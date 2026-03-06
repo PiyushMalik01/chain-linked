@@ -14,7 +14,6 @@ import {
   IconLayoutDashboard,
   IconUsers,
   IconActivity,
-  IconSettings,
   IconX,
   IconEye,
   IconThumbUp,
@@ -28,14 +27,13 @@ import Link from "next/link"
 
 import { ErrorBoundary } from "@/components/error-boundary"
 import { type TeamActivityItem } from "@/components/features/team-activity-feed"
+import { RemixPostButton } from "@/components/features/remix-post-button"
 import { TeamLeaderboard } from "@/components/features/team-leaderboard"
 import { TeamHeader } from "@/components/features/team-header"
-import { TeamMembersPreview } from "@/components/features/team-members-preview"
 import { PendingInvitationsCard, type PendingInvitation } from "@/components/features/pending-invitations-card"
 import { NoTeamState } from "@/components/features/no-team-state"
 import { TeamMemberList } from "@/components/features/team-member-list"
 import { TeamSkeleton } from "@/components/skeletons/page-skeletons"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -53,7 +51,7 @@ import { createClient } from "@/lib/supabase/client"
 // ============================================================================
 
 /** Tab type for team page */
-type TeamTab = "overview" | "members" | "settings"
+type TeamTab = "overview" | "members"
 
 /** Tab configuration */
 interface TabConfig {
@@ -65,7 +63,6 @@ interface TabConfig {
 const TABS: TabConfig[] = [
   { value: "overview", label: "Overview", icon: IconLayoutDashboard },
   { value: "members", label: "Members", icon: IconUsers },
-  { value: "settings", label: "Settings", icon: IconSettings },
 ]
 
 // ============================================================================
@@ -172,15 +169,18 @@ function AnimatedTabBar({
  * @param props.post - The team activity item to display
  * @param props.onClick - Callback when the card is clicked to open detail popup
  * @param props.index - Card index used for stagger animation delay
+ * @param props.isOwnPost - Whether the post belongs to the current user (shows Remix)
  */
 function PostGridCard({
   post,
   onClick,
   index = 0,
+  isOwnPost = false,
 }: {
   post: TeamActivityItem
   onClick: () => void
   index?: number
+  isOwnPost?: boolean
 }) {
   const relativeTime = formatDistanceToNow(new Date(post.postedAt), { addSuffix: true })
   const snippet = post.content.length > 120
@@ -189,10 +189,12 @@ function PostGridCard({
   const imageUrl = post.mediaUrls?.[0] ?? null
 
   return (
-    <motion.button
-      type="button"
+    <motion.div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="text-left bg-card rounded-xl border border-border/40 overflow-hidden transition-all hover:shadow-md hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+      className="text-left bg-card rounded-xl border border-border/40 overflow-hidden transition-all hover:shadow-md hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group cursor-pointer flex flex-col h-full"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -236,17 +238,14 @@ function PostGridCard({
       </div>
 
       {/* Content preview */}
-      <div className="px-4 pt-3 pb-3">
+      <div className="px-4 pt-3 pb-3 flex-1">
         <p className="text-[13px] text-muted-foreground leading-relaxed line-clamp-3">
           {snippet}
         </p>
       </div>
 
-      {/* Divider */}
-      <div className="mx-4 border-t border-border/30" />
-
       {/* Engagement metrics + date */}
-      <div className="px-4 py-3 flex items-center justify-between">
+      <div className="px-4 pt-1 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {post.metrics.impressions > 0 && (
             <span className="flex items-center gap-1" title="Impressions">
@@ -277,20 +276,35 @@ function PostGridCard({
           {relativeTime}
         </span>
       </div>
-    </motion.button>
+
+      {/* Full-width Remix button */}
+      <div className="px-4 pb-3">
+        <RemixPostButton
+          postId={post.id}
+          content={post.content}
+          authorName={post.author.name}
+          className="w-full justify-center h-9 rounded-lg border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 text-sm font-medium"
+        />
+      </div>
+    </motion.div>
   )
 }
 
 /**
  * Full post detail popup/modal
  * Shows the complete post with all content and metrics
+ * @param props.post - The post to display in detail
+ * @param props.onClose - Callback to close the popup
+ * @param props.isOwnPost - Whether the post belongs to the current user (shows Remix)
  */
 function PostDetailPopup({
   post,
   onClose,
+  isOwnPost = false,
 }: {
   post: TeamActivityItem
   onClose: () => void
+  isOwnPost?: boolean
 }) {
   const relativeTime = formatDistanceToNow(new Date(post.postedAt), { addSuffix: true })
   const hasMedia = post.mediaUrls && post.mediaUrls.length > 0
@@ -406,10 +420,14 @@ function PostDetailPopup({
             <IconShare className="size-4" />
             Repost
           </button>
-          <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-primary hover:bg-primary/5 rounded-lg transition-colors">
-            <IconSparkles className="size-4" />
-            Remix
-          </button>
+          <div className="flex-1 flex items-center justify-center">
+            <RemixPostButton
+              postId={post.id}
+              content={post.content}
+              authorName={post.author.name}
+              className="w-full justify-center py-2.5 rounded-lg text-primary hover:bg-primary/5"
+            />
+          </div>
         </div>
       </motion.div>
     </motion.div>
@@ -422,15 +440,21 @@ function PostDetailPopup({
  * @param props.posts - Array of team activity items to render
  * @param props.isLoading - Whether the data is still loading
  * @param props.className - Additional CSS classes for the container
+ * @param props.currentUserId - ID of the logged-in user (to show Remix on own posts)
+ * @param props.postUserIds - Map from post ID to the owning user ID
  */
 function PostGrid({
   posts,
   isLoading,
   className,
+  currentUserId,
+  postUserIds,
 }: {
   posts: TeamActivityItem[]
   isLoading: boolean
   className?: string
+  currentUserId?: string
+  postUserIds?: Map<string, string>
 }) {
   const [selectedPost, setSelectedPost] = useState<TeamActivityItem | null>(null)
 
@@ -489,6 +513,7 @@ function PostGrid({
             post={post}
             index={index}
             onClick={() => setSelectedPost(post)}
+            isOwnPost={!!currentUserId && postUserIds?.get(post.id) === currentUserId}
           />
         ))}
       </div>
@@ -499,6 +524,7 @@ function PostGrid({
           <PostDetailPopup
             post={selectedPost}
             onClose={() => setSelectedPost(null)}
+            isOwnPost={!!currentUserId && postUserIds?.get(selectedPost.id) === currentUserId}
           />
         )}
       </AnimatePresence>
@@ -520,14 +546,6 @@ function TeamContent() {
   const [activeTab, setActiveTab] = useState<TeamTab>("overview")
   const [brandKitLogoUrl, setBrandKitLogoUrl] = useState<string | null>(null)
 
-  const { posts, isLoading: postsLoading } = useTeamPosts(10)
-  const {
-    members: leaderboardMembers,
-    isLoading: leaderboardLoading,
-    timeRange,
-    setTimeRange,
-    currentUserId
-  } = useTeamLeaderboard()
   const {
     currentTeam,
     members,
@@ -540,6 +558,21 @@ function TeamContent() {
     removeMember,
     updateMemberRole,
   } = useTeam()
+
+  const { posts, rawPosts, isLoading: postsLoading } = useTeamPosts(10, currentTeam?.id)
+
+  /** Map from post ID to the owning user ID, for showing Remix on own posts */
+  const postUserIds = useMemo(
+    () => new Map(rawPosts.map((p) => [p.id, p.user_id])),
+    [rawPosts]
+  )
+  const {
+    members: leaderboardMembers,
+    isLoading: leaderboardLoading,
+    timeRange,
+    setTimeRange,
+    currentUserId,
+  } = useTeamLeaderboard(currentTeam?.id)
 
   const {
     invitations,
@@ -698,7 +731,12 @@ function TeamContent() {
                     </Link>
                   </Button>
                 </div>
-                <PostGrid posts={posts} isLoading={postsLoading} />
+                <PostGrid
+                  posts={posts}
+                  isLoading={postsLoading}
+                  currentUserId={user?.id}
+                  postUserIds={postUserIds}
+                />
               </div>
             </div>
           )}
@@ -737,172 +775,6 @@ function TeamContent() {
             </div>
           )}
 
-          {/* Settings Tab */}
-          {activeTab === "settings" && (
-            <div className="p-4 md:p-6">
-              <div className="max-w-2xl mx-auto space-y-5">
-                {/* General Settings Card */}
-                <Card className="border-border/50 rounded-xl shadow-sm">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="rounded-lg bg-primary/10 p-2">
-                        <IconSettings className="size-4 text-primary" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">General</CardTitle>
-                        <CardDescription className="text-xs">
-                          Basic team information
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-0">
-                    <div className="flex items-center justify-between py-3 border-b border-border/30">
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-medium">Team Name</p>
-                        <p className="text-xs text-muted-foreground">The display name for your team</p>
-                      </div>
-                      <span className="text-sm font-medium bg-muted/50 px-3 py-1.5 rounded-lg">
-                        {currentTeam.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between py-3 border-b border-border/30">
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-medium">Your Role</p>
-                        <p className="text-xs text-muted-foreground">Your permission level in this team</p>
-                      </div>
-                      <span className={cn(
-                        "text-sm font-medium px-3 py-1.5 rounded-lg capitalize",
-                        currentUserRole === 'owner'
-                          ? "bg-primary/10 text-primary"
-                          : currentUserRole === 'admin'
-                            ? "bg-amber-500/10 text-amber-600"
-                            : "bg-muted/50 text-muted-foreground"
-                      )}>
-                        {currentUserRole || 'Member'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between py-3">
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-medium">Team Size</p>
-                        <p className="text-xs text-muted-foreground">Total number of team members</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <IconUsers className="size-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">
-                          {currentTeam.member_count} member{currentTeam.member_count !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Company Info Card */}
-                {currentTeam.company && (
-                  <Card className="border-border/50 rounded-xl shadow-sm">
-                    <CardHeader className="pb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="rounded-lg bg-blue-500/10 p-2">
-                          <IconActivity className="size-4 text-blue-500" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">Company</CardTitle>
-                          <CardDescription className="text-xs">
-                            Associated organization details
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5">
-                          <p className="text-sm font-medium">Company Name</p>
-                          <p className="text-xs text-muted-foreground">Linked organization</p>
-                        </div>
-                        <span className="text-sm font-medium bg-muted/50 px-3 py-1.5 rounded-lg">
-                          {currentTeam.company.name}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Actions Card */}
-                {canManage && (
-                  <Card className="border-border/50 rounded-xl shadow-sm">
-                    <CardHeader className="pb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="rounded-lg bg-violet-500/10 p-2">
-                          <IconSparkles className="size-4 text-violet-500" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">Quick Actions</CardTitle>
-                          <CardDescription className="text-xs">
-                            Manage your team settings
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" className="rounded-lg" onClick={handleSettingsClick}>
-                          <IconSettings className="size-4 mr-1.5" />
-                          Advanced Settings
-                        </Button>
-                        <Button variant="outline" size="sm" className="rounded-lg" onClick={handleViewAllMembers}>
-                          <IconUsers className="size-4 mr-1.5" />
-                          Manage Members
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Danger Zone */}
-                {currentUserRole === 'owner' && (
-                  <Card className="border-destructive/30 bg-destructive/[0.02] rounded-xl">
-                    <CardHeader className="pb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="rounded-lg bg-destructive/10 p-2">
-                          <IconX className="size-4 text-destructive" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
-                          <CardDescription className="text-xs">
-                            Irreversible actions that affect your team
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex items-center justify-between p-3 rounded-xl border border-border/50 bg-background">
-                        <div>
-                          <p className="text-sm font-medium">Transfer Ownership</p>
-                          <p className="text-xs text-muted-foreground">
-                            Transfer team ownership to another member
-                          </p>
-                        </div>
-                        <Button variant="outline" size="sm" className="rounded-lg" disabled>
-                          Transfer
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-between p-3 rounded-xl border border-destructive/20 bg-background">
-                        <div>
-                          <p className="text-sm font-medium text-destructive">Delete Team</p>
-                          <p className="text-xs text-muted-foreground">
-                            Permanently delete this team and all its data
-                          </p>
-                        </div>
-                        <Button variant="destructive" size="sm" className="rounded-lg" disabled>
-                          Delete
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </div>
-          )}
         </motion.div>
       </AnimatePresence>
     </motion.div>

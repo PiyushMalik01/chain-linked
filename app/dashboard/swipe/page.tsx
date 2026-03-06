@@ -59,6 +59,9 @@ import type { GeneratedSuggestion } from "@/types/database"
 /** Threshold in pixels for swipe to be considered a decision */
 const SWIPE_THRESHOLD = 100
 
+/** Maximum number of active suggestions allowed */
+const MAX_ACTIVE_SUGGESTIONS = 10
+
 /**
  * Empty state when no more suggestions are available
  */
@@ -347,6 +350,18 @@ function SwipeContent() {
     return remainingSuggestions.filter((s) => s.category === categoryFilter)
   }, [remainingSuggestions, categoryFilter])
 
+  // Auto-reset filter when filtered cards run out but other cards remain
+  React.useEffect(() => {
+    if (
+      categoryFilter !== "all" &&
+      filteredSuggestions.length === 0 &&
+      remainingSuggestions.length > 0
+    ) {
+      setCategoryFilter("all")
+      toast.info("Showing all categories")
+    }
+  }, [categoryFilter, filteredSuggestions.length, remainingSuggestions.length])
+
   // Current card is the first in filtered suggestions
   const currentCard = filteredSuggestions.length > 0 ? filteredSuggestions[0] : null
 
@@ -634,7 +649,7 @@ function SwipeContent() {
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="shrink-0 border-primary/30">
             <IconSparkles className="size-3 mr-1 text-primary" />
-            {activeCount}/10 suggestions
+            {activeCount}/{MAX_ACTIVE_SUGGESTIONS} suggestions
           </Badge>
 
           {canGenerate && !isGenerating && (

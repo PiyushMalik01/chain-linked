@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthContext } from '@/lib/auth/auth-provider'
 import type { Tables } from '@/types/database'
@@ -68,7 +68,7 @@ export function useScheduledPosts(daysRange: number = 30): UseScheduledPostsRetu
   const [rawPosts, setRawPosts] = useState<Tables<'scheduled_posts'>[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabaseRef = React.useRef(createClient())
 
   /**
    * Fetch scheduled posts from database
@@ -98,7 +98,7 @@ export function useScheduledPosts(daysRange: number = 30): UseScheduledPostsRetu
       endDate.setDate(endDate.getDate() + daysRange)
 
       // Fetch scheduled posts for the user
-      const { data: postsData, error: fetchError } = await supabase
+      const { data: postsData, error: fetchError } = await supabaseRef.current
         .from('scheduled_posts')
         .select('*')
         .eq('user_id', user!.id)
@@ -140,7 +140,7 @@ export function useScheduledPosts(daysRange: number = 30): UseScheduledPostsRetu
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, daysRange, user, authLoading])
+  }, [daysRange, user, authLoading])
 
   // Fetch when auth state changes or on mount
   useEffect(() => {
@@ -156,7 +156,7 @@ export function useScheduledPosts(daysRange: number = 30): UseScheduledPostsRetu
     if (!user) return false
 
     try {
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await supabaseRef.current
         .from('scheduled_posts')
         .delete()
         .eq('id', postId)
@@ -177,7 +177,7 @@ export function useScheduledPosts(daysRange: number = 30): UseScheduledPostsRetu
       setError(err instanceof Error ? err.message : 'Failed to delete post')
       return false
     }
-  }, [supabase, user])
+  }, [user])
 
   /**
    * Update a scheduled post
@@ -192,7 +192,7 @@ export function useScheduledPosts(daysRange: number = 30): UseScheduledPostsRetu
     if (!user) return false
 
     try {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseRef.current
         .from('scheduled_posts')
         .update(data)
         .eq('id', postId)
@@ -212,7 +212,7 @@ export function useScheduledPosts(daysRange: number = 30): UseScheduledPostsRetu
       setError(err instanceof Error ? err.message : 'Failed to update post')
       return false
     }
-  }, [supabase, user, fetchPosts])
+  }, [user, fetchPosts])
 
   // Combined loading state
   const combinedLoading = authLoading || isLoading

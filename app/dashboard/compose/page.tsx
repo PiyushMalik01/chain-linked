@@ -10,9 +10,11 @@
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
+import { IconChevronDown, IconChevronUp, IconCheck, IconLoader2 } from "@tabler/icons-react"
 import { PageContent } from "@/components/shared/page-content"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { PostComposer } from "@/components/features/post-composer"
+import { RemixPostButton } from "@/components/features/remix-post-button"
 import { type MediaFile } from "@/components/features/media-upload"
 import { type GenerationContext } from "@/components/features/ai-inline-panel"
 import { ComposeSkeleton } from "@/components/skeletons/page-skeletons"
@@ -20,6 +22,8 @@ import { useAuthContext } from "@/lib/auth/auth-provider"
 import { useDraft } from "@/lib/store/draft-context"
 import { createClient } from "@/lib/supabase/client"
 import { usePageMeta } from "@/lib/dashboard-context"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 /**
  * Data structure for editing a scheduled post
@@ -38,10 +42,47 @@ function ComposeContent() {
   const { user, profile } = useAuthContext()
   const supabase = createClient()
   const searchParams = useSearchParams()
-  const { draft } = useDraft()
+  const { draft, updateDraft } = useDraft()
 
   // State for editing an existing scheduled post
   const [editingPost, setEditingPost] = React.useState<EditingPost | null>(null)
+
+  // State for "Remix from my posts" collapsible section
+  const [remixSectionOpen, setRemixSectionOpen] = React.useState(false)
+  const [recentPosts, setRecentPosts] = React.useState<{ id: string; content: string }[]>([])
+  const [recentPostsLoading, setRecentPostsLoading] = React.useState(false)
+
+  /**
+   * Fetch the user's 10 most recent posts for the remix section when opened
+   */
+  React.useEffect(() => {
+    if (!remixSectionOpen || recentPosts.length > 0 || !user) return
+
+    const fetchRecentPosts = async () => {
+      setRecentPostsLoading(true)
+      try {
+        const { data } = await supabase
+          .from("my_posts")
+          .select("id, content")
+          .eq("user_id", user.id)
+          .not("content", "is", null)
+          .order("posted_at", { ascending: false })
+          .limit(10)
+
+        setRecentPosts(
+          (data || [])
+            .filter((p) => (p.content?.length ?? 0) > 20)
+            .map((p) => ({ id: p.id, content: p.content! }))
+        )
+      } catch (err) {
+        console.error("Failed to fetch recent posts for remix:", err)
+      } finally {
+        setRecentPostsLoading(false)
+      }
+    }
+
+    fetchRecentPosts()
+  }, [remixSectionOpen, recentPosts.length, user, supabase])
 
   // Parse schedule date from query params (from dashboard calendar click)
   const initialScheduleDate = React.useMemo(() => {
@@ -56,6 +97,12 @@ function ComposeContent() {
 
   // Track whether draft has already been saved to avoid double-saves
   const draftSavedRef = React.useRef(false)
+
+  // Track whether the current content is saved as a draft
+  const [draftStatus, setDraftStatus] = React.useState<'idle' | 'saving' | 'saved'>('idle')
+
+  // Track the Supabase row ID of the current draft for in-place updates
+  const savedDraftIdRef = React.useRef<string | undefined>(draft.savedDraftId)
 
   // Track user in a ref so cleanup effects always have the current value
   const userRef = React.useRef(user)
@@ -120,6 +167,7 @@ function ComposeContent() {
         tone: ctx?.tone || null,
         context: ctx?.context || null,
         wordCount,
+        draftId: savedDraftIdRef.current || undefined,
       })
 
       navigator.sendBeacon('/api/drafts/auto-save', payload)
@@ -153,6 +201,7 @@ function ComposeContent() {
           tone: ctx?.tone || null,
           context: ctx?.context || null,
           wordCount,
+          draftId: savedDraftIdRef.current || undefined,
         })
 
         navigator.sendBeacon('/api/drafts/auto-save', payload)
@@ -168,8 +217,57 @@ function ComposeContent() {
   React.useEffect(() => {
     if (draft.content) {
       draftSavedRef.current = false
+      setDraftStatus('idle')
+    } else {
+      // Draft was cleared — reset the saved draft ID for a fresh session
+      savedDraftIdRef.current = undefined
     }
   }, [draft.content])
+
+  // Keep savedDraftIdRef in sync with context (e.g. when loaded from drafts page)
+  React.useEffect(() => {
+    if (draft.savedDraftId) {
+      savedDraftIdRef.current = draft.savedDraftId
+    }
+  }, [draft.savedDraftId])
+
+  /**
+   * Check on mount if current content is already saved as a draft
+   */
+  React.useEffect(() => {
+    const checkExistingDraft = async () => {
+      const currentContent = contentRef.current.trim()
+      if (!currentContent || !user) return
+
+      // If we already have a savedDraftId from context, just verify it exists
+      if (savedDraftIdRef.current) {
+        setDraftStatus('saved')
+        draftSavedRef.current = true
+        return
+      }
+
+      try {
+        const { data } = await supabase
+          .from('generated_posts')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('content', currentContent)
+          .eq('status', 'draft')
+          .limit(1)
+
+        if (data && data.length > 0) {
+          savedDraftIdRef.current = data[0].id
+          updateDraft({ savedDraftId: data[0].id })
+          setDraftStatus('saved')
+          draftSavedRef.current = true
+        }
+      } catch {
+        // Silently fail
+      }
+    }
+
+    checkExistingDraft()
+  }, [user, supabase, updateDraft])
 
   /**
    * Periodic auto-save every 30 seconds as a safety net.
@@ -189,6 +287,7 @@ function ComposeContent() {
       ) return
 
       const ctx = generationContextRef.current
+      setDraftStatus('saving')
       try {
         const res = await fetch("/api/drafts/auto-save", {
           method: "POST",
@@ -200,12 +299,22 @@ function ComposeContent() {
             tone: ctx?.tone || null,
             context: ctx?.context || null,
             wordCount: currentContent.split(/\s+/).filter(Boolean).length,
+            draftId: savedDraftIdRef.current || undefined,
           }),
         })
         if (res.ok) {
+          const data = await res.json()
+          if (data.id) {
+            savedDraftIdRef.current = data.id
+            updateDraft({ savedDraftId: data.id })
+          }
           lastSavedContent = currentContent
+          setDraftStatus('saved')
+        } else {
+          setDraftStatus('idle')
         }
       } catch {
+        setDraftStatus('idle')
         // Silently fail — will retry on next interval
       }
     }, 30_000)
@@ -395,6 +504,23 @@ function ComposeContent() {
           </button>
         </div>
       )}
+      {/* Draft save status indicator */}
+      {draftStatus !== 'idle' && draft.content?.trim() && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {draftStatus === 'saving' ? (
+            <>
+              <IconLoader2 className="size-3 animate-spin" />
+              <span>Saving draft…</span>
+            </>
+          ) : (
+            <>
+              <IconCheck className="size-3 text-green-500" />
+              <span>Saved as draft</span>
+            </>
+          )}
+        </div>
+      )}
+
       <ErrorBoundary>
         <PostComposer
           key={editingPost?.id || 'new'} // Force re-mount when editing different posts
@@ -406,6 +532,68 @@ function ComposeContent() {
           initialScheduleDate={initialScheduleDate}
         />
       </ErrorBoundary>
+
+      {/* Remix from my posts */}
+      <Card className="border-border/50">
+        <CardHeader className="p-0">
+          <button
+            type="button"
+            onClick={() => setRemixSectionOpen((prev) => !prev)}
+            className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium hover:bg-muted/40 rounded-t-xl transition-colors"
+          >
+            <span>Remix from my posts</span>
+            {remixSectionOpen ? (
+              <IconChevronUp className="size-4 text-muted-foreground" />
+            ) : (
+              <IconChevronDown className="size-4 text-muted-foreground" />
+            )}
+          </button>
+        </CardHeader>
+
+        {remixSectionOpen && (
+          <CardContent className="px-4 pb-4 pt-0">
+            {recentPostsLoading ? (
+              <div className="space-y-2 pt-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-14 rounded-lg bg-muted/50 animate-pulse" />
+                ))}
+              </div>
+            ) : recentPosts.length === 0 ? (
+              <p className="text-sm text-muted-foreground pt-2">
+                No posts found. Publish some LinkedIn posts to remix them here.
+              </p>
+            ) : (
+              <div className="space-y-2 pt-2">
+                {recentPosts.map((post) => {
+                  const firstLine = post.content.split("\n").find((l) => l.trim().length > 0)?.trim() || ""
+                  const title = firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine
+                  const preview = post.content.slice(0, 100).replace(/\n/g, " ")
+
+                  return (
+                    <div
+                      key={post.id}
+                      className={cn(
+                        "flex items-start justify-between gap-3 rounded-lg border border-border/40 px-3 py-2.5",
+                        "hover:border-border/70 hover:bg-muted/30 transition-colors"
+                      )}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{title}</p>
+                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">{preview}</p>
+                      </div>
+                      <RemixPostButton
+                        postId={post.id}
+                        content={post.content}
+                        className="shrink-0 h-7 px-2 text-[11px]"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
     </PageContent>
   )
 }

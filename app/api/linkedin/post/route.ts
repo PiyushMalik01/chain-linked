@@ -15,7 +15,7 @@ import {
   type LinkedInVisibility,
 } from '@/lib/linkedin'
 import { isPostingEnabled, POSTING_DISABLED_MESSAGE, DISABLED_DRAFT_STATUS } from '@/lib/linkedin/posting-config'
-import { decrypt, encrypt } from '@/lib/crypto'
+import { safeDecrypt, encrypt } from '@/lib/crypto'
 
 /**
  * Base64-encoded media item from client-side file upload
@@ -122,11 +122,12 @@ export async function POST(request: Request) {
     )
   }
 
-  // Decrypt tokens before creating API client
+  // Decrypt tokens before creating API client (safeDecrypt falls back to
+  // plaintext for tokens stored before encryption was added)
   const decryptedTokenData: LinkedInTokenData = {
     ...(tokenData as LinkedInTokenData),
-    access_token: decrypt(tokenData.access_token),
-    refresh_token: tokenData.refresh_token ? decrypt(tokenData.refresh_token) : null,
+    access_token: safeDecrypt(tokenData.access_token),
+    refresh_token: tokenData.refresh_token ? safeDecrypt(tokenData.refresh_token) : null,
   } as LinkedInTokenData
 
   // Create LinkedIn API client with token refresh callback

@@ -34,6 +34,7 @@ import {
   IconPalette,
   IconPlus,
   IconRefresh,
+  IconRuler,
   IconSchool,
   IconSettings,
   IconShield,
@@ -70,6 +71,7 @@ import { Switch } from "@/components/ui/switch"
 import { usePageMeta } from "@/lib/dashboard-context"
 import { useAuthContext } from "@/lib/auth/auth-provider"
 import { useSettings } from "@/hooks/use-settings"
+import { ContentRulesEditor } from "@/components/features/content-rules-editor"
 
 /* =============================================================================
    TYPES
@@ -80,6 +82,7 @@ type SettingsSection =
   | "profile"
   | "linkedin"
   | "brand-kit"
+  | "content-rules"
   | "team"
   | "notifications"
   | "account"
@@ -141,6 +144,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Brand Kit & AI",
     icon: IconPalette,
     description: "Colors, fonts, context",
+  },
+  {
+    id: "content-rules",
+    label: "Content Rules",
+    icon: IconRuler,
+    description: "AI writing guidelines",
   },
   {
     id: "team",
@@ -1213,11 +1222,39 @@ function SettingsContent() {
   /** Account section (appearance + danger zone) */
   const renderAccount = () => <AccountSection signOut={signOut} />
 
+  /** Content Rules section */
+  const renderContentRules = () => (
+    <motion.div
+      key="content-rules"
+      variants={sectionVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="space-y-4"
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <IconRuler className="size-4 text-primary" />
+            Personal Content Rules
+          </CardTitle>
+          <CardDescription>
+            Rules applied to all AI-generated content for your account. Toggle rules on or off without deleting them.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ContentRulesEditor scope="personal" />
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+
   /** Map section id to render function */
   const sectionRenderers: Record<SettingsSection, () => React.ReactNode> = {
     profile: renderProfile,
     linkedin: renderLinkedIn,
     "brand-kit": renderBrandKit,
+    "content-rules": renderContentRules,
     team: renderTeam,
     notifications: renderNotifications,
     account: renderAccount,

@@ -68,6 +68,8 @@ export interface DraftState {
   aiSuggestion?: AISuggestion
   /** Remix settings from the remix dialog */
   remixMeta?: RemixMeta
+  /** Supabase row ID of the saved draft (for updating instead of inserting) */
+  savedDraftId?: string
   /** Last modified timestamp */
   lastModified: number
 }
@@ -116,6 +118,7 @@ const initialDraftState: DraftState = {
   sourceAuthor: undefined,
   aiSuggestion: undefined,
   remixMeta: undefined,
+  savedDraftId: undefined,
   lastModified: Date.now(),
 }
 

@@ -18,6 +18,8 @@ import {
   IconBookmarkFilled,
   IconMaximize,
   IconFlame,
+  IconUserPlus,
+  IconUserCheck,
 } from "@tabler/icons-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -40,10 +42,25 @@ import type { InspirationPost } from "@/components/features/inspiration-feed"
 export interface InspirationPostCardProps {
   post: InspirationPost
   isSaved?: boolean
+  /** Whether the post's author is currently followed */
+  isFollowingAuthor?: boolean
   onRemix?: (post: InspirationPost) => void
   onSave?: (postId: string) => void
   onUnsave?: (postId: string) => void
   onExpand?: (post: InspirationPost) => void
+  /**
+   * Callback to follow the post's author
+   * @param url - LinkedIn profile URL
+   * @param authorName - Display name
+   * @param headline - Professional headline
+   * @param avatar - Avatar URL
+   */
+  onFollow?: (url: string, authorName?: string, headline?: string, avatar?: string) => Promise<void>
+  /**
+   * Callback to unfollow the post's author (not used on card, handled via panel)
+   * @param id - Record ID
+   */
+  onUnfollow?: (id: string) => Promise<void>
   className?: string
   compact?: boolean
 }
@@ -153,13 +170,17 @@ function ViralityBadge({ score }: { score: number }) {
 export function InspirationPostCard({
   post,
   isSaved = false,
+  isFollowingAuthor = false,
   onRemix,
   onSave,
   onUnsave,
   onExpand,
+  onFollow,
   className,
   compact = false,
 }: InspirationPostCardProps) {
+  const [isFollowPending, setIsFollowPending] = React.useState(false)
+
   const relativeTime = formatDistanceToNow(new Date(post.postedAt), {
     addSuffix: true,
   })
@@ -183,6 +204,17 @@ export function InspirationPostCard({
   const handleExpand = React.useCallback(() => {
     onExpand?.(post)
   }, [onExpand, post])
+
+  /** Follow the author if URL is available */
+  const handleFollow = React.useCallback(async () => {
+    if (!post.authorUrl || !onFollow) return
+    setIsFollowPending(true)
+    try {
+      await onFollow(post.authorUrl, post.author.name, post.author.headline, post.author.avatar)
+    } finally {
+      setIsFollowPending(false)
+    }
+  }, [post.authorUrl, post.author.name, post.author.headline, post.author.avatar, onFollow])
 
   return (
     <motion.div
@@ -334,6 +366,37 @@ export function InspirationPostCard({
                   Remix
                 </Button>
               </motion.div>
+
+              {/* Follow author button - only shown if post has an authorUrl and onFollow is provided */}
+              {post.authorUrl && onFollow && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <motion.div whileTap={{ scale: 0.95 }}>
+                      <Button
+                        variant={isFollowingAuthor ? "secondary" : "outline"}
+                        size="sm"
+                        onClick={handleFollow}
+                        disabled={isFollowPending || isFollowingAuthor}
+                        className={cn(
+                          "shrink-0 border-border/50",
+                          !isFollowingAuthor && "hover:border-primary/30",
+                        )}
+                        aria-label={isFollowingAuthor ? "Following author" : "Follow author"}
+                      >
+                        {isFollowingAuthor ? (
+                          <IconUserCheck className="size-3.5 text-primary" />
+                        ) : (
+                          <IconUserPlus className="size-3.5" />
+                        )}
+                      </Button>
+                    </motion.div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isFollowingAuthor ? "Following" : "Follow author"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
               {onExpand && (
                 <Tooltip>
                   <TooltipTrigger asChild>

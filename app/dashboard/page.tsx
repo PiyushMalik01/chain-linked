@@ -25,6 +25,7 @@ import type { ScheduledPostItem } from "@/components/features/schedule-calendar"
 import { DashboardSkeleton } from "@/components/skeletons/page-skeletons"
 import { useScheduledPosts } from "@/hooks/use-scheduled-posts"
 import { useAnalytics } from "@/hooks/use-analytics"
+import { MyRecentPostsSection, useMyRecentPosts } from "@/components/features/my-recent-posts"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthContext } from "@/lib/auth/auth-provider"
 import { usePageMeta } from "@/lib/dashboard-context"
@@ -49,7 +50,11 @@ import {
   IconChevronRight,
   IconAlertTriangle,
   IconPlugConnected,
+  IconFileText,
+  IconTemplate,
+  IconCarouselHorizontal,
 } from "@tabler/icons-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   staggerContainerVariants,
   staggerItemVariants,
@@ -469,34 +474,38 @@ function DashboardContent() {
   const { posts: scheduledPosts, isLoading: scheduleLoading } =
     useScheduledPosts(30)
   const { metrics, isLoading: analyticsLoading } = useAnalytics(user?.id)
+  const { posts: recentPosts, isLoading: postsLoading } = useMyRecentPosts(user?.id, 9)
+
+  /** Derive display name and avatar for the recent posts section */
+  const userInfo = useMemo(() => {
+    const linkedinProfile = profile?.linkedin_profile
+    const rawData = linkedinProfile?.raw_data as Record<string, unknown> | null
+    const linkedInName = rawData?.name as string | undefined
+    const name = linkedInName || profile?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "You"
+    const linkedInAvatar = (rawData?.profilePhotoUrl as string | undefined) || linkedinProfile?.profile_picture_url || profile?.linkedin_avatar_url
+    const avatarUrl = linkedInAvatar || profile?.avatar_url || user?.user_metadata?.avatar_url || undefined
+    return { name: name as string, avatarUrl: avatarUrl as string | undefined }
+  }, [user, profile])
 
   /**
    * Check Getting Started completion state from Supabase.
-   * - hasCreatedPost: user has any post in my_posts or scheduled_posts
-   * - hasScheduledContent: user has ever scheduled a post (any status)
+   * Uses head-only count queries (no data transfer) run in parallel.
    */
   const [hasCreatedPost, setHasCreatedPost] = useState(false)
   const [hasScheduledContent, setHasScheduledContent] = useState(false)
+  const supabaseRef = React.useRef(supabase)
   useEffect(() => {
     if (!user?.id) return
-    async function checkOnboarding() {
-      const [myPostsRes, scheduledRes] = await Promise.all([
-        supabase
-          .from('my_posts')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user!.id),
-        supabase
-          .from('scheduled_posts')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user!.id),
-      ])
+    const sb = supabaseRef.current
+    Promise.all([
+      sb.from('my_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+      sb.from('scheduled_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+    ]).then(([myPostsRes, scheduledRes]) => {
       const myPostsCount = myPostsRes.count ?? 0
       const scheduledCount = scheduledRes.count ?? 0
       setHasCreatedPost((myPostsCount + scheduledCount) > 0)
       setHasScheduledContent(scheduledCount > 0)
-    }
-    checkOnboarding()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- supabase client is effectively a singleton
+    })
   }, [user?.id])
 
   const tourCompleted = profile?.dashboard_tour_completed !== false
@@ -664,6 +673,67 @@ function DashboardContent() {
           </div>
         </motion.div>
 
+        {/* Start a post — LinkedIn-style quick compose card */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.4 }}
+          className="mb-5"
+        >
+          <Card className="border-border/40 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3.5">
+                <Avatar className="size-12 shrink-0 ring-2 ring-border/20 shadow-sm">
+                  {(profile?.linkedin_avatar_url || profile?.avatar_url) && (
+                    <AvatarImage
+                      src={profile.linkedin_avatar_url || profile.avatar_url || undefined}
+                      alt={displayName}
+                    />
+                  )}
+                  <AvatarFallback className="text-sm font-semibold bg-gradient-to-br from-primary/15 to-primary/5 text-primary">
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <Link
+                  href="/dashboard/compose"
+                  className="flex-1 rounded-full border border-border/50 bg-muted/30 px-5 py-3 text-sm text-muted-foreground/70 hover:bg-muted/60 hover:border-border/70 transition-all"
+                >
+                  Start a post
+                </Link>
+              </div>
+              <div className="flex items-center mt-4 pt-3 border-t border-border/30">
+                <Link
+                  href="/dashboard/drafts"
+                  className="flex-1 flex items-center justify-center gap-2.5 py-2.5 rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <div className="size-6 rounded-md bg-primary/10 flex items-center justify-center">
+                    <IconFileText className="size-4 text-primary" />
+                  </div>
+                  Saved Drafts
+                </Link>
+                <Link
+                  href="/dashboard/templates"
+                  className="flex-1 flex items-center justify-center gap-2.5 py-2.5 rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <div className="size-6 rounded-md bg-amber-500/10 flex items-center justify-center">
+                    <IconTemplate className="size-4 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  Templates
+                </Link>
+                <Link
+                  href="/dashboard/carousels"
+                  className="flex-1 flex items-center justify-center gap-2.5 py-2.5 rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <div className="size-6 rounded-md bg-emerald-500/10 flex items-center justify-center">
+                    <IconCarouselHorizontal className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  Create Carousel
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
         {/* 4 Metric Cards */}
         <motion.div
           className="grid grid-cols-2 gap-3 sm:grid-cols-4"
@@ -741,6 +811,21 @@ function DashboardContent() {
             isLoading={scheduleLoading}
           />
         </div>
+      </motion.div>
+
+      {/* My Recent Posts */}
+      <motion.div
+        className="px-4 lg:px-6"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.45, duration: 0.5 }}
+      >
+        <MyRecentPostsSection
+          posts={recentPosts}
+          isLoading={postsLoading}
+          authorName={userInfo.name}
+          authorAvatar={userInfo.avatarUrl}
+        />
       </motion.div>
     </div>
   )

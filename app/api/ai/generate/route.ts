@@ -317,6 +317,42 @@ The user has provided the following specific instructions and context. You MUST 
 ${context.trim()}`
     }
 
+    // Inject active content rules from database
+    try {
+      const [{ data: personalRules }, { data: teamMember }] = await Promise.all([
+        supabase
+          .from('content_rules')
+          .select('rule_text')
+          .eq('user_id', user.id)
+          .is('team_id', null)
+          .eq('is_active', true)
+          .order('priority', { ascending: false }),
+        supabase
+          .from('team_members')
+          .select('team_id')
+          .eq('user_id', user.id)
+          .limit(1),
+      ])
+
+      let teamRules: { rule_text: string }[] = []
+      if (teamMember?.[0]?.team_id) {
+        const { data } = await supabase
+          .from('content_rules')
+          .select('rule_text')
+          .eq('team_id', teamMember[0].team_id)
+          .eq('is_active', true)
+          .order('priority', { ascending: false })
+        teamRules = data || []
+      }
+
+      const allRules = [...teamRules, ...(personalRules || [])]
+      if (allRules.length > 0) {
+        systemPrompt += `\n\n## MANDATORY Content Rules\nThe following rules MUST be followed in all generated content:\n${allRules.map(r => `- ${r.rule_text}`).join('\n')}`
+      }
+    } catch {
+      // Content rules injection is non-blocking
+    }
+
     const userMessage = buildUserMessage(topic, length, context)
 
     // Track start time for response metrics

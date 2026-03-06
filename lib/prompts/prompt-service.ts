@@ -690,6 +690,7 @@ export class PromptService {
         response_time_ms: data.responseTimeMs ?? null,
         success: data.success,
         error_message: data.errorMessage ?? null,
+        estimated_cost: data.estimatedCost ?? null,
         metadata: data.metadata ?? {},
       })
 

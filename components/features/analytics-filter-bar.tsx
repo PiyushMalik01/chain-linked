@@ -11,7 +11,6 @@
 import { useCallback } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import {
-  IconArrowsExchange,
   IconCalendar,
 } from "@tabler/icons-react"
 
@@ -33,7 +32,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
 import type { AnalyticsV2Filters } from "@/hooks/use-analytics-v2"
 
 /** Content type options for filtering posts */
@@ -44,6 +42,8 @@ const CONTENT_TYPE_OPTIONS = [
   { value: "video", label: "Video" },
   { value: "carousel", label: "Carousel" },
   { value: "document", label: "Document" },
+  { value: "article", label: "Article" },
+  { value: "poll", label: "Poll" },
 ] as const
 
 /** Preset time periods */
@@ -242,19 +242,6 @@ export function AnalyticsFilterBar({ filters, onFiltersChange }: AnalyticsFilter
           </SelectContent>
         </Select>
 
-        {/* Compare Toggle */}
-        <Button
-          variant={filters.compare ? "default" : "outline"}
-          size="sm"
-          className={cn(
-            "gap-1.5 transition-all",
-            filters.compare && "bg-primary text-primary-foreground"
-          )}
-          onClick={() => updateFilters({ compare: !filters.compare })}
-        >
-          <IconArrowsExchange className="size-3.5" />
-          Compare
-        </Button>
       </div>
     </div>
   )

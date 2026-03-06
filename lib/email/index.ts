@@ -8,7 +8,6 @@ export {
   sendEmail,
   sendBatchEmails,
   getFromAddress,
-  resend,
 } from './resend'
 
 export type {

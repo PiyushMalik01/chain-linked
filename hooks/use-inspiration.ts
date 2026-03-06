@@ -75,6 +75,8 @@ export interface InspirationFilters {
   searchQuery: string
   /** Show only saved posts */
   savedOnly: boolean
+  /** Show only posts from followed influencers */
+  followingOnly: boolean
 }
 
 /**
@@ -139,6 +141,7 @@ const defaultFilters: InspirationFilters = {
   niche: 'all',
   searchQuery: '',
   savedOnly: false,
+  followingOnly: false,
 }
 
 /**
@@ -274,6 +277,7 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
         headline: post.author_headline || '',
         avatar: post.author_profile_picture || undefined,
       },
+      authorUrl: post.author_profile_url || undefined,
       content: post.text || '',
       category: inferCategory(post),
       metrics: {
@@ -607,7 +611,7 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
     if (!authLoading) {
       fetchPosts(0, false)
     }
-  }, [authLoading, filters.category, filters.niche, filters.savedOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, filters.category, filters.niche, filters.savedOnly, filters.followingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced search
   useEffect(() => {

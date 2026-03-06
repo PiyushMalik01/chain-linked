@@ -1,12 +1,14 @@
 /**
  * API Keys Hook
- * @description Manages user API keys (BYOK) with Supabase
+ * @description Manages user API keys (BYOK) with a shared React context so
+ * every consumer shares a single fetch instead of each component hitting the API independently.
  * @module hooks/use-api-keys
  */
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, createContext, useContext } from 'react'
+import * as React from 'react'
 
 /**
  * API key provider type
@@ -32,7 +34,7 @@ export interface ApiKeyStatus {
 /**
  * Hook return type
  */
-interface UseApiKeysReturn {
+export interface UseApiKeysReturn {
   /** Current API key status */
   status: ApiKeyStatus | null
   /** Loading state */
@@ -66,21 +68,14 @@ const DEFAULT_STATUS: ApiKeyStatus = {
   lastValidated: null,
 }
 
+const ApiKeysContext = createContext<UseApiKeysReturn | null>(null)
+
 /**
- * Hook to manage user API keys (BYOK - Bring Your Own Key)
- * @returns API key status, loading states, and management functions
- * @example
- * const { status, saveApiKey, deleteApiKey, isLoading, error } = useApiKeys()
- *
- * // Check if user has a key
- * if (status?.hasKey) {
- *   console.log('Key configured:', status.keyHint)
- * }
- *
- * // Save a new key
- * const success = await saveApiKey('sk-...')
+ * Provider component that fetches API key status once and shares it with all consumers.
+ * Mount this high in the component tree (e.g. in providers.tsx).
+ * @param props.children - Child components
  */
-export function useApiKeys(): UseApiKeysReturn {
+export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<ApiKeyStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -102,7 +97,6 @@ export function useApiKeys(): UseApiKeysReturn {
 
       if (!response.ok) {
         if (response.status === 401) {
-          // User not authenticated - set default status
           setStatus(DEFAULT_STATUS)
           return
         }
@@ -147,7 +141,6 @@ export function useApiKeys(): UseApiKeysReturn {
         return false
       }
 
-      // Update local status
       setStatus({
         hasKey: true,
         provider,
@@ -187,7 +180,6 @@ export function useApiKeys(): UseApiKeysReturn {
         return false
       }
 
-      // Update local status
       setStatus({
         ...DEFAULT_STATUS,
         provider,
@@ -223,14 +215,11 @@ export function useApiKeys(): UseApiKeysReturn {
         return false
       }
 
-      // Update local status with validation result
-      if (status) {
-        setStatus({
-          ...status,
-          isValid: data.isValid,
-          lastValidated: data.lastValidated,
-        })
-      }
+      setStatus(prev => prev ? {
+        ...prev,
+        isValid: data.isValid,
+        lastValidated: data.lastValidated,
+      } : prev)
 
       if (!data.isValid && data.error) {
         setError(data.error)
@@ -244,22 +233,19 @@ export function useApiKeys(): UseApiKeysReturn {
     } finally {
       setIsValidating(false)
     }
-  }, [status])
+  }, [])
 
-  /**
-   * Clear the error state
-   */
   const clearError = useCallback(() => {
     setError(null)
   }, [])
 
-  // Fetch status on mount
+  // Fetch status once on mount
   useEffect(() => {
     fetchStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return {
+  const value: UseApiKeysReturn = {
     status,
     isLoading,
     isSaving,
@@ -271,4 +257,25 @@ export function useApiKeys(): UseApiKeysReturn {
     refetch: fetchStatus,
     clearError,
   }
+
+  return (
+    <ApiKeysContext.Provider value={value}>
+      {children}
+    </ApiKeysContext.Provider>
+  )
+}
+
+/**
+ * Hook to manage user API keys (BYOK - Bring Your Own Key).
+ * Reads from the shared ApiKeysProvider context — all consumers share a single fetch.
+ * @returns API key status, loading states, and management functions
+ * @example
+ * const { status, saveApiKey, deleteApiKey, isLoading, error } = useApiKeys()
+ */
+export function useApiKeys(): UseApiKeysReturn {
+  const context = useContext(ApiKeysContext)
+  if (!context) {
+    throw new Error('useApiKeys must be used within an ApiKeysProvider')
+  }
+  return context
 }

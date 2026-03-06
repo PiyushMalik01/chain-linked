@@ -197,7 +197,8 @@ export async function POST() {
         name: 'swipe/generate-suggestions',
         data: {
           userId: user.id,
-          runId: newRun.id
+          runId: newRun.id,
+          suggestionsToGenerate,
         }
       })
     } catch (inngestError) {

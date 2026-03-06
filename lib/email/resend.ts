@@ -4,33 +4,13 @@
  * @module lib/email/resend
  */
 
+import type React from 'react'
 import { Resend } from 'resend'
-
-/**
- * Resend client instance (lazily initialized)
- * Only created when actually needed to avoid build-time errors
- */
-let resendClient: Resend | null = null
-
-/**
- * Get or create the Resend client
- * @returns Resend client instance
- * @throws Error if RESEND_API_KEY is not set
- */
-function getResendClient(): Resend {
-  if (!resendClient) {
-    if (!process.env.RESEND_API_KEY) {
-      throw new Error('RESEND_API_KEY environment variable is not set')
-    }
-    resendClient = new Resend(process.env.RESEND_API_KEY)
-  }
-  return resendClient
-}
 
 /**
  * Default email configuration
  */
-const DEFAULT_FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'team@chainlinked.io'
+const DEFAULT_FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'team@omrajpal.tech'
 const DEFAULT_FROM_NAME = process.env.EMAIL_FROM_NAME || 'ChainLinked'
 
 /**
@@ -45,12 +25,12 @@ export function getFromAddress(): string {
  * Email sending options
  */
 export interface SendEmailOptions {
-  /** Recipient email address */
-  to: string
+  /** Recipient email address(es) */
+  to: string | string[]
   /** Email subject line */
   subject: string
-  /** React component for email body */
-  react?: React.ReactElement
+  /** React component for email body (React.ReactNode per Resend v6) */
+  react?: React.ReactNode
   /** HTML content (alternative to react) */
   html?: string
   /** Plain text content (fallback) */
@@ -89,7 +69,6 @@ export interface SendEmailResult {
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
   const { to, subject, react, html, text, replyTo, cc, bcc } = options
 
-  // Validate that we have at least one content type
   if (!react && !html && !text) {
     return {
       success: false,
@@ -97,42 +76,42 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     }
   }
 
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[Email] RESEND_API_KEY is not set')
+    return { success: false, error: 'RESEND_API_KEY is not configured' }
+  }
+
   const fromAddr = getFromAddress()
-  console.log(`[Email] Sending email:`)
-  console.log(`[Email]   From: ${fromAddr}`)
-  console.log(`[Email]   To: ${to}`)
-  console.log(`[Email]   Subject: ${subject}`)
-  console.log(`[Email]   Content type: ${react ? 'react' : html ? 'html' : 'text'}`)
-  console.log(`[Email]   API key present: ${!!process.env.RESEND_API_KEY}`)
-  console.log(`[Email]   API key prefix: ${process.env.RESEND_API_KEY?.slice(0, 10)}...`)
+  const recipients = Array.isArray(to) ? to : [to]
+
+  console.log(`[Email] Sending to: ${recipients.join(', ')} | Subject: ${subject}`)
 
   try {
-    const resend = getResendClient()
-    const { data, error } = await resend.emails.send({
+    const resend = new Resend(process.env.RESEND_API_KEY)
+
+    const base = {
       from: fromAddr,
-      to,
+      to: recipients,
       subject,
-      react,
-      html,
-      text,
-      replyTo: replyTo,
-      cc,
-      bcc,
-    })
+      ...(replyTo ? { replyTo } : {}),
+      ...(cc?.length ? { cc } : {}),
+      ...(bcc?.length ? { bcc } : {}),
+    }
+
+    // Resend v6 uses a discriminated union — pass exactly one content type
+    const { data, error } = react
+      ? await resend.emails.send({ ...base, react })
+      : html
+        ? await resend.emails.send({ ...base, html })
+        : await resend.emails.send({ ...base, text: text! })
 
     if (error) {
       console.error('[Email] Resend API error:', JSON.stringify(error, null, 2))
-      return {
-        success: false,
-        error: error.message,
-      }
+      return { success: false, error: error.message }
     }
 
     console.log(`[Email] Sent successfully! Message ID: ${data?.id}`)
-    return {
-      success: true,
-      messageId: data?.id,
-    }
+    return { success: true, messageId: data?.id }
   } catch (err) {
     console.error('[Email] Exception during send:', err)
     return {
@@ -146,18 +125,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
  * Send multiple emails in batch
  * @param emails - Array of email options
  * @returns Array of results for each email
- * @example
- * const results = await sendBatchEmails([
- *   { to: 'user1@example.com', subject: 'Hello', text: 'Hi!' },
- *   { to: 'user2@example.com', subject: 'Hello', text: 'Hi!' },
- * ])
  */
 export async function sendBatchEmails(emails: SendEmailOptions[]): Promise<SendEmailResult[]> {
-  const results = await Promise.all(emails.map(sendEmail))
-  return results
+  return Promise.all(emails.map(sendEmail))
 }
-
-/**
- * Resend client getter export for advanced usage
- */
-export const resend = getResendClient

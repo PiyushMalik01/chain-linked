@@ -145,7 +145,7 @@ export function useGeneratedSuggestions(): UseGeneratedSuggestionsReturn {
       setIsLoading(true)
       setError(null)
 
-      const response = await fetch('/api/swipe/suggestions?status=active')
+      const response = await fetch(`/api/swipe/suggestions?status=active&limit=${MAX_ACTIVE_SUGGESTIONS}`)
 
       if (!response.ok) {
         if (response.status === 401) {

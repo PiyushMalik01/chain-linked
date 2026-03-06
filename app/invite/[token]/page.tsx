@@ -66,6 +66,7 @@ export default function InviteAcceptPage() {
   const [invitation, setInvitation] = useState<TeamInvitationWithInviter | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [existingTeamName, setExistingTeamName] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -76,6 +77,20 @@ export default function InviteAcceptPage() {
         // Check if user is authenticated
         const { data: { user } } = await supabase.auth.getUser()
         setUserEmail(user?.email || null)
+
+        // Check if user is already in a team (to show warning)
+        if (user) {
+          const { data: currentMemberships } = await supabase
+            .from('team_members')
+            .select('team_id, teams(name)')
+            .eq('user_id', user.id)
+            .limit(1)
+
+          if (currentMemberships && currentMemberships.length > 0) {
+            const teamData = currentMemberships[0].teams as unknown as { name: string } | null
+            setExistingTeamName(teamData?.name || 'your current team')
+          }
+        }
 
         // Fetch invitation
         const invitationData = await getInvitationByToken(token)
@@ -383,9 +398,21 @@ export default function InviteAcceptPage() {
               </p>
             </div>
 
+            {existingTeamName && (
+              <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-2">
+                  <IconAlertCircle className="size-4 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    You are currently a member of <strong>{existingTeamName}</strong>.
+                    Accepting this invitation will remove you from that team.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <Button onClick={handleAccept} className="w-full h-11">
               <IconCheck className="mr-2 h-4 w-4" />
-              Accept Invitation
+              {existingTeamName ? 'Leave Old Team & Accept' : 'Accept Invitation'}
             </Button>
           </div>
         )

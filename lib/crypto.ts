@@ -100,6 +100,20 @@ export function decrypt(encryptedData: string): string {
 }
 
 /**
+ * Attempts to decrypt a value, falling back to the raw string if decryption fails.
+ * Handles tokens that were stored as plaintext before encryption was added.
+ * @param value - Possibly encrypted string, or plaintext fallback
+ * @returns Decrypted or raw plaintext string
+ */
+export function safeDecrypt(value: string): string {
+  try {
+    return decrypt(value)
+  } catch {
+    return value
+  }
+}
+
+/**
  * Creates a hint for an API key (last 4 characters)
  * @param apiKey - The full API key
  * @returns A masked hint like "...abc1"

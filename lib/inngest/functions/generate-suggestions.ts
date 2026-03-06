@@ -24,9 +24,9 @@ import {
 const MAX_ACTIVE_SUGGESTIONS = 10
 
 /**
- * Number of content ideas to generate per batch
+ * Default number of content ideas to generate per batch (used as fallback)
  */
-const IDEAS_PER_BATCH = 10
+const DEFAULT_IDEAS_PER_BATCH = 10
 
 /**
  * Supabase admin client for background jobs
@@ -94,7 +94,7 @@ export const generateSuggestionsWorkflow = inngest.createFunction(
   },
   { event: 'swipe/generate-suggestions' },
   async ({ event, step }) => {
-    const { userId, runId } = event.data
+    const { userId, runId, suggestionsToGenerate: requestedCount } = event.data
     const supabase = getSupabaseAdmin()
 
     // Step 1: Validate and prepare
@@ -188,8 +188,14 @@ export const generateSuggestionsWorkflow = inngest.createFunction(
       // Build system prompt with company context
       const systemPrompt = buildContentIdeasSystemPrompt(companyContext)
 
+      // Use the requested count from the API, capped at MAX, fallback to default
+      const ideasToGenerate = Math.min(
+        requestedCount || DEFAULT_IDEAS_PER_BATCH,
+        MAX_ACTIVE_SUGGESTIONS - prepareResult.existingCount
+      ) || DEFAULT_IDEAS_PER_BATCH
+
       // Request for content ideas
-      const userMessage = `Generate ${IDEAS_PER_BATCH} diverse LinkedIn post ideas for ${companyContext.company_name}.
+      const userMessage = `Generate ${ideasToGenerate} diverse LinkedIn post ideas for ${companyContext.company_name}.
 
 Focus on topics that:
 1. Showcase their expertise in ${companyContext.industry || 'their industry'}
@@ -301,7 +307,19 @@ Remember: Return ONLY the post content, nothing else.`,
 
     // Step 4: Save suggestions to database
     const saveResult = await step.run('save-suggestions', async () => {
-      const { companyContext } = prepareResult
+      const { companyContext, existingCount } = prepareResult
+
+      // Cap the number of posts to save so we never exceed MAX_ACTIVE_SUGGESTIONS
+      const maxToSave = MAX_ACTIVE_SUGGESTIONS - existingCount
+      const postsToSave = expandedPosts.slice(0, Math.max(maxToSave, 0))
+
+      if (postsToSave.length === 0) {
+        await updateRunStatus(supabase, runId, 'completed', {
+          suggestions_generated: 0,
+          completed_at: new Date().toISOString(),
+        })
+        return { batchId: '', count: 0, postTypes: [] as string[] }
+      }
 
       // Generate a batch ID to group these suggestions
       const batchId = crypto.randomUUID()
@@ -317,7 +335,7 @@ Remember: Return ONLY the post content, nothing else.`,
         generation_batch_id: string
         status: string
         expires_at: string
-      }> = expandedPosts.map(({ idea, content }) => ({
+      }> = postsToSave.map(({ idea, content }) => ({
         user_id: userId,
         content,
         post_type: idea.postType,

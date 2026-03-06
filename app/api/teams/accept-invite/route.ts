@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'This invitation has expired' }, { status: 400 })
     }
 
-    // Check if user is already a team member
+    // Check if user is already a member of THIS team
     const { data: existingMembership } = await supabase
       .from('team_members')
       .select('id')
@@ -85,7 +85,6 @@ export async function POST(request: Request) {
       .single()
 
     if (existingMembership) {
-      // Update invitation to accepted
       await supabase
         .from('team_invitations')
         .update({
@@ -101,7 +100,38 @@ export async function POST(request: Request) {
       })
     }
 
-    // Add user to team
+    // Enforce single-team-per-member: remove user from all other teams before joining
+    const { data: currentMemberships } = await supabase
+      .from('team_members')
+      .select('id, team_id, role')
+      .eq('user_id', user.id)
+
+    if (currentMemberships && currentMemberships.length > 0) {
+      for (const membership of currentMemberships) {
+        // If user is the owner of a team, delete that team (it becomes orphaned)
+        if (membership.role === 'owner') {
+          // Delete all members of that team first
+          await supabase
+            .from('team_members')
+            .delete()
+            .eq('team_id', membership.team_id)
+
+          // Delete the team itself
+          await supabase
+            .from('teams')
+            .delete()
+            .eq('id', membership.team_id)
+        } else {
+          // Just remove the membership
+          await supabase
+            .from('team_members')
+            .delete()
+            .eq('id', membership.id)
+        }
+      }
+    }
+
+    // Add user to the new team
     const { error: memberError } = await supabase
       .from('team_members')
       .insert({

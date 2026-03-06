@@ -66,6 +66,7 @@ import { LinkedInStatusBadge } from "./linkedin-status-badge"
 import { MentionPopover, type MentionSuggestion } from "./mention-popover"
 import { CarouselDocumentPreview } from "./carousel-document-preview"
 import { usePostingConfig } from "@/hooks/use-posting-config"
+import { useApiKeys } from "@/hooks/use-api-keys"
 import { buildMentionToken, countCharactersWithMentions } from "@/lib/linkedin/mentions"
 import { useComposeMode } from "@/hooks/use-compose-mode"
 import { ComposeModeToggle } from "./compose/compose-mode-toggle"
@@ -255,7 +256,8 @@ export function PostComposer({
   const [showAIDialog, setShowAIDialog] = React.useState(false)
   const [isEditing, setIsEditing] = React.useState(false)
   const [mediaFiles, setMediaFiles] = React.useState<MediaFile[]>([])
-  const [hasApiKey, setHasApiKey] = React.useState<boolean>(false)
+  const { status: apiKeyStatus } = useApiKeys()
+  const hasApiKey = apiKeyStatus?.hasKey ?? false
   const [selectedGoal, setSelectedGoal] = React.useState<GoalCategory | undefined>(undefined)
   const [selectedFormat, setSelectedFormat] = React.useState<PostTypeId | undefined>(undefined)
   const [activeFontStyle, setActiveFontStyle] = React.useState<UnicodeFontStyle>('normal')
@@ -360,29 +362,6 @@ export function PostComposer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.content])
-
-  // Fetch user's OpenAI API key status for AI generation
-  React.useEffect(() => {
-    let cancelled = false
-    async function fetchApiKeyStatus() {
-      try {
-        const response = await fetch('/api/settings/api-keys')
-        if (cancelled) return
-        if (response.ok) {
-          const data = await response.json()
-          if (!cancelled) {
-            setHasApiKey(data.hasKey === true)
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Failed to fetch API key status:', error)
-        }
-      }
-    }
-    fetchApiKeyStatus()
-    return () => { cancelled = true }
-  }, [])
 
   // Track media files in a ref for cleanup on unmount
   const mediaFilesRef = React.useRef<MediaFile[]>(mediaFiles)

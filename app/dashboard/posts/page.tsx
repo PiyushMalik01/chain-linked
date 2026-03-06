@@ -47,6 +47,7 @@ import {
   IconUsers,
   IconUser,
 } from "@tabler/icons-react"
+import { RemixPostButton } from "@/components/features/remix-post-button"
 import {
   staggerContainerVariants,
   staggerItemVariants,
@@ -555,7 +556,7 @@ function PostCard({
 
         {/* Action Bar — LinkedIn style */}
         <div className="border-t border-border/50 mx-4" />
-        <div className="grid grid-cols-4 px-2 py-1">
+        <div className="grid grid-cols-5 px-2 py-1">
           <button className="flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-colors">
             <IconHeart className="size-4" />
             <span className="hidden sm:inline">Like</span>
@@ -572,6 +573,14 @@ function PostCard({
             <IconTrendingUp className="size-4" />
             <span className="hidden sm:inline">Analytics</span>
           </button>
+          <div className="flex items-center justify-center">
+            <RemixPostButton
+              postId={post.id}
+              content={post.content ?? ""}
+              authorName={authorName}
+              className="py-2.5 px-1 w-full justify-center rounded-lg"
+            />
+          </div>
         </div>
       </Card>
     </motion.div>

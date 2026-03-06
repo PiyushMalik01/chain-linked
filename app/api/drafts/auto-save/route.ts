@@ -26,6 +26,8 @@ interface AutoSaveDraftRequest {
   context?: string | null
   /** Word count of the content */
   wordCount?: number
+  /** Existing draft row ID — when provided, updates in place instead of inserting */
+  draftId?: string
 }
 
 /**
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { content, postType, source, topic, tone, context, wordCount } = body
+    const { content, postType, source, topic, tone, context, wordCount, draftId } = body
 
     // Validate content
     if (!content || content.trim().length === 0) {
@@ -74,18 +76,53 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check for duplicate draft (same content saved in last 30 seconds)
-    const thirtySecondsAgo = new Date(Date.now() - 30_000).toISOString()
+    const trimmedContent = content.trim()
+    const computedWordCount = wordCount || trimmedContent.split(/\s+/).filter(Boolean).length
+
+    // If we have an existing draft ID, update it in place
+    if (draftId) {
+      const { data: updated, error: updateError } = await supabase
+        .from('generated_posts')
+        .update({
+          content: trimmedContent,
+          post_type: postType || 'general',
+          hook: topic || null,
+          cta: tone || null,
+          source_snippet: context || null,
+          word_count: computedWordCount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', draftId)
+        .eq('user_id', user.id)
+        .eq('status', 'draft')
+        .select('id')
+        .single()
+
+      if (!updateError && updated) {
+        return NextResponse.json({
+          success: true,
+          id: updated.id,
+        })
+      }
+      // If the update failed (e.g. draft was archived/deleted), fall through to insert
+    }
+
+    // Check for duplicate draft (same content already saved as a draft)
     const { data: existingDraft } = await supabase
       .from('generated_posts')
       .select('id')
       .eq('user_id', user.id)
-      .eq('content', content.trim())
+      .eq('content', trimmedContent)
       .eq('status', 'draft')
-      .gte('created_at', thirtySecondsAgo)
       .limit(1)
 
     if (existingDraft && existingDraft.length > 0) {
+      // Update the timestamp so it surfaces as recently edited
+      await supabase
+        .from('generated_posts')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', existingDraft[0].id)
+
       return NextResponse.json({
         success: true,
         message: 'Draft already exists',
@@ -93,18 +130,18 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Insert draft into generated_posts
+    // Insert new draft into generated_posts
     const { data, error } = await supabase
       .from('generated_posts')
       .insert({
         user_id: user.id,
-        content: content.trim(),
+        content: trimmedContent,
         post_type: postType || 'general',
         source: source || 'compose',
         hook: topic || null,
         cta: tone || null,
         source_snippet: context || null,
-        word_count: wordCount || content.trim().split(/\s+/).filter(Boolean).length,
+        word_count: computedWordCount,
         status: 'draft',
       })
       .select('id')

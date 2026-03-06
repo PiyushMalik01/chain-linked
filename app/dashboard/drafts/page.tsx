@@ -49,6 +49,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { RemixPostButton } from "@/components/features/remix-post-button"
 
 // ============================================================================
 // Source Color System
@@ -400,10 +401,17 @@ function DraftCard({
           {draft.wordCount}w
         </span>
         {!selectMode && (
-          <span className="text-[11px] text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-            Edit
-            <IconArrowRight className="size-3" />
-          </span>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <RemixPostButton
+              postId={draft.id}
+              content={draft.content}
+              className="h-6 px-2 py-0 text-[11px]"
+            />
+            <span className="text-[11px] text-primary font-medium flex items-center gap-0.5">
+              Edit
+              <IconArrowRight className="size-3" />
+            </span>
+          </div>
         )}
       </div>
     </motion.div>
@@ -504,13 +512,19 @@ function DraftRow({
 
       {/* Actions */}
       {!selectMode && (
-        <DraftActions
-          draft={draft}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onCopy={onCopy}
-          triggerClassName="opacity-0 group-hover:opacity-100"
-        />
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <RemixPostButton
+            postId={draft.id}
+            content={draft.content}
+            className="h-7 px-2 py-0 text-[11px]"
+          />
+          <DraftActions
+            draft={draft}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onCopy={onCopy}
+          />
+        </div>
       )}
     </button>
   )
@@ -741,7 +755,7 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
  */
 function DraftsContent() {
   const router = useRouter()
-  const { loadForRemix } = useDraft()
+  const { updateDraft, clearDraft } = useDraft()
   const { drafts, isLoading, error, deleteDraft, bulkDeleteDrafts, refetch } = useDrafts()
   const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
@@ -876,12 +890,17 @@ function DraftsContent() {
 
   /** Load draft into composer */
   const handleEdit = React.useCallback(
-    (draft: SavedDraft) => {
-      loadForRemix(draft.id, draft.content, "Draft")
+    (d: SavedDraft) => {
+      clearDraft()
+      updateDraft({
+        content: d.content,
+        savedDraftId: d.id,
+        sourcePostId: d.id,
+      })
       toast.success("Draft loaded into composer")
       router.push("/dashboard/compose")
     },
-    [loadForRemix, router]
+    [clearDraft, updateDraft, router]
   )
 
   /** Copy draft content */

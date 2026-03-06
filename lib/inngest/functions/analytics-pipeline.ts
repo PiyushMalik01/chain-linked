@@ -23,6 +23,46 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 /** Log prefix for all pipeline output */
 const LOG_PREFIX = '[AnalyticsPipeline]'
 
+/** Max IDs per .in() query to stay under Supabase URL length limits (~8KB) */
+const BATCH_SIZE = 100
+
+/**
+ * Executes a Supabase .in() query in batches to avoid URL length limits.
+ * Chunks the values array into groups of BATCH_SIZE, runs each query,
+ * and merges the results.
+ * @param db - Supabase client
+ * @param table - Table name to query
+ * @param column - Column name for the .in() filter
+ * @param values - Array of values to filter by
+ * @param select - Columns to select
+ * @param orderBy - Optional ordering config
+ * @returns Merged array of all results
+ */
+async function batchIn<T = Record<string, unknown>>(
+  db: SupabaseClient,
+  table: string,
+  column: string,
+  values: string[],
+  select: string,
+  orderBy?: { column: string; ascending: boolean }
+): Promise<T[]> {
+  if (values.length === 0) return []
+  const results: T[] = []
+  for (let i = 0; i < values.length; i += BATCH_SIZE) {
+    const chunk = values.slice(i, i + BATCH_SIZE)
+    let query = db.from(table).select(select).in(column, chunk)
+    if (orderBy) {
+      query = query.order(orderBy.column, { ascending: orderBy.ascending })
+    }
+    const { data, error } = await query
+    if (error) {
+      console.error(`${LOG_PREFIX} batchIn error on ${table}.${column}:`, error.message)
+    }
+    if (data) results.push(...(data as T[]))
+  }
+  return results
+}
+
 /** Tracking status IDs matching analytics_tracking_status table */
 const TRACKING_STATUS = {
   INACTIVE: 0,
@@ -171,6 +211,7 @@ interface PostDailyRow {
   engagements_gained: number
   engagements_rate: number | null
   analytics_tracking_status_id: number
+  post_type: string | null
 }
 
 /**
@@ -227,14 +268,10 @@ export const analyticsPipeline = inngest.createFunction(
     const profileResults = await step.run('profile-daily-deltas', async () => {
       console.log(`${LOG_PREFIX} [Step 1] Computing profile daily deltas`)
 
-      // Get all profiles updated in the last 48 hours
-      const cutoff = new Date(now)
-      cutoff.setUTCHours(cutoff.getUTCHours() - 48)
-
+      // Process ALL profiles, not just recently synced ones
       const { data: profiles, error: profilesError } = await supabase
         .from('linkedin_profiles')
         .select('user_id, followers_count, connections_count, updated_at')
-        .gte('updated_at', cutoff.toISOString())
 
       if (profilesError) {
         console.error(`${LOG_PREFIX} [Step 1] Failed to fetch profiles:`, profilesError)
@@ -242,24 +279,35 @@ export const analyticsPipeline = inngest.createFunction(
       }
 
       if (!profiles || profiles.length === 0) {
-        console.log(`${LOG_PREFIX} [Step 1] No recently updated profiles found`)
+        console.log(`${LOG_PREFIX} [Step 1] No profiles found`)
         return { processed: 0, skipped: 0, errors: 0 }
       }
 
-      console.log(`${LOG_PREFIX} [Step 1] Found ${profiles.length} recently updated profiles`)
+      console.log(`${LOG_PREFIX} [Step 1] Found ${profiles.length} profiles to process`)
 
-      // Also fetch linkedin_analytics for profile_views and search_appearances
+      // Fetch linkedin_analytics for profile_views and search_appearances
+      // Merge across page_types using Math.max per metric
       const userIds = profiles.map((p) => p.user_id)
-      const { data: analyticsRows } = await supabase
-        .from('linkedin_analytics')
-        .select('user_id, profile_views, search_appearances')
-        .in('user_id', userIds)
-        .order('captured_at', { ascending: false })
+      const analyticsRows = await batchIn<{
+        user_id: string
+        impressions: number | null
+        profile_views: number | null
+        search_appearances: number | null
+        page_type: string | null
+      }>(
+        supabase, 'linkedin_analytics', 'user_id', userIds,
+        'user_id, impressions, profile_views, search_appearances, page_type',
+        { column: 'captured_at', ascending: false }
+      )
 
-      // Build a map of latest analytics per user
+      // Build map: merge across page_types using Math.max per metric per user
       const analyticsMap = new Map<string, { profile_views: number; search_appearances: number }>()
-      for (const row of analyticsRows || []) {
-        if (!analyticsMap.has(row.user_id)) {
+      for (const row of analyticsRows) {
+        const existing = analyticsMap.get(row.user_id)
+        if (existing) {
+          existing.profile_views = Math.max(existing.profile_views, row.profile_views ?? 0)
+          existing.search_appearances = Math.max(existing.search_appearances, row.search_appearances ?? 0)
+        } else {
           analyticsMap.set(row.user_id, {
             profile_views: row.profile_views ?? 0,
             search_appearances: row.search_appearances ?? 0,
@@ -288,19 +336,20 @@ export const analyticsPipeline = inngest.createFunction(
             .limit(1)
             .maybeSingle()
 
-          // Compute deltas
+          // Compute deltas with Math.max(0) clamping
+          // When no accumulative exists, gain is 0 (not the absolute value)
           const followersGained = latestAccum
-            ? currentFollowers - (latestAccum.followers_total ?? 0)
-            : currentFollowers
+            ? Math.max(0, currentFollowers - (latestAccum.followers_total ?? 0))
+            : 0
           const connectionsGained = latestAccum
-            ? currentConnections - (latestAccum.connections_total ?? 0)
-            : currentConnections
+            ? Math.max(0, currentConnections - (latestAccum.connections_total ?? 0))
+            : 0
           const profileViewsGained = latestAccum
-            ? currentProfileViews - (latestAccum.profile_views_total ?? 0)
-            : currentProfileViews
+            ? Math.max(0, currentProfileViews - (latestAccum.profile_views_total ?? 0))
+            : 0
           const searchAppearancesGained = latestAccum
-            ? currentSearchAppearances - (latestAccum.search_appearances_total ?? 0)
-            : currentSearchAppearances
+            ? Math.max(0, currentSearchAppearances - (latestAccum.search_appearances_total ?? 0))
+            : 0
 
           // Skip if all deltas are 0 (unless this is the first-ever run)
           if (
@@ -369,25 +418,56 @@ export const analyticsPipeline = inngest.createFunction(
         return { updated: 0 }
       }
 
+      // Batch-fetch profiles and analytics for all users to avoid N+1 queries
+      const dailyUserIds = [...new Set(dailyRows.map(r => r.user_id))]
+
+      const allProfiles = await batchIn<{
+        user_id: string
+        followers_count: number | null
+        connections_count: number | null
+      }>(
+        supabase, 'linkedin_profiles', 'user_id', dailyUserIds,
+        'user_id, followers_count, connections_count'
+      )
+
+      const profileMap = new Map<string, { followers_count: number; connections_count: number }>()
+      for (const p of allProfiles) {
+        profileMap.set(p.user_id, {
+          followers_count: p.followers_count ?? 0,
+          connections_count: p.connections_count ?? 0,
+        })
+      }
+
+      // Merge linkedin_analytics across page_types using Math.max
+      const allAnalytics = await batchIn<{
+        user_id: string
+        profile_views: number | null
+        search_appearances: number | null
+      }>(
+        supabase, 'linkedin_analytics', 'user_id', dailyUserIds,
+        'user_id, profile_views, search_appearances',
+        { column: 'captured_at', ascending: false }
+      )
+
+      const accumAnalyticsMap = new Map<string, { profile_views: number; search_appearances: number }>()
+      for (const row of allAnalytics) {
+        const existing = accumAnalyticsMap.get(row.user_id)
+        if (existing) {
+          existing.profile_views = Math.max(existing.profile_views, row.profile_views ?? 0)
+          existing.search_appearances = Math.max(existing.search_appearances, row.search_appearances ?? 0)
+        } else {
+          accumAnalyticsMap.set(row.user_id, {
+            profile_views: row.profile_views ?? 0,
+            search_appearances: row.search_appearances ?? 0,
+          })
+        }
+      }
+
       let updated = 0
 
       for (const daily of dailyRows) {
-        // Get current absolute values from linkedin_profiles
-        const { data: profile } = await supabase
-          .from('linkedin_profiles')
-          .select('followers_count, connections_count')
-          .eq('user_id', daily.user_id)
-          .limit(1)
-          .maybeSingle()
-
-        // Get linkedin_analytics for profile_views and search_appearances
-        const { data: analytics } = await supabase
-          .from('linkedin_analytics')
-          .select('profile_views, search_appearances')
-          .eq('user_id', daily.user_id)
-          .order('captured_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        const profile = profileMap.get(daily.user_id)
+        const analytics = accumAnalyticsMap.get(daily.user_id)
 
         const { error: upsertError } = await supabase
           .from('profile_analytics_accumulative')
@@ -418,15 +498,95 @@ export const analyticsPipeline = inngest.createFunction(
       return { updated }
     })
 
+    // ─── Step 2.5: Upsert analytics_history ─────────────────────────────
+    await step.run('upsert-analytics-history', async () => {
+      console.log(`${LOG_PREFIX} [Step 2.5] Upserting analytics_history from linkedin_analytics`)
+
+      // Fetch latest linkedin_analytics per user (merge across page_types)
+      const { data: analyticsRows, error: fetchErr } = await supabase
+        .from('linkedin_analytics')
+        .select('user_id, captured_at, impressions, members_reached, engagements, new_followers, profile_views')
+        .not('user_id', 'is', null)
+
+      if (fetchErr || !analyticsRows?.length) {
+        console.log(`${LOG_PREFIX} [Step 2.5] No linkedin_analytics data`)
+        return { upserted: 0 }
+      }
+
+      // Group by user_id + date, taking MAX across page_types
+      const grouped = new Map<string, {
+        user_id: string
+        date: string
+        impressions: number
+        members_reached: number
+        engagements: number
+        followers: number
+        profile_views: number
+      }>()
+
+      for (const row of analyticsRows) {
+        const date = (row.captured_at ?? '').split('T')[0]
+        if (!date) continue
+        const key = `${row.user_id}:${date}`
+        const existing = grouped.get(key)
+        if (existing) {
+          existing.impressions = Math.max(existing.impressions, row.impressions ?? 0)
+          existing.members_reached = Math.max(existing.members_reached, row.members_reached ?? 0)
+          existing.engagements = Math.max(existing.engagements, row.engagements ?? 0)
+          existing.followers = Math.max(existing.followers, row.new_followers ?? 0)
+          existing.profile_views = Math.max(existing.profile_views, row.profile_views ?? 0)
+        } else {
+          grouped.set(key, {
+            user_id: row.user_id,
+            date,
+            impressions: row.impressions ?? 0,
+            members_reached: row.members_reached ?? 0,
+            engagements: row.engagements ?? 0,
+            followers: row.new_followers ?? 0,
+            profile_views: row.profile_views ?? 0,
+          })
+        }
+      }
+
+      const rows = Array.from(grouped.values())
+      let upserted = 0
+
+      for (let i = 0; i < rows.length; i += 50) {
+        const batch = rows.slice(i, i + 50)
+        const { error: upsertErr } = await supabase
+          .from('analytics_history')
+          .upsert(
+            batch.map(r => ({
+              user_id: r.user_id,
+              date: r.date,
+              impressions: r.impressions,
+              members_reached: r.members_reached,
+              engagements: r.engagements,
+              followers: r.followers,
+              profile_views: r.profile_views,
+            })),
+            { onConflict: 'user_id,date' }
+          )
+
+        if (upsertErr) {
+          console.error(`${LOG_PREFIX} [Step 2.5] analytics_history upsert error:`, upsertErr.message)
+        } else {
+          upserted += batch.length
+        }
+      }
+
+      console.log(`${LOG_PREFIX} [Step 2.5] Done: ${upserted} analytics_history rows upserted`)
+      return { upserted }
+    })
+
     // ─── Step 3: Post Daily Deltas ───────────────────────────────────────
     const postDailyResults = await step.run('post-daily-deltas', async () => {
       console.log(`${LOG_PREFIX} [Step 3] Computing post daily deltas`)
 
-      // Fetch all posts with a posted_at date
+      // Fetch all posts (including those without posted_at - use created_at as fallback)
       const { data: posts, error: postsError } = await supabase
         .from('my_posts')
-        .select('id, user_id, activity_urn, posted_at, impressions, reactions, comments, reposts, saves, sends')
-        .not('posted_at', 'is', null)
+        .select('id, user_id, activity_urn, posted_at, created_at, impressions, reactions, comments, reposts, saves, sends, media_type')
 
       if (postsError) {
         console.error(`${LOG_PREFIX} [Step 3] Failed to fetch posts:`, postsError)
@@ -442,13 +602,22 @@ export const analyticsPipeline = inngest.createFunction(
 
       // Fetch detailed metrics from post_analytics (keyed by activity_urn)
       const activityUrns = posts.map((p) => p.activity_urn).filter(Boolean)
-      const { data: postAnalyticsRows } = await supabase
-        .from('post_analytics')
-        .select(
-          'activity_urn, impressions, members_reached, unique_views, reactions, comments, reposts, saves, sends, engagement_rate'
-        )
-        .in('activity_urn', activityUrns)
-        .order('captured_at', { ascending: false })
+      const postAnalyticsRows = await batchIn<{
+        activity_urn: string
+        impressions: number | null
+        members_reached: number | null
+        unique_views: number | null
+        reactions: number | null
+        comments: number | null
+        reposts: number | null
+        saves: number | null
+        sends: number | null
+        engagement_rate: number | null
+      }>(
+        supabase, 'post_analytics', 'activity_urn', activityUrns,
+        'activity_urn, impressions, members_reached, unique_views, reactions, comments, reposts, saves, sends, engagement_rate',
+        { column: 'captured_at', ascending: false }
+      )
 
       // Build map of latest post_analytics per activity_urn
       const paMap = new Map<
@@ -464,7 +633,7 @@ export const analyticsPipeline = inngest.createFunction(
           engagementRate: number | null
         }
       >()
-      for (const row of postAnalyticsRows || []) {
+      for (const row of postAnalyticsRows) {
         if (row.activity_urn && !paMap.has(row.activity_urn)) {
           paMap.set(row.activity_urn, {
             impressions: row.impressions ?? 0,
@@ -481,13 +650,27 @@ export const analyticsPipeline = inngest.createFunction(
 
       // Fetch all existing post_analytics_accumulative rows for batch lookup
       const postIds = posts.map((p) => p.id)
-      const { data: accumRows } = await supabase
-        .from('post_analytics_accumulative')
-        .select('*')
-        .in('post_id', postIds)
+      const accumRows = await batchIn<{
+        post_id: string
+        user_id: string
+        impressions_total: number | null
+        unique_reach_total: number | null
+        reactions_total: number | null
+        comments_total: number | null
+        reposts_total: number | null
+        saves_total: number | null
+        sends_total: number | null
+        engagements_total: number | null
+        engagements_rate: number | null
+        analytics_tracking_status_id: number | null
+        analysis_date: string
+        post_created_at: string | null
+      }>(
+        supabase, 'post_analytics_accumulative', 'post_id', postIds, '*'
+      )
 
-      const accumMap = new Map<string, (typeof accumRows extends (infer T)[] | null ? T : never)>()
-      for (const row of accumRows || []) {
+      const accumMap = new Map<string, (typeof accumRows)[number]>()
+      for (const row of accumRows) {
         accumMap.set(row.post_id, row)
       }
 
@@ -501,7 +684,13 @@ export const analyticsPipeline = inngest.createFunction(
 
       for (const post of posts) {
         try {
-          const postedAt = new Date(post.posted_at)
+          // Use posted_at with created_at fallback
+          const postDate = post.posted_at ?? post.created_at
+          if (!postDate) {
+            skipped++
+            continue
+          }
+          const postedAt = new Date(postDate)
           const ageDays = Math.floor(
             (yesterday.getTime() - postedAt.getTime()) / (1000 * 60 * 60 * 24)
           )
@@ -533,24 +722,29 @@ export const analyticsPipeline = inngest.createFunction(
           // Get latest accumulative for this post
           const accum = accumMap.get(post.id)
 
-          // Compute deltas
+          // Compute deltas with Math.max(0) clamping to prevent negatives
+          // When no accum exists (first run), gain is 0 (not lifetime absolute)
           const impressionsGained = accum
-            ? currentImpressions - (accum.impressions_total ?? 0)
-            : currentImpressions
+            ? Math.max(0, currentImpressions - (accum.impressions_total ?? 0))
+            : 0
           const uniqueReachGained = accum
-            ? currentUniqueReach - (accum.unique_reach_total ?? 0)
-            : currentUniqueReach
+            ? Math.max(0, currentUniqueReach - (accum.unique_reach_total ?? 0))
+            : 0
           const reactionsGained = accum
-            ? currentReactions - (accum.reactions_total ?? 0)
-            : currentReactions
+            ? Math.max(0, currentReactions - (accum.reactions_total ?? 0))
+            : 0
           const commentsGained = accum
-            ? currentComments - (accum.comments_total ?? 0)
-            : currentComments
+            ? Math.max(0, currentComments - (accum.comments_total ?? 0))
+            : 0
           const repostsGained = accum
-            ? currentReposts - (accum.reposts_total ?? 0)
-            : currentReposts
-          const savesGained = accum ? currentSaves - (accum.saves_total ?? 0) : currentSaves
-          const sendsGained = accum ? currentSends - (accum.sends_total ?? 0) : currentSends
+            ? Math.max(0, currentReposts - (accum.reposts_total ?? 0))
+            : 0
+          const savesGained = accum
+            ? Math.max(0, currentSaves - (accum.saves_total ?? 0))
+            : 0
+          const sendsGained = accum
+            ? Math.max(0, currentSends - (accum.sends_total ?? 0))
+            : 0
 
           // Skip if all deltas are 0 (unless first-ever row)
           if (
@@ -596,6 +790,7 @@ export const analyticsPipeline = inngest.createFunction(
             engagements_gained: engagementsGained,
             engagements_rate: engagementsRate,
             analytics_tracking_status_id: trackingStatus,
+            post_type: post.media_type || null,
           })
 
           processed++
@@ -644,49 +839,132 @@ export const analyticsPipeline = inngest.createFunction(
 
       // Fetch existing accumulative rows for these posts
       const postIds = dailyRows.map((r) => r.post_id)
-      const { data: existingAccums } = await supabase
-        .from('post_analytics_accumulative')
-        .select('*')
-        .in('post_id', postIds)
+      const existingAccums = await batchIn<{
+        post_id: string
+        user_id: string
+        impressions_total: number | null
+        unique_reach_total: number | null
+        reactions_total: number | null
+        comments_total: number | null
+        reposts_total: number | null
+        saves_total: number | null
+        sends_total: number | null
+        engagements_total: number | null
+        engagements_rate: number | null
+        analytics_tracking_status_id: number | null
+        analysis_date: string
+        post_created_at: string | null
+      }>(
+        supabase, 'post_analytics_accumulative', 'post_id', postIds, '*'
+      )
 
-      const existingMap = new Map<string, (typeof existingAccums extends (infer T)[] | null ? T : never)>()
-      for (const row of existingAccums || []) {
+      const existingMap = new Map<string, (typeof existingAccums)[number]>()
+      for (const row of existingAccums) {
         existingMap.set(row.post_id, row)
       }
 
       // Also fetch the earliest analysis_date per post for post_created_at
-      const { data: earliestDates } = await supabase
-        .from('post_analytics_daily')
-        .select('post_id, analysis_date')
-        .in('post_id', postIds)
-        .order('analysis_date', { ascending: true })
+      const earliestDates = await batchIn<{ post_id: string; analysis_date: string }>(
+        supabase, 'post_analytics_daily', 'post_id', postIds,
+        'post_id, analysis_date',
+        { column: 'analysis_date', ascending: true }
+      )
 
       const earliestMap = new Map<string, string>()
-      for (const row of earliestDates || []) {
+      for (const row of earliestDates) {
         if (!earliestMap.has(row.post_id)) {
           earliestMap.set(row.post_id, row.analysis_date)
         }
       }
 
+      // Fetch source-of-truth snapshots from my_posts for drift check
+      const sourcePosts = await batchIn<{
+        id: string
+        impressions: number | null
+        reactions: number | null
+        comments: number | null
+        reposts: number | null
+        saves: number | null
+        sends: number | null
+      }>(
+        supabase, 'my_posts', 'id', postIds,
+        'id, impressions, reactions, comments, reposts, saves, sends'
+      )
+
+      const sourceMap = new Map<string, {
+        impressions: number
+        reactions: number
+        comments: number
+        reposts: number
+        saves: number
+        sends: number
+      }>()
+      for (const sp of sourcePosts) {
+        sourceMap.set(sp.id, {
+          impressions: sp.impressions ?? 0,
+          reactions: sp.reactions ?? 0,
+          comments: sp.comments ?? 0,
+          reposts: sp.reposts ?? 0,
+          saves: sp.saves ?? 0,
+          sends: sp.sends ?? 0,
+        })
+      }
+
       const upsertRows = dailyRows.map((daily) => {
         const existing = existingMap.get(daily.post_id)
+        const source = sourceMap.get(daily.post_id)
+
+        // Additive accumulation
+        let impressionsTotal = (existing?.impressions_total ?? 0) + (daily.impressions_gained ?? 0)
+        let reactionsTotal = (existing?.reactions_total ?? 0) + (daily.reactions_gained ?? 0)
+        let commentsTotal = (existing?.comments_total ?? 0) + (daily.comments_gained ?? 0)
+        let repostsTotal = (existing?.reposts_total ?? 0) + (daily.reposts_gained ?? 0)
+        let savesTotal = (existing?.saves_total ?? 0) + (daily.saves_gained ?? 0)
+        let sendsTotal = (existing?.sends_total ?? 0) + (daily.sends_gained ?? 0)
+
+        // Drift sanity check: if accumulated total exceeds source by >5%, reset to source
+        if (source) {
+          const DRIFT_THRESHOLD = 1.05
+          if (source.impressions > 0 && impressionsTotal > source.impressions * DRIFT_THRESHOLD) {
+            console.warn(`${LOG_PREFIX} [Step 4] Drift detected for post ${daily.post_id}: accum impressions ${impressionsTotal} > source ${source.impressions}. Resetting.`)
+            impressionsTotal = source.impressions
+          }
+          if (source.reactions > 0 && reactionsTotal > source.reactions * DRIFT_THRESHOLD) {
+            reactionsTotal = source.reactions
+          }
+          if (source.comments > 0 && commentsTotal > source.comments * DRIFT_THRESHOLD) {
+            commentsTotal = source.comments
+          }
+          if (source.reposts > 0 && repostsTotal > source.reposts * DRIFT_THRESHOLD) {
+            repostsTotal = source.reposts
+          }
+          if (source.saves > 0 && savesTotal > source.saves * DRIFT_THRESHOLD) {
+            savesTotal = source.saves
+          }
+          if (source.sends > 0 && sendsTotal > source.sends * DRIFT_THRESHOLD) {
+            sendsTotal = source.sends
+          }
+        }
+
+        const engagementsTotal = reactionsTotal + commentsTotal + repostsTotal + savesTotal + sendsTotal
+
         return {
           user_id: daily.user_id,
           post_id: daily.post_id,
           analysis_date: analysisDate,
           post_created_at: earliestMap.get(daily.post_id) ?? analysisDate,
-          impressions_total: (existing?.impressions_total ?? 0) + (daily.impressions_gained ?? 0),
+          impressions_total: impressionsTotal,
           unique_reach_total:
             (existing?.unique_reach_total ?? 0) + (daily.unique_reach_gained ?? 0),
-          reactions_total: (existing?.reactions_total ?? 0) + (daily.reactions_gained ?? 0),
-          comments_total: (existing?.comments_total ?? 0) + (daily.comments_gained ?? 0),
-          reposts_total: (existing?.reposts_total ?? 0) + (daily.reposts_gained ?? 0),
-          saves_total: (existing?.saves_total ?? 0) + (daily.saves_gained ?? 0),
-          sends_total: (existing?.sends_total ?? 0) + (daily.sends_gained ?? 0),
-          engagements_total:
-            (existing?.engagements_total ?? 0) + (daily.engagements_gained ?? 0),
+          reactions_total: reactionsTotal,
+          comments_total: commentsTotal,
+          reposts_total: repostsTotal,
+          saves_total: savesTotal,
+          sends_total: sendsTotal,
+          engagements_total: engagementsTotal,
           engagements_rate: daily.engagements_rate,
           analytics_tracking_status_id: daily.analytics_tracking_status_id,
+          post_type: daily.post_type ?? null,
         }
       })
 
@@ -739,6 +1017,7 @@ export const analyticsPipeline = inngest.createFunction(
           sends: number
           engagements: number
           tracking_status: number
+          post_type: string | null
         }
       >()
 
@@ -755,6 +1034,7 @@ export const analyticsPipeline = inngest.createFunction(
           existing.sends += row.sends_gained ?? 0
           existing.engagements += row.engagements_gained ?? 0
           existing.tracking_status = row.analytics_tracking_status_id ?? existing.tracking_status
+          if (!existing.post_type && row.post_type) existing.post_type = row.post_type
         } else {
           postAgg.set(key, {
             user_id: row.user_id,
@@ -768,6 +1048,7 @@ export const analyticsPipeline = inngest.createFunction(
             sends: row.sends_gained ?? 0,
             engagements: row.engagements_gained ?? 0,
             tracking_status: row.analytics_tracking_status_id ?? TRACKING_STATUS.DAILY,
+            post_type: row.post_type ?? null,
           })
         }
       }
@@ -785,9 +1066,10 @@ export const analyticsPipeline = inngest.createFunction(
         saves_total: agg.saves,
         sends_total: agg.sends,
         engagements_total: agg.engagements,
-        engagements_rate: agg.impressions > 0 ? agg.engagements / agg.impressions : null,
+        engagements_rate: agg.impressions > 0 ? (agg.engagements / agg.impressions) * 100 : null,
         is_finalized: isSunday,
         analytics_tracking_status_id: agg.tracking_status,
+        post_type: agg.post_type,
       }))
 
       if (upsertRows.length > 0) {
@@ -840,6 +1122,7 @@ export const analyticsPipeline = inngest.createFunction(
           sends: number
           engagements: number
           tracking_status: number
+          post_type: string | null
         }
       >()
 
@@ -856,6 +1139,7 @@ export const analyticsPipeline = inngest.createFunction(
           existing.sends += row.sends_gained ?? 0
           existing.engagements += row.engagements_gained ?? 0
           existing.tracking_status = row.analytics_tracking_status_id ?? existing.tracking_status
+          if (!existing.post_type && row.post_type) existing.post_type = row.post_type
         } else {
           postAgg.set(key, {
             user_id: row.user_id,
@@ -869,6 +1153,7 @@ export const analyticsPipeline = inngest.createFunction(
             sends: row.sends_gained ?? 0,
             engagements: row.engagements_gained ?? 0,
             tracking_status: row.analytics_tracking_status_id ?? TRACKING_STATUS.DAILY,
+            post_type: row.post_type ?? null,
           })
         }
       }
@@ -886,9 +1171,10 @@ export const analyticsPipeline = inngest.createFunction(
         saves_total: agg.saves,
         sends_total: agg.sends,
         engagements_total: agg.engagements,
-        engagements_rate: agg.impressions > 0 ? agg.engagements / agg.impressions : null,
+        engagements_rate: agg.impressions > 0 ? (agg.engagements / agg.impressions) * 100 : null,
         is_finalized: finalize,
         analytics_tracking_status_id: agg.tracking_status,
+        post_type: agg.post_type,
       }))
 
       if (upsertRows.length > 0) {
@@ -942,6 +1228,7 @@ export const analyticsPipeline = inngest.createFunction(
           sends: number
           engagements: number
           tracking_status: number
+          post_type: string | null
         }
       >()
 
@@ -958,6 +1245,7 @@ export const analyticsPipeline = inngest.createFunction(
           existing.sends += row.sends_total ?? 0
           existing.engagements += row.engagements_total ?? 0
           existing.tracking_status = row.analytics_tracking_status_id ?? existing.tracking_status
+          if (!existing.post_type && row.post_type) existing.post_type = row.post_type
         } else {
           postAgg.set(key, {
             user_id: row.user_id,
@@ -971,6 +1259,7 @@ export const analyticsPipeline = inngest.createFunction(
             sends: row.sends_total ?? 0,
             engagements: row.engagements_total ?? 0,
             tracking_status: row.analytics_tracking_status_id ?? TRACKING_STATUS.DAILY,
+            post_type: row.post_type ?? null,
           })
         }
       }
@@ -988,9 +1277,10 @@ export const analyticsPipeline = inngest.createFunction(
         saves_total: agg.saves,
         sends_total: agg.sends,
         engagements_total: agg.engagements,
-        engagements_rate: agg.impressions > 0 ? agg.engagements / agg.impressions : null,
+        engagements_rate: agg.impressions > 0 ? (agg.engagements / agg.impressions) * 100 : null,
         is_finalized: finalize,
         analytics_tracking_status_id: agg.tracking_status,
+        post_type: agg.post_type,
       }))
 
       if (upsertRows.length > 0) {
@@ -1044,6 +1334,7 @@ export const analyticsPipeline = inngest.createFunction(
           sends: number
           engagements: number
           tracking_status: number
+          post_type: string | null
         }
       >()
 
@@ -1060,6 +1351,7 @@ export const analyticsPipeline = inngest.createFunction(
           existing.sends += row.sends_total ?? 0
           existing.engagements += row.engagements_total ?? 0
           existing.tracking_status = row.analytics_tracking_status_id ?? existing.tracking_status
+          if (!existing.post_type && row.post_type) existing.post_type = row.post_type
         } else {
           postAgg.set(key, {
             user_id: row.user_id,
@@ -1073,6 +1365,7 @@ export const analyticsPipeline = inngest.createFunction(
             sends: row.sends_total ?? 0,
             engagements: row.engagements_total ?? 0,
             tracking_status: row.analytics_tracking_status_id ?? TRACKING_STATUS.DAILY,
+            post_type: row.post_type ?? null,
           })
         }
       }
@@ -1090,9 +1383,10 @@ export const analyticsPipeline = inngest.createFunction(
         saves_total: agg.saves,
         sends_total: agg.sends,
         engagements_total: agg.engagements,
-        engagements_rate: agg.impressions > 0 ? agg.engagements / agg.impressions : null,
+        engagements_rate: agg.impressions > 0 ? (agg.engagements / agg.impressions) * 100 : null,
         is_finalized: finalize,
         analytics_tracking_status_id: agg.tracking_status,
+        post_type: agg.post_type,
       }))
 
       if (upsertRows.length > 0) {
@@ -1114,11 +1408,10 @@ export const analyticsPipeline = inngest.createFunction(
     const phaseResults = await step.run('phase-transitions', async () => {
       console.log(`${LOG_PREFIX} [Step 9] Checking for tracking phase transitions`)
 
-      // Fetch all posts with posted_at to check for phase boundary crossings
+      // Fetch all posts (including those without posted_at)
       const { data: posts, error: postsError } = await supabase
         .from('my_posts')
-        .select('id, user_id, posted_at')
-        .not('posted_at', 'is', null)
+        .select('id, user_id, posted_at, created_at')
 
       if (postsError || !posts || posts.length === 0) {
         console.log(`${LOG_PREFIX} [Step 9] No posts to check`)
@@ -1130,7 +1423,9 @@ export const analyticsPipeline = inngest.createFunction(
       let transitions = 0
 
       for (const post of posts) {
-        const postedAt = new Date(post.posted_at)
+        const postDate = post.posted_at ?? post.created_at
+        if (!postDate) continue
+        const postedAt = new Date(postDate)
         const ageDays = Math.floor(
           (yesterday.getTime() - postedAt.getTime()) / (1000 * 60 * 60 * 24)
         )
@@ -1174,6 +1469,45 @@ export const analyticsPipeline = inngest.createFunction(
 
       console.log(`${LOG_PREFIX} [Step 9] Done: ${transitions} phase transitions applied`)
       return { transitions }
+    })
+
+    // ─── Step 10: Update sync_metadata ──────────────────────────────────
+    await step.run('update-sync-metadata', async () => {
+      console.log(`${LOG_PREFIX} [Step 10] Updating sync_metadata for processed users`)
+
+      // Get all user IDs that were processed in this pipeline run
+      const { data: processedProfiles } = await supabase
+        .from('profile_analytics_daily')
+        .select('user_id')
+        .eq('analysis_date', analysisDate)
+
+      const userIds = [...new Set((processedProfiles || []).map(p => p.user_id))]
+
+      if (userIds.length === 0) {
+        console.log(`${LOG_PREFIX} [Step 10] No users to update`)
+        return { updated: 0 }
+      }
+
+      const nowIso = new Date().toISOString()
+      const rows = userIds.map(uid => ({
+        user_id: uid,
+        table_name: 'analytics_pipeline',
+        last_synced_at: nowIso,
+        sync_status: 'completed',
+        pending_changes: 0,
+      }))
+
+      const { error: upsertErr } = await supabase
+        .from('sync_metadata')
+        .upsert(rows, { onConflict: 'user_id,table_name' })
+
+      if (upsertErr) {
+        console.error(`${LOG_PREFIX} [Step 10] sync_metadata upsert error:`, upsertErr.message)
+        return { updated: 0 }
+      }
+
+      console.log(`${LOG_PREFIX} [Step 10] Done: ${userIds.length} sync_metadata rows updated`)
+      return { updated: userIds.length }
     })
 
     // ─── Summary ─────────────────────────────────────────────────────────

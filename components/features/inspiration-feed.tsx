@@ -17,6 +17,7 @@ import {
   IconLoader2,
   IconChevronDown,
   IconSparkles,
+  IconUsers,
 } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
@@ -85,6 +86,8 @@ export interface InspirationPost {
   id: string
   /** Author information */
   author: InspirationPostAuthor
+  /** LinkedIn profile URL of the author, used for follow/unfollow matching */
+  authorUrl?: string
   /** Post content text */
   content: string
   /** Category classification */
@@ -125,6 +128,24 @@ export interface InspirationFeedProps {
   error?: string | null
   /** Additional CSS classes to apply to the container */
   className?: string
+  /**
+   * Callback to check if an author URL is followed
+   * @param authorUrl - The LinkedIn profile URL
+   */
+  isFollowing?: (authorUrl: string) => boolean
+  /**
+   * Callback to follow an influencer
+   * @param url - LinkedIn profile URL
+   * @param authorName - Optional display name
+   * @param headline - Optional headline
+   * @param avatar - Optional avatar URL
+   */
+  onFollow?: (url: string, authorName?: string, headline?: string, avatar?: string) => Promise<void>
+  /**
+   * Callback to unfollow an influencer by record ID
+   * @param id - Record ID
+   */
+  onUnfollow?: (id: string) => Promise<void>
 }
 
 /** Available category options for filtering - matches inferred categories from posts */
@@ -355,18 +376,23 @@ export function InspirationFeed({
   isLoading = false,
   error,
   className,
+  isFollowing,
+  onFollow,
+  onUnfollow,
 }: InspirationFeedProps) {
   // Local state for internal filtering when props not provided
   const [localCategory, setLocalCategory] = React.useState<InspirationCategory>("all")
   const [localSearchQuery, setLocalSearchQuery] = React.useState("")
   const [localNiche, setLocalNiche] = React.useState<InspirationNiche | "all">("all")
   const [localSavedOnly, setLocalSavedOnly] = React.useState(false)
+  const [localFollowingOnly, setLocalFollowingOnly] = React.useState(false)
 
   // Use prop values if provided, otherwise use local state
   const activeCategory = filters?.category ?? localCategory
   const searchQuery = filters?.searchQuery ?? localSearchQuery
   const activeNiche = filters?.niche ?? localNiche
   const savedOnly = filters?.savedOnly ?? localSavedOnly
+  const followingOnly = filters?.followingOnly ?? localFollowingOnly
 
   /**
    * Handles category tab change.
@@ -430,6 +456,21 @@ export function InspirationFeed({
   )
 
   /**
+   * Handles following only toggle.
+   * @param value - New following only value
+   */
+  const handleFollowingOnlyChange = React.useCallback(
+    (value: boolean) => {
+      if (onFiltersChange) {
+        onFiltersChange({ followingOnly: value })
+      } else {
+        setLocalFollowingOnly(value)
+      }
+    },
+    [onFiltersChange]
+  )
+
+  /**
    * Handles remixing a post - calls the onRemix callback to let parent handle the flow
    * @param post - The post to remix
    */
@@ -472,8 +513,14 @@ export function InspirationFeed({
   const displayPosts = React.useMemo(() => {
     if (!posts) return []
 
-    // If filters are controlled externally, don't filter locally
-    if (filters) return posts
+    // If filters are controlled externally, only apply following filter locally
+    // (since followingOnly requires client-side isFollowing check)
+    if (filters) {
+      if (followingOnly && isFollowing) {
+        return posts.filter(post => post.authorUrl ? isFollowing(post.authorUrl) : false)
+      }
+      return posts
+    }
 
     return posts.filter((post) => {
       // Category filter
@@ -490,9 +537,14 @@ export function InspirationFeed({
       // Saved filter
       const matchesSaved = !savedOnly || savedPostIds.has(post.id)
 
-      return matchesCategory && matchesSearch && matchesSaved
+      // Following filter
+      const matchesFollowing = !followingOnly || (
+        !!post.authorUrl && !!isFollowing && isFollowing(post.authorUrl)
+      )
+
+      return matchesCategory && matchesSearch && matchesSaved && matchesFollowing
     })
-  }, [posts, filters, activeCategory, searchQuery, savedOnly, savedPostIds])
+  }, [posts, filters, activeCategory, searchQuery, savedOnly, savedPostIds, followingOnly, isFollowing])
 
   return (
     <motion.div
@@ -556,6 +608,15 @@ export function InspirationFeed({
                   )}
                   Saved posts only
                 </DropdownMenuCheckboxItem>
+                {onFollow && (
+                  <DropdownMenuCheckboxItem
+                    checked={followingOnly}
+                    onCheckedChange={handleFollowingOnlyChange}
+                  >
+                    <IconUsers className="mr-2 size-4" />
+                    Following only
+                  </DropdownMenuCheckboxItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -641,10 +702,13 @@ export function InspirationFeed({
                     <InspirationPostCard
                       post={post}
                       isSaved={savedPostIds.has(post.id)}
+                      isFollowingAuthor={post.authorUrl ? (isFollowing?.(post.authorUrl) ?? false) : false}
                       onRemix={handleRemix}
                       onSave={handleSave}
                       onUnsave={handleUnsave}
                       onExpand={onExpand}
+                      onFollow={onFollow}
+                      onUnfollow={onUnfollow}
                     />
                   </motion.div>
                 ))}

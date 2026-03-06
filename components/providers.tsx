@@ -6,6 +6,7 @@ import { PostHogProvider, PostHogUserSync } from "@/components/posthog-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { DraftProvider } from "@/lib/store/draft-context"
 import { AuthProvider } from "@/lib/auth/auth-provider"
+import { ApiKeysProvider } from "@/hooks/use-api-keys"
 import { SessionReplayDebug } from "@/components/debug/session-replay-debug"
 
 /**
@@ -17,7 +18,8 @@ import { SessionReplayDebug } from "@/components/debug/session-replay-debug"
  * 1. ThemeProvider - Theming foundation
  * 2. AuthProvider - Authentication state (needed by PostHog for user identification)
  * 3. PostHogProvider - Analytics (wraps auth-dependent components)
- * 4. DraftProvider - Draft state management
+ * 4. ApiKeysProvider - Shared API key status (single fetch for all consumers)
+ * 5. DraftProvider - Draft state management
  */
 export function Providers({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
@@ -31,9 +33,11 @@ export function Providers({ children }: { children: React.ReactNode }): React.Re
         <PostHogProvider>
           <PostHogUserSync />
           <TooltipProvider>
-            <DraftProvider>
-              {children}
-            </DraftProvider>
+            <ApiKeysProvider>
+              <DraftProvider>
+                {children}
+              </DraftProvider>
+            </ApiKeysProvider>
           </TooltipProvider>
         </PostHogProvider>
       </AuthProvider>

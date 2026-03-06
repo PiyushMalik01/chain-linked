@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   X,
   Check,
+  ShieldCheck,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -48,6 +49,7 @@ import { completeOnboardingInDatabase } from "@/services/onboarding"
 import { useAuthContext } from "@/lib/auth/auth-provider"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { ContentRulesEditor } from "@/components/features/content-rules-editor"
 
 /* ------------------------------------------------------------------ */
 /*                         TYPE DEFINITIONS                          */
@@ -952,6 +954,19 @@ export default function Step4() {
             )}
           </>
         )}
+      </SectionBlock>
+
+      {/* ========================= CONTENT RULES SECTION ========================= */}
+      <SectionBlock
+        title="AI Writing Rules"
+        icon={<ShieldCheck className="h-5 w-5" />}
+        colorScheme="violet"
+      >
+        <p className="text-sm text-muted-foreground">
+          Set rules that the AI must follow when generating your LinkedIn content.
+          You can always update these later from Settings.
+        </p>
+        <ContentRulesEditor scope="personal" />
       </SectionBlock>
 
       {/* ========================= PRODUCT DIALOG (kept for add/edit single item) ========================= */}

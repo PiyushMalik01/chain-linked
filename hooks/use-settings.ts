@@ -217,43 +217,45 @@ export function useSettings(): UseSettingsReturn {
       if (teamMemberData && teamMemberData.length > 0) {
         const teamId = teamMemberData[0].team_id
 
-        // Fetch all team members with user info
+        // Fetch all team members then look up profiles separately
+        // (no direct FK from team_members to profiles for PostgREST join)
         const { data: membersData, error: membersError } = await supabase
           .from('team_members')
-          .select(`
-            id,
-            role,
-            user_id,
-            users:user_id (
-              id,
-              name,
-              email,
-              avatar_url
-            )
-          `)
+          .select('id, role, user_id')
           .eq('team_id', teamId)
 
         if (membersError) {
           console.warn('Error fetching team members:', membersError)
         }
 
-        if (membersData) {
-          // Check team ownership
-          const { data: teamData } = await supabase
-            .from('teams')
-            .select('owner_id')
-            .eq('id', teamId)
-            .single()
+        if (membersData && membersData.length > 0) {
+          // Fetch profiles for all team member user_ids
+          const memberUserIds = membersData.map(m => m.user_id)
+          const [{ data: profilesData }, { data: teamData }] = await Promise.all([
+            supabase
+              .from('profiles')
+              .select('id, full_name, email, avatar_url')
+              .in('id', memberUserIds),
+            supabase
+              .from('teams')
+              .select('owner_id')
+              .eq('id', teamId)
+              .single(),
+          ])
+
+          const profileMap = new Map(
+            (profilesData ?? []).map(p => [p.id, p])
+          )
 
           const transformedMembers: TeamMember[] = membersData.map((member) => {
-            const userData = member.users as unknown as { id: string; name: string | null; email: string; avatar_url: string | null }
+            const profile = profileMap.get(member.user_id)
             const isOwner = teamData?.owner_id === member.user_id
             return {
               id: member.id,
-              name: userData?.name || userData?.email?.split('@')[0] || 'Unknown',
-              email: userData?.email || '',
+              name: profile?.full_name || profile?.email?.split('@')[0] || 'Unknown',
+              email: profile?.email || '',
               role: isOwner ? 'owner' : (member.role as 'admin' | 'member'),
-              avatarUrl: userData?.avatar_url || undefined,
+              avatarUrl: profile?.avatar_url || undefined,
             }
           })
 

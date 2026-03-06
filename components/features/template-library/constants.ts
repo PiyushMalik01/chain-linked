@@ -12,7 +12,7 @@ import {
   IconRoute,
 } from "@tabler/icons-react"
 
-import type { AITemplateCategory, TemplateFormData } from "./types"
+import type { AITemplateCategory, TemplateFormData, TemplateSortBy } from "./types"
 
 /**
  * Initial form state for creating a new template
@@ -54,7 +54,7 @@ export const CATEGORY_AI_DEFAULTS: Record<string, { topic: string; tone: string 
 
 /**
  * Color configuration for each category
- * Includes border, badge background, and badge text classes
+ * Includes border, badge, gradient, dot, and filter-active classes
  */
 export interface CategoryColorConfig {
   /** 2px top border color class */
@@ -63,6 +63,12 @@ export interface CategoryColorConfig {
   badgeBg: string
   /** Badge text color class */
   badgeText: string
+  /** Card gradient background */
+  gradient: string
+  /** Small dot color */
+  dot: string
+  /** Active filter pill color */
+  filterActive: string
 }
 
 /**
@@ -71,28 +77,43 @@ export interface CategoryColorConfig {
 const CATEGORY_COLORS: Record<string, CategoryColorConfig> = {
   "Thought Leadership": {
     border: "border-t-blue-500/60",
-    badgeBg: "bg-blue-500/10",
+    badgeBg: "bg-blue-500/15",
     badgeText: "text-blue-700 dark:text-blue-400",
+    gradient: "from-blue-500/8 via-transparent to-transparent",
+    dot: "bg-blue-500",
+    filterActive: "bg-blue-500 text-white",
   },
   "Personal Story": {
     border: "border-t-violet-500/60",
-    badgeBg: "bg-violet-500/10",
+    badgeBg: "bg-violet-500/15",
     badgeText: "text-violet-700 dark:text-violet-400",
+    gradient: "from-violet-500/8 via-transparent to-transparent",
+    dot: "bg-violet-500",
+    filterActive: "bg-violet-500 text-white",
   },
   "How-To": {
     border: "border-t-emerald-500/60",
-    badgeBg: "bg-emerald-500/10",
+    badgeBg: "bg-emerald-500/15",
     badgeText: "text-emerald-700 dark:text-emerald-400",
+    gradient: "from-emerald-500/8 via-transparent to-transparent",
+    dot: "bg-emerald-500",
+    filterActive: "bg-emerald-500 text-white",
   },
   "Engagement": {
     border: "border-t-amber-500/60",
-    badgeBg: "bg-amber-500/10",
+    badgeBg: "bg-amber-500/15",
     badgeText: "text-amber-700 dark:text-amber-400",
+    gradient: "from-amber-500/8 via-transparent to-transparent",
+    dot: "bg-amber-500",
+    filterActive: "bg-amber-500 text-white",
   },
   "Sales": {
     border: "border-t-rose-500/60",
-    badgeBg: "bg-rose-500/10",
+    badgeBg: "bg-rose-500/15",
     badgeText: "text-rose-700 dark:text-rose-400",
+    gradient: "from-rose-500/8 via-transparent to-transparent",
+    dot: "bg-rose-500",
+    filterActive: "bg-rose-500 text-white",
   },
 }
 
@@ -102,38 +123,59 @@ const CATEGORY_COLORS: Record<string, CategoryColorConfig> = {
 const CUSTOM_PALETTES: CategoryColorConfig[] = [
   {
     border: "border-t-cyan-500/60",
-    badgeBg: "bg-cyan-500/10",
+    badgeBg: "bg-cyan-500/15",
     badgeText: "text-cyan-700 dark:text-cyan-400",
+    gradient: "from-cyan-500/8 via-transparent to-transparent",
+    dot: "bg-cyan-500",
+    filterActive: "bg-cyan-500 text-white",
   },
   {
     border: "border-t-pink-500/60",
-    badgeBg: "bg-pink-500/10",
+    badgeBg: "bg-pink-500/15",
     badgeText: "text-pink-700 dark:text-pink-400",
+    gradient: "from-pink-500/8 via-transparent to-transparent",
+    dot: "bg-pink-500",
+    filterActive: "bg-pink-500 text-white",
   },
   {
     border: "border-t-orange-500/60",
-    badgeBg: "bg-orange-500/10",
+    badgeBg: "bg-orange-500/15",
     badgeText: "text-orange-700 dark:text-orange-400",
+    gradient: "from-orange-500/8 via-transparent to-transparent",
+    dot: "bg-orange-500",
+    filterActive: "bg-orange-500 text-white",
   },
   {
     border: "border-t-teal-500/60",
-    badgeBg: "bg-teal-500/10",
+    badgeBg: "bg-teal-500/15",
     badgeText: "text-teal-700 dark:text-teal-400",
+    gradient: "from-teal-500/8 via-transparent to-transparent",
+    dot: "bg-teal-500",
+    filterActive: "bg-teal-500 text-white",
   },
   {
     border: "border-t-indigo-500/60",
-    badgeBg: "bg-indigo-500/10",
+    badgeBg: "bg-indigo-500/15",
     badgeText: "text-indigo-700 dark:text-indigo-400",
+    gradient: "from-indigo-500/8 via-transparent to-transparent",
+    dot: "bg-indigo-500",
+    filterActive: "bg-indigo-500 text-white",
   },
   {
     border: "border-t-lime-500/60",
-    badgeBg: "bg-lime-500/10",
+    badgeBg: "bg-lime-500/15",
     badgeText: "text-lime-700 dark:text-lime-400",
+    gradient: "from-lime-500/8 via-transparent to-transparent",
+    dot: "bg-lime-500",
+    filterActive: "bg-lime-500 text-white",
   },
   {
     border: "border-t-fuchsia-500/60",
-    badgeBg: "bg-fuchsia-500/10",
+    badgeBg: "bg-fuchsia-500/15",
     badgeText: "text-fuchsia-700 dark:text-fuchsia-400",
+    gradient: "from-fuchsia-500/8 via-transparent to-transparent",
+    dot: "bg-fuchsia-500",
+    filterActive: "bg-fuchsia-500 text-white",
   },
 ]
 
@@ -171,6 +213,16 @@ export function getCategoryColor(name: string): CategoryColorConfig {
  * Sentinel value used in the category Select to trigger "Create New Category" flow
  */
 export const CREATE_NEW_CATEGORY_VALUE = "__create_new__"
+
+/**
+ * Sort options for templates
+ */
+export const SORT_OPTIONS: { value: TemplateSortBy; label: string }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "most-used", label: "Most Used" },
+  { value: "az", label: "A → Z" },
+]
 
 /**
  * Pre-built AI template suggestions organized by category

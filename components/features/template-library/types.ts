@@ -97,3 +97,8 @@ export interface AITemplateCategory {
   /** Templates in this category */
   templates: AITemplate[]
 }
+
+/**
+ * Sort options for the template library
+ */
+export type TemplateSortBy = "newest" | "oldest" | "most-used" | "az"

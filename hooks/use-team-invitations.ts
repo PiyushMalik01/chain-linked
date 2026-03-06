@@ -126,6 +126,11 @@ export function useTeamInvitations(options: UseTeamInvitationsOptions): UseTeamI
       const data = await response.json()
 
       if (!response.ok) {
+        // 403 = not admin/owner — silently return empty, not an error
+        if (response.status === 403) {
+          setInvitations([])
+          return
+        }
         throw new Error(data.error || 'Failed to fetch invitations')
       }
 

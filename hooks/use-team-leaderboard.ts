@@ -57,11 +57,12 @@ function getStartDate(range: LeaderboardTimeRange): string {
 /**
  * Hook to fetch team leaderboard data
  * Aggregates post counts and engagement metrics per team member
+ * @param teamId - Team ID to fetch leaderboard for (avoids ambiguity when user is in multiple teams)
  * @returns Team leaderboard data and controls
  * @example
- * const { members, isLoading, timeRange, setTimeRange } = useTeamLeaderboard()
+ * const { members, isLoading, timeRange, setTimeRange } = useTeamLeaderboard(currentTeam?.id)
  */
-export function useTeamLeaderboard(): UseTeamLeaderboardReturn {
+export function useTeamLeaderboard(teamId?: string | null): UseTeamLeaderboardReturn {
   // Get auth state from context
   const { user, isLoading: authLoading } = useAuthContext()
 
@@ -76,12 +77,8 @@ export function useTeamLeaderboard(): UseTeamLeaderboardReturn {
    * Fetch leaderboard data from database
    */
   const fetchLeaderboard = useCallback(async () => {
-    // Don't fetch if auth is still loading
-    if (authLoading) {
-      return
-    }
+    if (authLoading) return
 
-    // If no user (not authenticated), return empty state
     if (!user) {
       setMembers([])
       setIsLoading(false)
@@ -92,31 +89,34 @@ export function useTeamLeaderboard(): UseTeamLeaderboardReturn {
       setIsLoading(true)
       setError(null)
 
-      // Get user's team membership - handle gracefully if table doesn't exist
-      let teamMemberIds: string[] = [user!.id]
+      let teamMemberIds: string[] = [user.id]
 
       try {
-        const { data: teamMembership, error: teamError } = await supabase
-          .from('team_members')
-          .select('team_id')
-          .eq('user_id', user!.id)
-          .maybeSingle()
+        let resolvedTeamId = teamId
 
-        if (teamError) {
-          console.warn('Team membership query error:', teamError.message)
-        } else if (teamMembership?.team_id) {
-          // Get all team members
+        if (!resolvedTeamId) {
+          const { data: firstMembership } = await supabase
+            .from('team_members')
+            .select('team_id')
+            .eq('user_id', user.id)
+            .order('joined_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+          resolvedTeamId = firstMembership?.team_id
+        }
+
+        if (resolvedTeamId) {
           const { data: teamMembersData, error: membersError } = await supabase
             .from('team_members')
             .select('user_id')
-            .eq('team_id', teamMembership.team_id)
+            .eq('team_id', resolvedTeamId)
 
           if (!membersError && teamMembersData && teamMembersData.length > 0) {
             teamMemberIds = teamMembersData.map(m => m.user_id)
           }
         }
       } catch {
-        // Silently continue with solo user if team_members table is unavailable
         console.info('Team members table unavailable, using solo mode')
       }
 
@@ -272,7 +272,7 @@ export function useTeamLeaderboard(): UseTeamLeaderboardReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, timeRange, user, authLoading])
+  }, [supabase, timeRange, user, authLoading, teamId])
 
   // Fetch when auth state changes or on mount
   useEffect(() => {

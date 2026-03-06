@@ -325,6 +325,8 @@ export interface PromptUsageInput {
   success: boolean
   /** Error message if failed */
   errorMessage?: string
+  /** Estimated cost in USD for this LLM call */
+  estimatedCost?: number
   /** Additional metadata */
   metadata?: Record<string, unknown>
 }

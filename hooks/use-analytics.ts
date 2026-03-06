@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthContext } from '@/lib/auth/auth-provider'
 import type { Tables } from '@/types/database'
@@ -106,10 +106,11 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
   const [metadata, setMetadata] = useState<AnalyticsMetadata | null>(null)
   const [isLoading, setIsLoading] = useState(true) // Start true while waiting for auth
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabaseRef = React.useRef(createClient())
 
   /**
    * Fetch analytics data from Supabase
+   * All independent queries run in parallel via Promise.all for faster loading.
    */
   const fetchAnalytics = useCallback(async () => {
     // Don't fetch if auth is still loading
@@ -129,20 +130,51 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       return
     }
 
+    const supabase = supabaseRef.current
+
     try {
       setIsLoading(true)
       setError(null)
 
-      // Fetch analytics records for charting, ordered by captured_at
-      const { data: analytics, error: fetchError } = await supabase
-        .from('linkedin_analytics')
-        .select('*')
-        .eq('user_id', targetUserId)
-        .order('captured_at', { ascending: false })
+      // Run ALL independent queries in parallel
+      const [cacheResult, analyticsResult, profileResult, myPostsResult] = await Promise.all([
+        supabase
+          .from('analytics_summary_cache')
+          .select('metric, pct_change')
+          .eq('user_id', targetUserId)
+          .eq('period', '30d'),
+        supabase
+          .from('linkedin_analytics')
+          .select('*')
+          .eq('user_id', targetUserId)
+          .order('captured_at', { ascending: false }),
+        supabase
+          .from('linkedin_profiles')
+          .select('followers_count, connections_count')
+          .eq('user_id', targetUserId)
+          .single(),
+        supabase
+          .from('my_posts')
+          .select('impressions, reactions, comments, reposts, posted_at, created_at')
+          .eq('user_id', targetUserId),
+      ])
 
-      // If table doesn't exist or other error, use demo data
-      if (fetchError) {
-        console.warn('Analytics fetch warning (showing zeros):', fetchError.message)
+      /** Lookup map from metric name to its cached percentage change */
+      const changeMap = new Map<string, number>(
+        cacheResult.data?.map((c) => [c.metric, c.pct_change]) ?? []
+      )
+
+      const analytics = analyticsResult.data
+      const profile = profileResult.data
+      const myPosts = myPostsResult.data
+
+      if (profileResult.error && profileResult.error.code !== 'PGRST116') {
+        console.warn('Profile fetch warning:', profileResult.error)
+      }
+
+      // If analytics table error, use demo data
+      if (analyticsResult.error) {
+        console.warn('Analytics fetch warning (showing zeros):', analyticsResult.error.message)
         setMetrics(DEFAULT_METRICS)
         setChartData(EMPTY_CHART_DATA)
         setMetadata({ lastUpdated: new Date().toISOString(), captureMethod: null })
@@ -150,26 +182,8 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
         return
       }
 
-      // Also fetch profile data for accurate follower count
-      const { data: profile, error: profileError } = await supabase
-        .from('linkedin_profiles')
-        .select('followers_count, connections_count')
-        .eq('user_id', targetUserId)
-        .single()
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.warn('Profile fetch warning:', profileError)
-      }
-
       if (!analytics || analytics.length === 0) {
         // No linkedin_analytics data — try deriving metrics from my_posts + profile
-        console.info('No linkedin_analytics data, deriving from my_posts...')
-
-        const { data: myPosts } = await supabase
-          .from('my_posts')
-          .select('impressions, reactions, comments, reposts, posted_at, created_at')
-          .eq('user_id', targetUserId)
-
         if (myPosts && myPosts.length > 0) {
           const totalImpressions = myPosts.reduce((sum, p) => sum + (p.impressions || 0), 0)
           const totalReactions = myPosts.reduce((sum, p) => sum + (p.reactions || 0), 0)
@@ -181,10 +195,10 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
           const totalConnections = profile?.connections_count || 0
 
           setMetrics({
-            impressions: { value: totalImpressions, change: 0 },
-            engagementRate: { value: engagementRate, change: 0 },
-            followers: { value: totalFollowers, change: 0 },
-            profileViews: { value: 0, change: 0 },
+            impressions: { value: totalImpressions, change: changeMap.get('impressions') ?? 0 },
+            engagementRate: { value: engagementRate, change: changeMap.get('engagement_rate') ?? 0 },
+            followers: { value: totalFollowers, change: changeMap.get('followers') ?? 0 },
+            profileViews: { value: 0, change: changeMap.get('profile_views') ?? 0 },
             searchAppearances: { value: 0, change: 0 },
             connections: { value: totalConnections, change: 0 },
             membersReached: { value: 0, change: 0 },
@@ -234,21 +248,13 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       let impressions = latestAnalytics.impressions || 0
       let engagements = latestAnalytics.engagements || 0
 
-      // If analytics records lack impressions data (e.g. only profileViews saved),
-      // derive impressions and engagements from my_posts for accurate dashboard display.
-      if (impressions === 0) {
-        const { data: myPosts } = await supabase
-          .from('my_posts')
-          .select('impressions, reactions, comments, reposts')
-          .eq('user_id', targetUserId)
-
-        if (myPosts && myPosts.length > 0) {
-          impressions = myPosts.reduce((sum, p) => sum + (p.impressions || 0), 0)
-          const totalReactions = myPosts.reduce((sum, p) => sum + (p.reactions || 0), 0)
-          const totalComments = myPosts.reduce((sum, p) => sum + (p.comments || 0), 0)
-          const totalReposts = myPosts.reduce((sum, p) => sum + (p.reposts || 0), 0)
-          engagements = totalReactions + totalComments + totalReposts
-        }
+      // If analytics records lack impressions data, derive from my_posts (already fetched)
+      if (impressions === 0 && myPosts && myPosts.length > 0) {
+        impressions = myPosts.reduce((sum, p) => sum + (p.impressions || 0), 0)
+        const totalReactions = myPosts.reduce((sum, p) => sum + (p.reactions || 0), 0)
+        const totalComments = myPosts.reduce((sum, p) => sum + (p.comments || 0), 0)
+        const totalReposts = myPosts.reduce((sum, p) => sum + (p.reposts || 0), 0)
+        engagements = totalReactions + totalComments + totalReposts
       }
 
       const engagementRate = impressions > 0 ? (engagements / impressions) * 100 : 0
@@ -260,19 +266,19 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       const aggregatedMetrics: AnalyticsMetrics = {
         impressions: {
           value: impressions,
-          change: impressionGrowth,
+          change: changeMap.get('impressions') ?? impressionGrowth,
         },
         engagementRate: {
           value: engagementRate,
-          change: 0,
+          change: changeMap.get('engagement_rate') ?? 0,
         },
         followers: {
           value: totalFollowers,
-          change: 0,
+          change: changeMap.get('followers') ?? 0,
         },
         profileViews: {
           value: latestAnalytics.profile_views || 0,
-          change: 0,
+          change: changeMap.get('profile_views') ?? 0,
         },
         searchAppearances: {
           value: latestAnalytics.search_appearances || 0,
@@ -296,9 +302,7 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
         captureMethod: rawDataObj?.captureMethod || 'extension',
       })
 
-      // Build chart data from analytics records and my_posts.
-      // Analytics records provide profile_views; my_posts provide
-      // impressions and engagements grouped by post date.
+      // Build chart data from analytics records and my_posts
       const chartDataMap = new Map<string, ChartDataPoint>()
       const sortedAnalytics = [...analytics].reverse()
 
@@ -311,16 +315,21 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
         chartDataMap.set(date, existing)
       })
 
-      // Merge my_posts data into the chart for post-level impressions/engagements
-      const { data: chartPosts } = await supabase
-        .from('my_posts')
-        .select('impressions, reactions, comments, reposts, posted_at')
-        .eq('user_id', targetUserId)
+      // Build a set of dates that already have analytics-sourced impressions
+      const datesWithAnalyticsImpressions = new Set<string>()
+      sortedAnalytics.forEach((record) => {
+        if ((record.impressions || 0) > 0) {
+          const date = (record.captured_at ?? '').split('T')[0]
+          if (date) datesWithAnalyticsImpressions.add(date)
+        }
+      })
 
-      if (chartPosts && chartPosts.length > 0) {
-        chartPosts.forEach((post) => {
+      // Merge my_posts data (already fetched) for dates without analytics impressions
+      if (myPosts && myPosts.length > 0) {
+        myPosts.forEach((post) => {
           const date = (post.posted_at || '').split('T')[0]
           if (!date) return
+          if (datesWithAnalyticsImpressions.has(date)) return
           const existing = chartDataMap.get(date) || { date, impressions: 0, engagements: 0, profileViews: 0 }
           existing.impressions += post.impressions || 0
           existing.engagements += (post.reactions || 0) + (post.comments || 0) + (post.reposts || 0)
@@ -336,14 +345,13 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
     } catch (err) {
       console.error('Analytics fetch error:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch analytics')
-      // Use demo data on error for better UX
       setMetrics(DEFAULT_METRICS)
       setChartData(EMPTY_CHART_DATA)
       setMetadata({ lastUpdated: new Date().toISOString(), captureMethod: null })
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, userId, user?.id, authLoading])
+  }, [userId, user?.id, authLoading])
 
   // Fetch when auth state changes or on mount
   useEffect(() => {

@@ -44,14 +44,13 @@ function mapMediaToPostType(mediaType: string | null): TeamActivityItem['postTyp
 
 /**
  * Hook to fetch team activity posts from all team members
- * Queries team_members to find the user's team, then fetches posts
- * from all members with their profile information.
  * @param limit - Maximum number of posts to fetch
+ * @param teamId - Team ID to fetch posts for (avoids ambiguity when user is in multiple teams)
  * @returns Team posts data and loading state
  * @example
- * const { posts, isLoading, error } = useTeamPosts(20)
+ * const { posts, isLoading, error } = useTeamPosts(20, currentTeam?.id)
  */
-export function useTeamPosts(limit: number = 20): UseTeamPostsReturn {
+export function useTeamPosts(limit: number = 20, teamId?: string | null): UseTeamPostsReturn {
   const { user, isLoading: authLoading } = useAuthContext()
 
   const [posts, setPosts] = useState<TeamActivityItem[]>([])
@@ -77,24 +76,30 @@ export function useTeamPosts(limit: number = 20): UseTeamPostsReturn {
       setIsLoading(true)
       setError(null)
 
-      // Step 1: Get the user's team membership
+      // Step 1: Get team member IDs — use provided teamId, or fall back to first membership
       let teamMemberIds: string[] = [user.id]
 
       try {
-        const { data: teamMembership, error: teamError } = await supabase
-          .from('team_members')
-          .select('team_id')
-          .eq('user_id', user.id)
-          .maybeSingle()
+        let resolvedTeamId = teamId
 
-        if (teamError) {
-          console.warn('Team membership query error:', teamError.message)
-        } else if (teamMembership?.team_id) {
-          // Step 2: Get all members of that team
+        if (!resolvedTeamId) {
+          // Fall back: pick the first team membership (order by joined_at)
+          const { data: firstMembership } = await supabase
+            .from('team_members')
+            .select('team_id')
+            .eq('user_id', user.id)
+            .order('joined_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+          resolvedTeamId = firstMembership?.team_id
+        }
+
+        if (resolvedTeamId) {
           const { data: teamMembersData, error: membersError } = await supabase
             .from('team_members')
             .select('user_id')
-            .eq('team_id', teamMembership.team_id)
+            .eq('team_id', resolvedTeamId)
 
           if (!membersError && teamMembersData && teamMembersData.length > 0) {
             teamMemberIds = teamMembersData.map(m => m.user_id)
@@ -182,7 +187,7 @@ export function useTeamPosts(limit: number = 20): UseTeamPostsReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, limit, user, authLoading])
+  }, [supabase, limit, user, authLoading, teamId])
 
   useEffect(() => {
     fetchPosts()

@@ -29,7 +29,9 @@ import { Badge } from "@/components/ui/badge"
 
 // --- Inspiration tab ---
 import { InspirationFeed } from "@/components/features/inspiration-feed"
+import { FollowedInfluencersPanel } from "@/components/features/followed-influencers-panel"
 import { useInspiration } from "@/hooks/use-inspiration"
+import { useFollowedInfluencers } from "@/hooks/use-followed-influencers"
 import {
   Dialog,
   DialogContent,
@@ -59,7 +61,6 @@ import { DiscoverNewsCard } from "@/components/features/discover-news-card"
 import { DiscoverTrendingSidebar } from "@/components/features/discover-trending-sidebar"
 import { TopicSelectionOverlay } from "@/components/features/topic-selection-overlay"
 import { ManageTopicsModal } from "@/components/features/manage-topics-modal"
-import { ResearchSection } from "@/components/features/research-section"
 import { Input } from "@/components/ui/input"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import {
@@ -71,7 +72,6 @@ import {
   IconInbox,
   IconLoader2,
   IconSearch,
-  IconTelescope,
 } from "@tabler/icons-react"
 
 // --- Swipe tab ---
@@ -384,7 +384,7 @@ function PostDetailModal({
 
 /**
  * Viral Posts tab content (formerly the standalone Inspiration page)
- * @returns Inspiration feed with filtering, pagination, and remix support
+ * @returns Inspiration feed with filtering, pagination, remix, and follow support
  */
 function ViralPostsTab() {
   const router = useRouter()
@@ -404,6 +404,14 @@ function ViralPostsTab() {
     unsavePost,
     isPostSaved,
   } = useInspiration()
+
+  const {
+    influencers,
+    isLoading: isInfluencersLoading,
+    followInfluencer,
+    unfollowInfluencer,
+    isFollowing,
+  } = useFollowedInfluencers()
 
   const [selectedPost, setSelectedPost] = React.useState<InspirationPost | null>(null)
   const [isDetailOpen, setIsDetailOpen] = React.useState(false)
@@ -465,6 +473,14 @@ function ViralPostsTab() {
 
   return (
     <>
+      {/* Followed Influencers Panel - shown above the feed */}
+      <FollowedInfluencersPanel
+        influencers={influencers}
+        isLoading={isInfluencersLoading}
+        onFollow={followInfluencer}
+        onUnfollow={unfollowInfluencer}
+      />
+
       <ErrorBoundary>
         <InspirationFeed
           posts={posts}
@@ -479,6 +495,9 @@ function ViralPostsTab() {
           onUnsave={unsavePost}
           onExpand={handleExpand}
           onRemix={handleRemix}
+          isFollowing={isFollowing}
+          onFollow={followInfluencer}
+          onUnfollow={unfollowInfluencer}
         />
       </ErrorBoundary>
 
@@ -728,7 +747,7 @@ function DiscoverTopicsTab() {
   const [articleToRemix, setArticleToRemix] = React.useState<NewsArticle | null>(null)
   const [isDetailOpen, setIsDetailOpen] = React.useState(false)
   const [articleToView, setArticleToView] = React.useState<NewsArticle | null>(null)
-  const [isResearchMode, setIsResearchMode] = React.useState(false)
+
   const [searchInput, setSearchInput] = React.useState("")
   const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -814,17 +833,6 @@ function DiscoverTopicsTab() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button
-            variant={isResearchMode ? "default" : "outline"}
-            onClick={() => setIsResearchMode(!isResearchMode)}
-            className="gap-2"
-            title={isResearchMode ? "Exit Research Mode" : "Enter Research Mode"}
-          >
-            <IconTelescope className="size-4" />
-            <span className="hidden sm:inline">
-              {isResearchMode ? "Exit Research" : "Deep Research"}
-            </span>
-          </Button>
-          <Button
             variant="outline"
             size="sm"
             onClick={fetchNewArticles}
@@ -841,9 +849,6 @@ function DiscoverTopicsTab() {
               {isSeeding ? "Fetching..." : "Fetch New"}
             </span>
           </Button>
-          <Button variant="ghost" size="icon" onClick={refresh} title="Refresh feed">
-            <IconRefresh className="size-4" />
-          </Button>
           <Button
             variant="outline"
             onClick={() => setIsManageTopicsOpen(true)}
@@ -854,15 +859,6 @@ function DiscoverTopicsTab() {
           </Button>
         </div>
       </div>
-
-      {/* Research Mode Section */}
-      {isResearchMode && (
-        <ResearchSection
-          onRemix={handleRemix as (article: unknown) => void}
-          showClose
-          onClose={() => setIsResearchMode(false)}
-        />
-      )}
 
       {/* Topic Pills */}
       <ScrollArea className="w-full">

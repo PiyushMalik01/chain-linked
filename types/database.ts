@@ -472,6 +472,42 @@ export type Database = {
         }
         Relationships: []
       }
+      content_rules: {
+        Row: {
+          id: string
+          user_id: string
+          team_id: string | null
+          rule_type: string
+          rule_text: string
+          is_active: boolean
+          priority: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          team_id?: string | null
+          rule_type?: string
+          rule_text: string
+          is_active?: boolean
+          priority?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          team_id?: string | null
+          rule_type?: string
+          rule_text?: string
+          is_active?: boolean
+          priority?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       company_context: {
         Row: {
           brand_colors: Json | null
@@ -1638,6 +1674,7 @@ export type Database = {
           impressions_total: number | null
           post_created_at: string | null
           post_id: string
+          post_type: string | null
           reactions_total: number | null
           reposts_total: number | null
           saves_total: number | null
@@ -1656,6 +1693,7 @@ export type Database = {
           impressions_total?: number | null
           post_created_at?: string | null
           post_id: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -1674,6 +1712,7 @@ export type Database = {
           impressions_total?: number | null
           post_created_at?: string | null
           post_id?: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -1710,6 +1749,7 @@ export type Database = {
           id: string
           impressions_gained: number | null
           post_id: string
+          post_type: string | null
           reactions_gained: number | null
           reposts_gained: number | null
           saves_gained: number | null
@@ -1728,6 +1768,7 @@ export type Database = {
           id?: string
           impressions_gained?: number | null
           post_id: string
+          post_type?: string | null
           reactions_gained?: number | null
           reposts_gained?: number | null
           saves_gained?: number | null
@@ -1746,6 +1787,7 @@ export type Database = {
           id?: string
           impressions_gained?: number | null
           post_id?: string
+          post_type?: string | null
           reactions_gained?: number | null
           reposts_gained?: number | null
           saves_gained?: number | null
@@ -1783,6 +1825,7 @@ export type Database = {
           is_finalized: boolean | null
           month_start: string
           post_id: string
+          post_type: string | null
           reactions_total: number | null
           reposts_total: number | null
           saves_total: number | null
@@ -1802,6 +1845,7 @@ export type Database = {
           is_finalized?: boolean | null
           month_start: string
           post_id: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -1821,6 +1865,7 @@ export type Database = {
           is_finalized?: boolean | null
           month_start?: string
           post_id?: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -1857,6 +1902,7 @@ export type Database = {
           impressions_total: number | null
           is_finalized: boolean | null
           post_id: string
+          post_type: string | null
           quarter_start: string
           reactions_total: number | null
           reposts_total: number | null
@@ -1876,6 +1922,7 @@ export type Database = {
           impressions_total?: number | null
           is_finalized?: boolean | null
           post_id: string
+          post_type?: string | null
           quarter_start: string
           reactions_total?: number | null
           reposts_total?: number | null
@@ -1895,6 +1942,7 @@ export type Database = {
           impressions_total?: number | null
           is_finalized?: boolean | null
           post_id?: string
+          post_type?: string | null
           quarter_start?: string
           reactions_total?: number | null
           reposts_total?: number | null
@@ -1932,6 +1980,7 @@ export type Database = {
           impressions_total: number | null
           is_finalized: boolean | null
           post_id: string
+          post_type: string | null
           reactions_total: number | null
           reposts_total: number | null
           saves_total: number | null
@@ -1951,6 +2000,7 @@ export type Database = {
           impressions_total?: number | null
           is_finalized?: boolean | null
           post_id: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -1970,6 +2020,7 @@ export type Database = {
           impressions_total?: number | null
           is_finalized?: boolean | null
           post_id?: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -2007,6 +2058,7 @@ export type Database = {
           impressions_total: number | null
           is_finalized: boolean | null
           post_id: string
+          post_type: string | null
           reactions_total: number | null
           reposts_total: number | null
           saves_total: number | null
@@ -2026,6 +2078,7 @@ export type Database = {
           impressions_total?: number | null
           is_finalized?: boolean | null
           post_id: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -2045,6 +2098,7 @@ export type Database = {
           impressions_total?: number | null
           is_finalized?: boolean | null
           post_id?: string
+          post_type?: string | null
           reactions_total?: number | null
           reposts_total?: number | null
           saves_total?: number | null
@@ -2202,6 +2256,7 @@ export type Database = {
           linkedin_user_id: string | null
           onboarding_completed: boolean | null
           onboarding_current_step: number | null
+          onboarding_type: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -2228,6 +2283,7 @@ export type Database = {
           linkedin_user_id?: string | null
           onboarding_completed?: boolean | null
           onboarding_current_step?: number | null
+          onboarding_type?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -2254,6 +2310,7 @@ export type Database = {
           linkedin_user_id?: string | null
           onboarding_completed?: boolean | null
           onboarding_current_step?: number | null
+          onboarding_type?: string | null
         }
         Relationships: []
       }
@@ -2326,6 +2383,7 @@ export type Database = {
         Row: {
           created_at: string
           error_message: string | null
+          estimated_cost: number | null
           feature: string
           id: string
           input_tokens: number | null
@@ -2343,6 +2401,7 @@ export type Database = {
         Insert: {
           created_at?: string
           error_message?: string | null
+          estimated_cost?: number | null
           feature: string
           id?: string
           input_tokens?: number | null
@@ -2360,6 +2419,7 @@ export type Database = {
         Update: {
           created_at?: string
           error_message?: string | null
+          estimated_cost?: number | null
           feature?: string
           id?: string
           input_tokens?: number | null
@@ -2836,6 +2896,45 @@ export type Database = {
           },
         ]
       }
+      team_join_requests: {
+        Row: {
+          id: string
+          team_id: string
+          user_id: string
+          status: string
+          message: string | null
+          admin_note: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          team_id: string
+          user_id: string
+          status?: string
+          message?: string | null
+          admin_note?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          team_id?: string
+          user_id?: string
+          status?: string
+          message?: string | null
+          admin_note?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       team_members: {
         Row: {
           id: string
@@ -2872,6 +2971,7 @@ export type Database = {
         Row: {
           company_id: string | null
           created_at: string | null
+          discoverable: boolean | null
           id: string
           logo_url: string | null
           name: string
@@ -2881,6 +2981,7 @@ export type Database = {
         Insert: {
           company_id?: string | null
           created_at?: string | null
+          discoverable?: boolean | null
           id?: string
           logo_url?: string | null
           name: string
@@ -2890,6 +2991,7 @@ export type Database = {
         Update: {
           company_id?: string | null
           created_at?: string | null
+          discoverable?: boolean | null
           id?: string
           logo_url?: string | null
           name?: string
