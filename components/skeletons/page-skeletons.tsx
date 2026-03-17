@@ -721,7 +721,7 @@ export function SwipeSkeleton() {
       </div>
 
       {/* Card Stack */}
-      <div className="relative h-[400px] w-full max-w-md">
+      <div className="relative h-[520px] w-full max-w-lg">
         {/* Background cards */}
         <div className="absolute inset-0 scale-[0.94] translate-y-4">
           <Skeleton className="h-full w-full rounded-xl opacity-30" />

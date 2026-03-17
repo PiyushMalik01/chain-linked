@@ -258,7 +258,7 @@ export function SwipeCard({
         isDragging && "shadow-2xl border-primary/30",
         !isDragging && "transition-shadow duration-200 hover:shadow-lg"
       )}>
-        <CardContent className="relative flex h-full flex-col p-5 bg-gradient-to-br from-transparent via-transparent to-primary/5 dark:to-primary/10">
+        <CardContent className="relative flex h-full flex-col p-6 bg-gradient-to-br from-transparent via-transparent to-primary/5 dark:to-primary/10">
           {/* Swipe Direction Indicators with Framer Motion */}
           <AnimatePresence>
             {swipeDirection === "right" && !isExiting && (
@@ -369,7 +369,7 @@ export function SwipeCard({
 
           {/* Content */}
           <div className="mt-4 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">
+            <p className="whitespace-pre-line text-base leading-relaxed text-foreground/90">
               {data.content}
             </p>
           </div>
@@ -437,7 +437,7 @@ export function SwipeCardStack({
 
   return (
     <motion.div
-      className={cn("relative h-[400px] w-full max-w-md", className)}
+      className={cn("relative h-[520px] w-full max-w-lg", className)}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -492,7 +492,7 @@ export function SwipeCardStack({
 export function SwipeCardEmpty() {
   return (
     <motion.div
-      className="relative h-[400px] w-full max-w-md flex items-center justify-center"
+      className="relative h-[520px] w-full max-w-lg flex items-center justify-center"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4 }}

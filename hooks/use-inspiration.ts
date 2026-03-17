@@ -131,6 +131,13 @@ interface UseInspirationReturn {
   isPostSaved: (postId: string) => boolean
   /** Get a single post by ID */
   getPostById: (postId: string) => InspirationPost | undefined
+  /** Metadata from AI-powered smart search, null when not using smart search */
+  searchMeta: {
+    searchTerms: string[]
+    clusters: string[]
+    tags: string[]
+    intent: string
+  } | null
 }
 
 /**
@@ -147,11 +154,14 @@ const defaultFilters: InspirationFilters = {
 /**
  * Hook to fetch and manage inspiration posts from Supabase
  * @param initialLimit - Initial number of posts to fetch (default: PAGE_SIZE)
+ * @param filterByInfluencerId - Optional influencer ID to filter posts by a specific influencer
  * @returns Inspiration data, loading state, filters, and actions
  * @example
  * const { posts, filters, setFilters, loadMore, savePost } = useInspiration()
+ * // Filter by a specific influencer
+ * const { posts } = useInspiration(PAGE_SIZE, 'influencer-id')
  */
-export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
+export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: string): UseInspirationReturn {
   // Get auth state from context
   const { user, isLoading: authLoading } = useAuthContext()
 
@@ -170,6 +180,13 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** Metadata returned by the AI-powered smart search endpoint */
+  const [searchMeta, setSearchMeta] = useState<{
+    searchTerms: string[]
+    clusters: string[]
+    tags: string[]
+    intent: string
+  } | null>(null)
   // Track if we've already attempted to fetch user-specific data (to avoid repeated 404s)
   // Using ref to avoid triggering re-renders or effect dependencies
   const hasAttemptedUserDataFetchRef = useRef(false)
@@ -322,7 +339,10 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
       // Handle "Following" filter - fetch from influencer posts API
       if (filters.followingOnly) {
         try {
-          const res = await fetch(`/api/influencers/posts?page=${page}&limit=${PAGE_SIZE}`)
+          const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+          if (filterByInfluencerId) params.set('influencer_id', filterByInfluencerId)
+          if (filters.category !== 'all') params.set('cluster', filters.category)
+          const res = await fetch(`/api/influencers/posts?${params}`)
           if (!res.ok) throw new Error('Failed to fetch influencer posts')
 
           const { posts: influencerPosts, totalCount } = await res.json()
@@ -337,7 +357,9 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
             },
             authorUrl: post.followed_influencers?.linkedin_url || undefined,
             content: post.content || '',
-            category: 'general',
+            category: post.primary_cluster?.toLowerCase() || 'general',
+            tags: post.tags || [],
+            primaryCluster: post.primary_cluster || null,
             metrics: {
               reactions: post.likes_count || 0,
               comments: post.comments_count || 0,
@@ -502,7 +524,7 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
       setIsLoading(false)
       setPagination(prev => ({ ...prev, isLoadingMore: false }))
     }
-  }, [supabase, filters, savedPostIds, userNiches, user, authLoading, transformPost, transformToSuggestion, fetchSavedPosts, fetchUserNiches])
+  }, [supabase, filters, savedPostIds, userNiches, user, authLoading, filterByInfluencerId, transformPost, transformToSuggestion, fetchSavedPosts, fetchUserNiches])
 
   /**
    * Update filters
@@ -663,17 +685,68 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
     if (!authLoading) {
       fetchPosts(0, false)
     }
-  }, [authLoading, filters.category, filters.niche, filters.savedOnly, filters.followingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, filters.category, filters.niche, filters.savedOnly, filters.followingOnly, filterByInfluencerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced search
+  // Smart search with debounce
   useEffect(() => {
     if (authLoading) return
-
-    const timeoutId = setTimeout(() => {
-      if (filters.searchQuery !== '') {
+    if (!filters.searchQuery || filters.searchQuery.trim().length < 3) {
+      setSearchMeta(null)
+      if (filters.searchQuery === '') {
         fetchPosts(0, false)
       }
-    }, 300)
+      return
+    }
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const params = new URLSearchParams({
+          q: filters.searchQuery.trim(),
+          page: '0',
+          limit: String(PAGE_SIZE),
+        })
+
+        const res = await fetch(`/api/inspiration/search?${params}`)
+        if (!res.ok) throw new Error('Search failed')
+
+        const { posts: searchPosts, totalCount, searchMeta: meta } = await res.json()
+
+        setSearchMeta(meta)
+
+        // Transform search results to InspirationPost format
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const transformed: InspirationPost[] = (searchPosts || []).map((post: any) => ({
+          id: post.id,
+          author: post.author || { name: 'Unknown', headline: '' },
+          authorUrl: post.authorUrl || undefined,
+          content: post.content || '',
+          category: post.category || post.primaryCluster?.toLowerCase() || 'general',
+          tags: post.tags || [],
+          primaryCluster: post.primaryCluster || null,
+          metrics: post.metrics || { reactions: 0, comments: 0, reposts: 0 },
+          postedAt: post.postedAt || new Date().toISOString(),
+        }))
+
+        setPosts(transformed)
+        setSuggestions([])
+        setRawPosts([])
+        setPagination({
+          page: 0,
+          totalCount,
+          hasMore: PAGE_SIZE < totalCount,
+          isLoadingMore: false,
+        })
+      } catch (err) {
+        console.error('Smart search error:', err)
+        // Fallback to basic search
+        fetchPosts(0, false)
+      } finally {
+        setIsLoading(false)
+      }
+    }, 400) // Slightly longer debounce for AI search
 
     return () => clearTimeout(timeoutId)
   }, [filters.searchQuery, authLoading]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -699,5 +772,6 @@ export function useInspiration(initialLimit = PAGE_SIZE): UseInspirationReturn {
     unsavePost,
     isPostSaved,
     getPostById,
+    searchMeta,
   }
 }

@@ -30,10 +30,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const page = parseInt(searchParams.get('page') || '0', 10)
   const limit = parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10)
+  const influencerId = searchParams.get('influencer_id') || ''
+  const cluster = searchParams.get('cluster') || ''
+  const search = searchParams.get('search') || ''
   const offset = page * limit
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: posts, error, count } = await (supabase as any)
+  let query = (supabase as any)
     .from('influencer_posts')
     .select(`
       id,
@@ -46,6 +49,8 @@ export async function GET(request: Request) {
       quality_score,
       linkedin_url,
       influencer_id,
+      tags,
+      primary_cluster,
       followed_influencers!inner (
         author_name,
         author_headline,
@@ -56,6 +61,26 @@ export async function GET(request: Request) {
     `, { count: 'exact' })
     .eq('user_id', user.id)
     .eq('quality_status', 'approved')
+
+  // Filter by specific influencer if provided
+  if (influencerId) {
+    query = query.eq('influencer_id', influencerId)
+  }
+
+  // Filter by primary cluster if provided
+  if (cluster) {
+    query = query.eq('primary_cluster', cluster)
+  }
+
+  // Filter by content search if provided
+  if (search) {
+    const sanitized = search.replace(/[%_\\.,()'"]/g, '').trim().slice(0, 100)
+    if (sanitized.length > 0) {
+      query = query.ilike('content', `%${sanitized}%`)
+    }
+  }
+
+  const { data: posts, error, count } = await query
     .order('posted_at', { ascending: false, nullsFirst: false })
     .range(offset, offset + limit - 1)
 

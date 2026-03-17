@@ -38,6 +38,10 @@ export interface FollowedInfluencer {
   created_at: string
   /** When the record was last updated */
   updated_at: string
+  /** When the user last viewed this influencer's posts */
+  last_seen_at: string | null
+  /** Number of new posts since last seen */
+  new_post_count: number
 }
 
 /**
@@ -69,6 +73,16 @@ interface UseFollowedInfluencersReturn {
   isFollowing: (authorUrl: string) => boolean
   /** Refetch the list from the server */
   refetch: () => Promise<void>
+  /**
+   * Mark an influencer as seen, resetting new_post_count to 0
+   * @param influencerId - The followed_influencers record ID
+   */
+  markAsSeen: (influencerId: string) => Promise<void>
+  /**
+   * Trigger a fetch of latest posts for an influencer
+   * @param influencerId - The followed_influencers record ID
+   */
+  fetchLatestPosts: (influencerId: string) => Promise<void>
 }
 
 /**
@@ -144,7 +158,30 @@ export function useFollowedInfluencers(): UseFollowedInfluencersReturn {
         return
       }
 
-      setInfluencers((data as FollowedInfluencer[]) ?? [])
+      // Count new posts per influencer (posts created after last_seen_at)
+      const influencerData = (data as FollowedInfluencer[]) ?? []
+      const enrichedInfluencers = await Promise.all(
+        influencerData.map(async (inf) => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let query = (supabase as any)
+              .from('influencer_posts')
+              .select('id', { count: 'exact', head: true })
+              .eq('influencer_id', inf.id)
+              .eq('quality_status', 'approved')
+
+            if (inf.last_seen_at) {
+              query = query.gt('created_at', inf.last_seen_at)
+            }
+
+            const { count } = await query
+            return { ...inf, new_post_count: count || 0 }
+          } catch {
+            return { ...inf, new_post_count: 0 }
+          }
+        })
+      )
+      setInfluencers(enrichedInfluencers)
     } catch (err) {
       console.warn('Followed influencers fetch skipped:', err instanceof Error ? err.message : 'Unknown error')
       setInfluencers([])
@@ -241,6 +278,59 @@ export function useFollowedInfluencers(): UseFollowedInfluencersReturn {
   }, [influencers])
 
   /**
+   * Mark an influencer as seen, updating last_seen_at and resetting new_post_count.
+   * Performs an optimistic update and then persists to the database.
+   * @param influencerId - The followed_influencers record ID
+   */
+  const markAsSeen = useCallback(async (influencerId: string) => {
+    if (!user) return
+
+    // Optimistic update
+    setInfluencers(prev => prev.map(inf =>
+      inf.id === influencerId
+        ? { ...inf, last_seen_at: new Date().toISOString(), new_post_count: 0 }
+        : inf
+    ))
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('followed_influencers')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', influencerId)
+        .eq('user_id', user.id)
+    } catch (err) {
+      console.warn('Failed to update last_seen_at:', err)
+    }
+  }, [supabase, user])
+
+  /**
+   * Trigger a fetch of the latest posts for a given influencer via the API.
+   * @param influencerId - The followed_influencers record ID
+   */
+  const fetchLatestPosts = useCallback(async (influencerId: string) => {
+    const influencer = influencers.find(inf => inf.id === influencerId)
+    if (!influencer) return
+
+    try {
+      const response = await fetch('/api/influencers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ influencer_id: influencerId }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger fetch')
+      }
+
+      toast.success('Fetching latest posts... This may take a moment.')
+    } catch (err) {
+      console.error('Fetch latest posts error:', err)
+      toast.error('Failed to trigger post fetch')
+    }
+  }, [influencers])
+
+  /**
    * Returns true if the given LinkedIn profile URL is in the followed list.
    */
   const isFollowing = useCallback((authorUrl: string): boolean => {
@@ -265,5 +355,7 @@ export function useFollowedInfluencers(): UseFollowedInfluencersReturn {
     unfollowInfluencer,
     isFollowing,
     refetch: fetchInfluencers,
+    markAsSeen,
+    fetchLatestPosts,
   }
 }

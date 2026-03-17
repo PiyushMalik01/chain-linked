@@ -2,31 +2,17 @@
 
 /**
  * Followed Influencers Panel Component
- * @description Collapsible panel showing the list of followed LinkedIn influencers.
- * Allows unfollowing and adding new influencers via a dialog.
+ * @description Instagram Stories-style horizontal avatar feed showing followed
+ * LinkedIn influencers. Avatars display a gradient ring when new posts are
+ * available and support selection for filtering the inspiration feed.
  * @module components/features/followed-influencers-panel
  */
 
 import * as React from 'react'
-import {
-  IconUsers,
-  IconUserMinus,
-  IconUserPlus,
-  IconChevronDown,
-  IconChevronUp,
-  IconLoader2,
-} from '@tabler/icons-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { IconPlus } from '@tabler/icons-react'
 
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { cn, getInitials } from '@/lib/utils'
 import { FollowInfluencerDialog } from '@/components/features/follow-influencer-dialog'
 import type { FollowedInfluencer } from '@/hooks/use-followed-influencers'
@@ -49,103 +35,160 @@ export interface FollowedInfluencersPanelProps {
    * @param id - Record ID to unfollow
    */
   onUnfollow: (id: string) => Promise<void>
+  /**
+   * Callback when an influencer avatar is selected or deselected
+   * @param id - The influencer ID, or null to deselect
+   */
+  onSelectInfluencer?: (id: string | null) => void
+  /**
+   * Callback to fetch the latest posts for an influencer
+   * @param id - The influencer ID
+   */
+  onFetchLatest?: (id: string) => void
+  /**
+   * Callback to mark an influencer's new posts as seen
+   * @param id - The influencer ID
+   */
+  onMarkAsSeen?: (id: string) => void
+  /** Currently selected influencer ID */
+  selectedInfluencerId?: string | null
   /** Additional CSS classes */
   className?: string
 }
 
 /**
- * Single influencer row in the panel list
+ * Circular button to open the follow influencer dialog.
+ * Displayed as the first item in the horizontal scroll.
+ * @param props - Component props
+ * @param props.onClick - Click handler to open the dialog
+ * @returns A 56px dashed circle button with a "+" icon
+ * @example
+ * <AddInfluencerButton onClick={() => setIsDialogOpen(true)} />
  */
-function InfluencerRow({
-  influencer,
-  onUnfollow,
-}: {
-  influencer: FollowedInfluencer
-  onUnfollow: (id: string) => Promise<void>
-}) {
-  const [isUnfollowing, setIsUnfollowing] = React.useState(false)
-
-  const handleUnfollow = React.useCallback(async () => {
-    setIsUnfollowing(true)
-    try {
-      await onUnfollow(influencer.id)
-    } finally {
-      setIsUnfollowing(false)
-    }
-  }, [influencer.id, onUnfollow])
-
-  const displayName = influencer.author_name ?? influencer.linkedin_username ?? 'Unknown'
-  const headline = influencer.author_headline
-
+function AddInfluencerButton({ onClick }: { onClick: () => void }) {
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -10 }}
-      transition={{ duration: 0.2 }}
-      className="flex items-center gap-3 group"
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 shrink-0 w-[72px]"
+      aria-label="Follow new influencer"
     >
-      <Avatar className="size-8 shrink-0 ring-1 ring-border">
-        {influencer.author_profile_picture && (
-          <AvatarImage
-            src={influencer.author_profile_picture}
-            alt={displayName}
-          />
-        )}
-        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-secondary/20 text-xs font-medium">
-          {getInitials(displayName)}
-        </AvatarFallback>
-      </Avatar>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{displayName}</p>
-        {headline && (
-          <p className="text-xs text-muted-foreground truncate max-w-[180px]">
-            {headline}
-          </p>
-        )}
+      <div className="size-14 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
+        <IconPlus className="size-5 text-muted-foreground" />
       </div>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'size-7 shrink-0 text-muted-foreground transition-all duration-200',
-              'opacity-0 group-hover:opacity-100',
-              'hover:text-destructive hover:bg-destructive/10',
-            )}
-            onClick={handleUnfollow}
-            disabled={isUnfollowing}
-            aria-label={`Unfollow ${displayName}`}
-          >
-            {isUnfollowing ? (
-              <IconLoader2 className="size-3.5 animate-spin" />
-            ) : (
-              <IconUserMinus className="size-3.5" />
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Unfollow {displayName}</p>
-        </TooltipContent>
-      </Tooltip>
-    </motion.div>
+      <span className="text-[11px] leading-tight text-muted-foreground">
+        Follow
+      </span>
+    </button>
   )
 }
 
 /**
- * Collapsible panel showing followed LinkedIn influencers with follow/unfollow actions.
- * Includes a button to open the FollowInfluencerDialog for adding new influencers.
+ * Single influencer avatar in the horizontal Stories-style feed.
+ * Shows a gradient ring (Instagram-style) when the influencer has new posts,
+ * a primary ring when selected, or a muted border otherwise.
+ * @param props - Component props
+ * @param props.influencer - The followed influencer data
+ * @param props.isSelected - Whether this influencer is currently selected
+ * @param props.onSelect - Callback when the avatar is clicked
+ * @param props.onMarkAsSeen - Optional callback to mark new posts as seen
+ * @returns A clickable avatar button with name label
+ * @example
+ * <InfluencerAvatar
+ *   influencer={influencer}
+ *   isSelected={false}
+ *   onSelect={(id) => console.log('Selected', id)}
+ * />
+ */
+function InfluencerAvatar({
+  influencer,
+  isSelected,
+  onSelect,
+  onMarkAsSeen,
+}: {
+  influencer: FollowedInfluencer
+  isSelected: boolean
+  onSelect: (id: string) => void
+  onMarkAsSeen?: (id: string) => void
+}) {
+  const displayName =
+    influencer.author_name ?? influencer.linkedin_username ?? 'Unknown'
+  const hasNewPosts = influencer.new_post_count > 0
+
+  /**
+   * Handles avatar click: selects the influencer and marks posts as seen
+   * if there are new posts available.
+   */
+  const handleClick = () => {
+    onSelect(influencer.id)
+    if (hasNewPosts) {
+      onMarkAsSeen?.(influencer.id)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      className={cn(
+        'flex flex-col items-center gap-1.5 shrink-0 w-[72px] transition-transform',
+        isSelected && 'scale-105',
+      )}
+      aria-label={`View posts from ${displayName}`}
+      aria-pressed={isSelected}
+    >
+      <div
+        className={cn(
+          'rounded-full p-[2px]',
+          hasNewPosts
+            ? 'bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600'
+            : isSelected
+              ? 'bg-primary'
+              : 'bg-border',
+        )}
+      >
+        <div className="rounded-full p-[2px] bg-background">
+          <Avatar className="size-14">
+            {influencer.author_profile_picture && (
+              <AvatarImage
+                src={influencer.author_profile_picture}
+                alt={displayName}
+              />
+            )}
+            <AvatarFallback className="bg-gradient-to-br from-primary/20 to-secondary/20 text-sm font-medium">
+              {getInitials(displayName)}
+            </AvatarFallback>
+          </Avatar>
+        </div>
+      </div>
+      <span
+        className={cn(
+          'text-[11px] leading-tight truncate w-full text-center',
+          isSelected
+            ? 'font-semibold text-foreground'
+            : 'text-muted-foreground',
+        )}
+      >
+        {displayName.split(' ')[0]}
+      </span>
+    </button>
+  )
+}
+
+/**
+ * Instagram Stories-style horizontal avatar feed for followed LinkedIn influencers.
+ * Displays a scrollable row of circular avatars with gradient rings for new posts,
+ * a leading "+" button to follow new influencers, and selection support for filtering.
  *
+ * @param props - Component props
+ * @returns A horizontal scrolling panel of influencer avatars with follow dialog
  * @example
  * <FollowedInfluencersPanel
  *   influencers={influencers}
  *   isLoading={isLoading}
  *   onFollow={followInfluencer}
  *   onUnfollow={unfollowInfluencer}
+ *   onSelectInfluencer={setSelectedId}
+ *   onMarkAsSeen={markAsSeen}
+ *   selectedInfluencerId={selectedId}
  * />
  */
 export function FollowedInfluencersPanel({
@@ -153,118 +196,71 @@ export function FollowedInfluencersPanel({
   isLoading = false,
   onFollow,
   onUnfollow,
+  onSelectInfluencer,
+  onFetchLatest,
+  onMarkAsSeen,
+  selectedInfluencerId,
   className,
 }: FollowedInfluencersPanelProps) {
-  const [isExpanded, setIsExpanded] = React.useState(true)
   const [isDialogOpen, setIsDialogOpen] = React.useState(false)
 
-  const toggleExpanded = React.useCallback(() => {
-    setIsExpanded(prev => !prev)
-  }, [])
+  /** Total count of new posts across all followed influencers */
+  const totalNewPosts = React.useMemo(
+    () =>
+      influencers.reduce((sum, inf) => sum + (inf.new_post_count || 0), 0),
+    [influencers],
+  )
 
   return (
     <>
-      <Card className={cn(
-        'border-border/50 bg-gradient-to-br from-card via-card to-primary/5',
-        'transition-all duration-300',
-        className,
-      )}>
-        <CardHeader className="py-3 px-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 shrink-0">
-                <IconUsers className="size-3.5 text-primary" />
-              </div>
-              <CardTitle className="text-sm font-medium">Following</CardTitle>
-              {influencers.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-                  {influencers.length}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => setIsDialogOpen(true)}
-                    aria-label="Follow new influencer"
-                  >
-                    <IconUserPlus className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Follow new influencer</p>
-                </TooltipContent>
-              </Tooltip>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
-                onClick={toggleExpanded}
-                aria-label={isExpanded ? 'Collapse panel' : 'Expand panel'}
-                aria-expanded={isExpanded}
+      <div className={cn('relative', className)}>
+        {/* Header with "Following" label and new-post count badge */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Following
+            </h3>
+            {totalNewPosts > 0 && (
+              <Badge
+                variant="default"
+                className="text-[10px] px-1.5 py-0 h-4 bg-gradient-to-r from-pink-500 to-purple-600"
               >
-                {isExpanded ? (
-                  <IconChevronUp className="size-3.5" />
-                ) : (
-                  <IconChevronDown className="size-3.5" />
-                )}
-              </Button>
-            </div>
+                {totalNewPosts} new
+              </Badge>
+            )}
           </div>
-        </CardHeader>
+        </div>
 
-        <AnimatePresence initial={false}>
-          {isExpanded && (
-            <motion.div
-              key="panel-content"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              style={{ overflow: 'hidden' }}
-            >
-              <CardContent className="px-4 pb-4 pt-0">
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <IconLoader2 className="size-4 animate-spin text-muted-foreground" />
-                  </div>
-                ) : influencers.length === 0 ? (
-                  <div className="text-center py-4">
-                    <p className="text-xs text-muted-foreground mb-3">
-                      No influencers followed yet
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-7"
-                      onClick={() => setIsDialogOpen(true)}
-                    >
-                      <IconUserPlus className="size-3" />
-                      Follow someone
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    <AnimatePresence mode="popLayout">
-                      {influencers.map(influencer => (
-                        <InfluencerRow
-                          key={influencer.id}
-                          influencer={influencer}
-                          onUnfollow={onUnfollow}
-                        />
-                      ))}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </CardContent>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </Card>
+        {/* Horizontal scroll container with hidden scrollbar */}
+        <div className="flex gap-3 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <AddInfluencerButton onClick={() => setIsDialogOpen(true)} />
+
+          {isLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex flex-col items-center gap-1.5 shrink-0 w-[72px] animate-pulse"
+                >
+                  <div className="size-14 rounded-full bg-muted" />
+                  <div className="h-3 w-10 rounded bg-muted" />
+                </div>
+              ))
+            : influencers.map((inf) => (
+                <InfluencerAvatar
+                  key={inf.id}
+                  influencer={inf}
+                  isSelected={selectedInfluencerId === inf.id}
+                  onSelect={(id) => {
+                    // Toggle selection: click again to deselect
+                    onSelectInfluencer?.(
+                      selectedInfluencerId === id ? null : id,
+                    )
+                  }}
+                  onMarkAsSeen={onMarkAsSeen}
+                />
+              ))}
+        </div>
+      </div>
 
       <FollowInfluencerDialog
         open={isDialogOpen}

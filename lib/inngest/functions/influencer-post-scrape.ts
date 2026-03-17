@@ -1,6 +1,6 @@
 /**
  * Influencer Post Scrape Cron Job
- * @description Inngest cron function that runs every 6 hours to scrape recent posts
+ * @description Inngest cron function that runs daily at 06:00 UTC to scrape recent posts
  * from followed influencers via Apify (harvestapi~linkedin-profile-posts),
  * filter them with LLM quality assessment, update influencer profile data,
  * and store approved posts in the influencer_posts table.
@@ -15,7 +15,7 @@ import { createClient } from '@supabase/supabase-js'
 const APIFY_ACTOR_ID = 'harvestapi~linkedin-profile-posts'
 
 /** Max posts to fetch per profile */
-const LIMIT_PER_PROFILE = 20
+const LIMIT_PER_PROFILE = 10
 
 /**
  * Supabase admin client for background jobs
@@ -84,7 +84,7 @@ interface InfluencerGroup {
 
 /**
  * Influencer Post Scrape Cron Function
- * Runs every 6 hours or on-demand when a user follows an influencer
+ * Runs daily at 06:00 UTC or on-demand when a user follows an influencer
  */
 export const influencerPostScrape = inngest.createFunction(
   {
@@ -93,20 +93,31 @@ export const influencerPostScrape = inngest.createFunction(
     retries: 2,
   },
   [
-    { cron: '0 */6 * * *' },
+    { cron: '0 6 * * *' },
     { event: 'influencer/follow' },
   ],
-  async ({ step }) => {
+  async ({ step, event }) => {
     const supabase = getSupabaseAdmin()
 
     console.log('[InfluencerScrape] Starting influencer post scrape')
 
     // Step 1: Fetch active influencers, grouped by username to deduplicate
     const influencerGroups = await step.run('fetch-active-influencers', async () => {
-      const { data: influencers, error } = await supabase
+      // If triggered by event (follow/fetch-latest), only scrape that specific influencer
+      const eventData = event?.data as { userId?: string; linkedinUrl?: string; linkedinUsername?: string } | undefined
+
+      let query = supabase
         .from('followed_influencers')
         .select('id, user_id, linkedin_url, linkedin_username')
         .eq('status', 'active')
+
+      // Filter to specific influencer if event-triggered
+      if (eventData?.linkedinUrl) {
+        query = query.eq('linkedin_url', eventData.linkedinUrl)
+        console.log(`[InfluencerScrape] Event-triggered: scraping only ${eventData.linkedinUrl}`)
+      }
+
+      const { data: influencers, error } = await query
 
       if (error) {
         console.error('[InfluencerScrape] Failed to fetch influencers:', error)
@@ -168,7 +179,7 @@ export const influencerPostScrape = inngest.createFunction(
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 profileUrls,
-                limitPerProfile: LIMIT_PER_PROFILE,
+                maxPosts: LIMIT_PER_PROFILE,
               }),
             }
           )
@@ -180,13 +191,15 @@ export const influencerPostScrape = inngest.createFunction(
 
           const items: ApifyLinkedInPost[] = await response.json()
 
-          // Filter to posts from last 7 days
-          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+          // Filter to posts from last 14 days; accept posts with no date
+          const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
           const recentItems = items.filter(item => {
-            if (!item.postedAt?.timestamp && !item.postedAt?.date) return false
+            if (!item.postedAt?.timestamp && !item.postedAt?.date) return true
             const postedTime = item.postedAt.timestamp || new Date(item.postedAt.date!).getTime()
-            return postedTime >= sevenDaysAgo
+            return postedTime >= fourteenDaysAgo
           })
+
+          console.log(`[InfluencerScrape] Apify returned ${items.length} raw items, ${recentItems.length} passed date filter`)
 
           console.log(`[InfluencerScrape] Batch ${batchIdx}: ${recentItems.length} recent posts (of ${items.length} total) from ${profileUrls.length} profiles`)
 
@@ -198,6 +211,7 @@ export const influencerPostScrape = inngest.createFunction(
               return authorId === group.linkedin_username ||
                      queryUrl.includes(group.linkedin_username || '__none__')
             })
+            console.log(`[InfluencerScrape] Influencer ${group.linkedin_username}: ${groupPosts.length} posts matched`)
             return { influencerGroup: group, posts: groupPosts }
           })
         } catch (error) {
@@ -255,6 +269,8 @@ export const influencerPostScrape = inngest.createFunction(
         score: number
         reason: string | null
         topics: string[]
+        tags: string[]
+        primaryCluster: string
       }> = []
 
       for (let i = 0; i < allPosts.length; i += 10) {
@@ -278,6 +294,8 @@ export const influencerPostScrape = inngest.createFunction(
             score: filterResults[j].score,
             reason: filterResults[j].reason,
             topics: filterResults[j].topics,
+            tags: filterResults[j].tags,
+            primaryCluster: filterResults[j].primaryCluster,
           })
         }
       }
@@ -286,7 +304,50 @@ export const influencerPostScrape = inngest.createFunction(
       return results
     })
 
-    // Step 5: Save approved posts
+    // Step 5: Classify tags and resolve clusters
+    await step.run('classify-tags', async () => {
+      // Fetch existing tag->cluster mappings
+      const { data: mappings } = await supabase
+        .from('tag_cluster_mappings')
+        .select('tag, cluster')
+
+      const tagClusterMap = new Map<string, string>()
+      if (mappings) {
+        for (const m of mappings) {
+          tagClusterMap.set(m.tag, m.cluster)
+        }
+      }
+
+      // For each quality result, resolve cluster from tags
+      for (const result of qualityResults) {
+        if (!result.approved) continue
+
+        // Try to find cluster from existing mappings
+        let resolvedCluster = 'AI' // default
+        for (const tag of result.tags) {
+          const cluster = tagClusterMap.get(tag)
+          if (cluster) {
+            resolvedCluster = cluster
+            break
+          }
+        }
+        result.primaryCluster = resolvedCluster
+
+        // Insert any new tags into tag_cluster_mappings
+        for (const tag of result.tags) {
+          if (!tagClusterMap.has(tag)) {
+            await supabase
+              .from('tag_cluster_mappings')
+              .upsert({ tag, cluster: resolvedCluster }, { onConflict: 'tag', ignoreDuplicates: true })
+            tagClusterMap.set(tag, resolvedCluster)
+          }
+        }
+      }
+
+      console.log('[InfluencerScrape] Tag classification complete')
+    })
+
+    // Step 6: Save approved posts
     const savedCount = await step.run('save-posts', async () => {
       if (qualityResults.length === 0) return 0
 
@@ -304,10 +365,13 @@ export const influencerPostScrape = inngest.createFunction(
               ? new Date(result.post.postedAt.timestamp).toISOString()
               : null)
 
+          const linkedinPostId = result.post.id || null
+
           const row = {
             influencer_id: influencerId,
             user_id: userId,
             linkedin_url: result.post.linkedinUrl || null,
+            linkedin_post_id: linkedinPostId,
             content: result.post.content || '',
             post_type: result.post.type || null,
             likes_count: result.post.engagement?.likes || 0,
@@ -317,6 +381,8 @@ export const influencerPostScrape = inngest.createFunction(
             quality_score: result.score,
             quality_status: result.approved ? 'approved' : 'rejected',
             rejection_reason: result.reason,
+            tags: result.tags,
+            primary_cluster: result.primaryCluster,
             raw_data: result.post as unknown as Record<string, unknown>,
           }
 
@@ -336,19 +402,23 @@ export const influencerPostScrape = inngest.createFunction(
       return saved
     })
 
-    // Step 6: Update influencer counts and last_scraped_at
+    // Step 7: Update influencer counts and last_scraped_at
     await step.run('update-counts', async () => {
       for (const scraped of allScrapedPosts) {
         const group = scraped.influencerGroup
-        const approvedCount = qualityResults.filter(
-          r => r.groupIdx === allScrapedPosts.indexOf(scraped) && r.approved
-        ).length
 
         for (const influencerId of group.influencer_ids) {
+          // Query actual approved post count from DB
+          const { count } = await supabase
+            .from('influencer_posts')
+            .select('id', { count: 'exact', head: true })
+            .eq('influencer_id', influencerId)
+            .eq('quality_status', 'approved')
+
           await supabase
             .from('followed_influencers')
             .update({
-              posts_count: approvedCount,
+              posts_count: count || 0,
               last_scraped_at: new Date().toISOString(),
             })
             .eq('id', influencerId)
@@ -357,7 +427,7 @@ export const influencerPostScrape = inngest.createFunction(
       console.log('[InfluencerScrape] Updated influencer counts and last_scraped_at')
     })
 
-    // Step 7: Emit completion event
+    // Step 8: Emit completion event
     await step.sendEvent('scrape-completed', {
       name: 'influencer/scrape.completed',
       data: {

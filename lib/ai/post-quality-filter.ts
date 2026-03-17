@@ -20,6 +20,10 @@ export interface PostQualityResult {
   reason: string | null
   /** Auto-classified topics */
   topics: string[]
+  /** Lowercase-hyphenated sub-tags (e.g. "content-marketing", "ai-tools") */
+  tags: string[]
+  /** Primary cluster category */
+  primaryCluster: string
 }
 
 /**
@@ -45,7 +49,7 @@ Evaluate each post and return a JSON response.
 
 REJECTION CRITERIA (reject if ANY apply):
 1. SHORT/LOW-SUBSTANCE: Post is under 50 characters, or only 1-2 sentences with no real insight or value
-2. POLITICAL/PARTISAN: Contains political opinions, partisan content, controversial political takes, or policy advocacy
+2. POLITICAL/PARTISAN: Contains ANY political content including: political opinions, partisan commentary, controversial political takes, policy advocacy, political figures/parties (Trump, Biden, Democrats, Republicans, etc.), election commentary, immigration debates, culture war topics (DEI, woke, CRT), gun control, abortion, government policy criticism/praise, geopolitical takes, or any content that would be divisive along political lines. When in doubt about whether content is political, REJECT it.
 3. JOB ANNOUNCEMENTS: Job postings, internship announcements, "excited to join/start" posts, "we're hiring" posts, work anniversary celebrations
 4. ENGAGEMENT BAIT: "Like if you agree", "Comment YES", "Repost this", repost chains, follow-for-follow, empty motivational one-liners designed purely for engagement
 
@@ -57,6 +61,10 @@ APPROVAL CRITERIA:
 - Offers data-driven analysis or unique observations
 
 For TOPICS, classify into 1-3 of these categories: marketing, sales, leadership, technology, entrepreneurship, product-management, remote-work, saas, content-creation, personal-branding, hiring, finance, general
+
+For TAGS, provide 2-5 lowercase-hyphenated sub-tags that describe the post's specific themes (e.g. "content-marketing", "ai-tools", "founder-lessons", "cold-outreach", "team-building").
+
+For PRIMARY_CLUSTER, classify each post into exactly ONE of these 8 clusters: AI, Marketing, Sales, Leadership, Startup, Product, Growth, Engineering
 
 Return ONLY valid JSON, no markdown fences.`
 
@@ -73,7 +81,7 @@ Engagement: ${post.metrics.likes} likes, ${post.metrics.comments} comments, ${po
 Content: ${post.content.slice(0, 1000)}`
   }).join('\n\n')
 
-  return `Evaluate the following ${posts.length} LinkedIn post(s). For each post, return a JSON object with: approved (boolean), score (0.0-1.0), reason (string or null if approved), topics (string array).
+  return `Evaluate the following ${posts.length} LinkedIn post(s). For each post, return a JSON object with: approved (boolean), score (0.0-1.0), reason (string or null if approved), topics (string array), tags (string array of 2-5 lowercase-hyphenated sub-tags), primary_cluster (string, one of: AI, Marketing, Sales, Leadership, Startup, Product, Growth, Engineering).
 
 Return a JSON array with exactly ${posts.length} objects in the same order as the posts.
 
@@ -114,6 +122,8 @@ export async function filterPostQualityBatch(
       score: 0.5,
       reason: null,
       topics: ['general'],
+      tags: [],
+      primaryCluster: 'AI',
     }))
   }
 
@@ -137,6 +147,8 @@ export async function filterPostQualityBatch(
         score: 0.5,
         reason: null,
         topics: ['general'],
+        tags: [],
+        primaryCluster: 'AI',
       }))
     }
 
@@ -146,6 +158,8 @@ export async function filterPostQualityBatch(
       score: typeof result.score === 'number' ? Math.max(0, Math.min(1, result.score)) : 0.5,
       reason: typeof result.reason === 'string' ? result.reason : null,
       topics: Array.isArray(result.topics) ? result.topics.filter((t: unknown) => typeof t === 'string') : ['general'],
+      tags: Array.isArray(result.tags) ? result.tags.filter((t: unknown) => typeof t === 'string') : [],
+      primaryCluster: typeof result.primary_cluster === 'string' ? result.primary_cluster : 'AI',
     }))
   } catch (error) {
     console.error('[QualityFilter] LLM filter failed:', error instanceof Error ? error.message : error)
@@ -155,6 +169,8 @@ export async function filterPostQualityBatch(
       score: 0.3,
       reason: null,
       topics: ['general'],
+      tags: [],
+      primaryCluster: 'AI',
     }))
   }
 }

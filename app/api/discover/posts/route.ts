@@ -36,6 +36,8 @@ export async function GET(request: Request) {
   const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "12", 10)))
   const sort = (searchParams.get("sort") || "engagement") as SortOption
   const search = searchParams.get("search") || ""
+  const cluster = searchParams.get("cluster") || ""
+  const tagsParam = searchParams.get("tags") || ""
 
   const offset = (page - 1) * limit
 
@@ -47,6 +49,19 @@ export async function GET(request: Request) {
     // Filter by topic if provided (topics is a text[] column)
     if (topic) {
       query = query.contains("topics", [topic])
+    }
+
+    // Filter by primary_cluster if provided
+    if (cluster) {
+      query = query.eq("primary_cluster", cluster)
+    }
+
+    // Filter by tags if provided (comma-separated, uses array overlap)
+    if (tagsParam) {
+      const tagsArray = tagsParam.split(",").map((t: string) => t.trim()).filter(Boolean)
+      if (tagsArray.length > 0) {
+        query = query.overlaps("tags", tagsArray)
+      }
     }
 
     // Search in content and author name with sanitized input

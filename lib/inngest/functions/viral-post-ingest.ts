@@ -1,9 +1,10 @@
 /**
  * Viral Post Ingest Cron Job
- * @description Inngest cron function that runs every 6 hours (offset) to scrape
- * trending posts from curated viral LinkedIn creators via Apify
- * (harvestapi~linkedin-profile-posts), filter with LLM quality assessment,
- * and store approved posts in the discover_posts table.
+ * @description Inngest cron function that runs daily at 5 AM UTC (1 hour before
+ * the influencer scrape at 6 AM) to scrape trending posts from curated viral
+ * LinkedIn creators via Apify (harvestapi~linkedin-profile-posts), filter with
+ * LLM quality assessment, classify tags/clusters, and store up to 20 approved
+ * posts per day in the discover_posts table.
  * @module lib/inngest/functions/viral-post-ingest
  */
 
@@ -16,6 +17,9 @@ const APIFY_ACTOR_ID = 'harvestapi~linkedin-profile-posts'
 
 /** Max posts to fetch per profile for viral ingest */
 const LIMIT_PER_PROFILE = 10
+
+/** Maximum number of approved posts to save per daily run */
+const MAX_POSTS_PER_DAY = 20
 
 /**
  * Supabase admin client for background jobs
@@ -141,7 +145,8 @@ function calculateEngagementRate(likes: number, comments: number, reposts: numbe
 
 /**
  * Viral Post Ingest Cron Function
- * Runs every 6 hours (offset from influencer scrape) to ingest viral posts
+ * Runs daily at 5 AM UTC (1 hour before influencer scrape). Ingests up to
+ * {@link MAX_POSTS_PER_DAY} top-engagement viral posts per run.
  */
 export const viralPostIngest = inngest.createFunction(
   {
@@ -149,11 +154,11 @@ export const viralPostIngest = inngest.createFunction(
     name: 'Viral Post Ingest',
     retries: 2,
   },
-  { cron: '0 3,9,15,21 * * *' },
+  { cron: '0 5 * * *' },
   async ({ step }) => {
     const supabase = getSupabaseAdmin()
 
-    console.log('[ViralIngest] Starting viral post ingest')
+    console.log('[ViralIngest] Starting daily viral post ingest')
 
     // Step 1: Fetch source profiles
     const sourceProfiles = await step.run('fetch-source-profiles', async () => {
@@ -198,7 +203,7 @@ export const viralPostIngest = inngest.createFunction(
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 profileUrls,
-                limitPerProfile: LIMIT_PER_PROFILE,
+                maxPosts: LIMIT_PER_PROFILE,
               }),
             }
           )
@@ -209,16 +214,18 @@ export const viralPostIngest = inngest.createFunction(
           }
 
           const items: ApifyLinkedInPost[] = await response.json()
+          console.log(`[ViralIngest] Batch ${batchIdx}: Apify returned ${items.length} total items`)
 
-          // Filter to posts from last 24 hours
-          const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
+          // Filter to posts from last 3 days (wider window for daily runs)
+          const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000
           const recentItems = items.filter(item => {
-            if (!item.postedAt?.timestamp && !item.postedAt?.date) return false
+            // Accept posts with no date info
+            if (!item.postedAt?.timestamp && !item.postedAt?.date) return true
             const postedTime = item.postedAt.timestamp || new Date(item.postedAt.date!).getTime()
-            return postedTime >= oneDayAgo
+            return postedTime >= threeDaysAgo
           })
 
-          console.log(`[ViralIngest] Batch ${batchIdx}: ${recentItems.length} recent posts from ${profileUrls.length} profiles`)
+          console.log(`[ViralIngest] Batch ${batchIdx}: ${recentItems.length}/${items.length} passed date filter from ${profileUrls.length} profiles`)
           return recentItems
         } catch (error) {
           console.error(`[ViralIngest] Batch ${batchIdx} scrape failed:`, error instanceof Error ? error.message : error)
@@ -228,6 +235,8 @@ export const viralPostIngest = inngest.createFunction(
 
       allScrapedPosts.push(...batchPosts)
     }
+
+    console.log(`[ViralIngest] Total scraped posts after date filter: ${allScrapedPosts.length}`)
 
     // Step 3: LLM quality filter
     const qualityResults = await step.run('llm-quality-filter', async () => {
@@ -241,6 +250,8 @@ export const viralPostIngest = inngest.createFunction(
         score: number
         reason: string | null
         topics: string[]
+        tags: string[]
+        primaryCluster: string
       }> = []
 
       // Process in batches of 10
@@ -259,9 +270,10 @@ export const viralPostIngest = inngest.createFunction(
         const filterResults = await filterPostQualityBatch(postsForFilter)
 
         for (let j = 0; j < chunk.length; j++) {
-          // Merge LLM topics with keyword-based classification
+          // Merge LLM topics and tags with keyword-based classification
           const keywordTopics = classifyTopics(chunk[j].content || '')
-          const allTopics = [...new Set([...filterResults[j].topics, ...keywordTopics])]
+          const llmTags = filterResults[j].tags || []
+          const allTopics = [...new Set([...filterResults[j].topics, ...keywordTopics, ...llmTags])]
 
           results.push({
             post: chunk[j],
@@ -269,18 +281,73 @@ export const viralPostIngest = inngest.createFunction(
             score: filterResults[j].score,
             reason: filterResults[j].reason,
             topics: allTopics,
+            tags: filterResults[j].tags,
+            primaryCluster: filterResults[j].primaryCluster,
           })
         }
       }
 
-      console.log(`[ViralIngest] Quality filter: ${results.filter(r => r.approved).length}/${results.length} approved`)
+      const approvedCount = results.filter(r => r.approved).length
+      const rejectedCount = results.length - approvedCount
+      console.log(`[ViralIngest] Quality filter: ${approvedCount} approved, ${rejectedCount} rejected out of ${results.length} total`)
       return results
     })
 
+    // Step 3b: Classify tags and resolve clusters
+    await step.run('classify-tags', async () => {
+      const { data: mappings } = await supabase
+        .from('tag_cluster_mappings')
+        .select('tag, cluster')
+
+      const tagClusterMap = new Map<string, string>()
+      if (mappings) {
+        for (const m of mappings) {
+          tagClusterMap.set(m.tag, m.cluster)
+        }
+      }
+
+      for (const result of qualityResults) {
+        if (!result.approved) continue
+
+        // Resolve cluster from existing mappings, fallback to LLM-provided cluster
+        let resolvedCluster = result.primaryCluster || 'AI'
+        for (const tag of result.tags) {
+          const cluster = tagClusterMap.get(tag)
+          if (cluster) {
+            resolvedCluster = cluster
+            break
+          }
+        }
+        result.primaryCluster = resolvedCluster
+
+        // Insert any new tags
+        for (const tag of result.tags) {
+          if (!tagClusterMap.has(tag)) {
+            await supabase
+              .from('tag_cluster_mappings')
+              .upsert({ tag, cluster: resolvedCluster }, { onConflict: 'tag', ignoreDuplicates: true })
+            tagClusterMap.set(tag, resolvedCluster)
+          }
+        }
+      }
+
+      console.log('[ViralIngest] Tag classification complete')
+    })
+
+    // Apply daily cap - keep top 20 by engagement
+    const approvedPosts = qualityResults
+      .filter(r => r.approved)
+      .sort((a, b) => {
+        const engA = (a.post.engagement?.likes || 0) + (a.post.engagement?.comments || 0) * 2 + (a.post.engagement?.shares || 0) * 3
+        const engB = (b.post.engagement?.likes || 0) + (b.post.engagement?.comments || 0) * 2 + (b.post.engagement?.shares || 0) * 3
+        return engB - engA
+      })
+      .slice(0, MAX_POSTS_PER_DAY)
+
+    console.log(`[ViralIngest] Daily cap applied: ${approvedPosts.length} posts (max ${MAX_POSTS_PER_DAY})`)
+
     // Step 4: Save to discover_posts
     const savedCount = await step.run('save-to-discover-posts', async () => {
-      const approvedPosts = qualityResults.filter(r => r.approved)
-
       if (approvedPosts.length === 0) return 0
 
       let saved = 0
@@ -299,6 +366,7 @@ export const viralPostIngest = inngest.createFunction(
 
         const row = {
           linkedin_url: post.linkedinUrl || `apify-viral-${crypto.randomUUID()}`,
+          linkedin_post_id: post.id || null,
           author_name: post.author?.name || 'Unknown',
           author_headline: post.author?.info || '',
           author_avatar_url: post.author?.avatar?.url || null,
@@ -311,6 +379,8 @@ export const viralPostIngest = inngest.createFunction(
           posted_at: postedAtDate,
           scraped_at: new Date().toISOString(),
           topics: result.topics,
+          tags: result.tags,
+          primary_cluster: result.primaryCluster,
           is_viral: isViral,
           engagement_rate: engagementRate,
           source: 'apify_viral',
@@ -358,7 +428,8 @@ export const viralPostIngest = inngest.createFunction(
       data: {
         profilesScraped: sourceProfiles.length,
         postsFound: qualityResults.length,
-        postsApproved: qualityResults.filter(r => r.approved).length,
+        postsApproved: approvedPosts.length,
+        postsSaved: savedCount,
         staleRemoved,
       },
     })
@@ -367,7 +438,7 @@ export const viralPostIngest = inngest.createFunction(
       success: true,
       profilesScraped: sourceProfiles.length,
       postsFound: qualityResults.length,
-      postsApproved: qualityResults.filter(r => r.approved).length,
+      postsApproved: approvedPosts.length,
       postsSaved: savedCount,
       staleRemoved,
     }

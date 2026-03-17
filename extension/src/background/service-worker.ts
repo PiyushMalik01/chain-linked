@@ -602,17 +602,40 @@ async function ensureUserId(): Promise<string | null> {
   let userId = getCurrentUserId();
   if (userId) return userId;
 
+  // First try the auth module which handles token refresh properly
+  try {
+    const supabaseAuth = (self as unknown as { supabaseAuth?: {
+      getSession: () => Promise<{ session?: { user?: { id: string }; access_token?: string }; user?: { id: string } }>;
+    } }).supabaseAuth;
+    if (supabaseAuth) {
+      const { session, user } = await supabaseAuth.getSession();
+      const authUserId = user?.id || session?.user?.id;
+      if (authUserId) {
+        console.log(`[CL:WORKER] Restored userId via auth module (with refresh): ${authUserId.substring(0, 8)}...`);
+        setCurrentUserId(authUserId);
+        return authUserId;
+      }
+    }
+  } catch (authErr) {
+    console.warn('[CL:WORKER] Auth module restore failed:', authErr instanceof Error ? authErr.message : authErr);
+  }
+
+  // Fallback to storage — but check expiry before setting JWT
   try {
     const sessionResult = await chrome.storage.local.get('supabase_session');
     if (sessionResult.supabase_session?.user?.id) {
-      const restoredUserId = sessionResult.supabase_session.user.id;
+      const session = sessionResult.supabase_session;
+      const restoredUserId = session.user.id;
       console.log(`[CL:WORKER] Restored userId from session: ${restoredUserId.substring(0, 8)}...`);
       setCurrentUserId(restoredUserId);
 
-      // Also set auth on supabase client if available
-      if (self.supabase && sessionResult.supabase_session.access_token) {
-        self.supabase.setAuth(sessionResult.supabase_session.access_token, restoredUserId);
+      // Only set auth if token is not expired
+      const isExpired = session.expires_at && (Date.now() / 1000) > session.expires_at;
+      if (!isExpired && self.supabase && session.access_token) {
+        self.supabase.setAuth(session.access_token, restoredUserId);
         console.log(`[CL:WORKER] Set auth on Supabase client`);
+      } else if (isExpired) {
+        console.warn(`[CL:WORKER] Stored JWT is expired — not setting on client`);
       }
 
       return restoredUserId;
@@ -736,10 +759,27 @@ async function addToAnalyticsHistory(analyticsData: Partial<CreatorAnalytics>): 
       topPostsCount: analyticsData.topPosts?.length || 0,
     };
 
+    // Don't create new analytics_history entries with all-zero metrics
+    // (happens when creator analytics returns 404 but profile_views still syncs)
+    const hasSubstantiveData = entry.impressions > 0 || (analyticsData.engagements || 0) > 0 || (analyticsData.newFollowers || 0) > 0;
+
     const existingIndex = history.findIndex((h) => h.date === today);
     if (existingIndex >= 0) {
-      history[existingIndex] = entry;
-    } else {
+      // Update existing entry - merge profile_views but don't overwrite non-zero values with zeros
+      const existing = history[existingIndex];
+      history[existingIndex] = {
+        ...existing,
+        profileViews: entry.profileViews || existing.profileViews,
+        // Only overwrite impressions etc if we have real data
+        ...(hasSubstantiveData ? {
+          impressions: entry.impressions,
+          membersReached: entry.membersReached,
+          topPostsCount: entry.topPostsCount,
+        } : {}),
+        timestamp: entry.timestamp,
+      };
+    } else if (hasSubstantiveData || entry.profileViews > 0) {
+      // Only create new entry if we have some data
       history.push(entry);
     }
 
@@ -2772,11 +2812,35 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
             console.log('[ServiceWorker] Restoring session from storage for user:', session.user.id.substring(0, 8) + '...');
             // Restore the currentUserId in sync bridge
             setCurrentUserId(session.user.id);
-            // Also set auth on supabase client if available
-            const supabaseClient = (self as unknown as { supabase?: { setAuth: (token: string, userId?: string) => void } }).supabase;
-            if (supabaseClient && session.access_token) {
-              supabaseClient.setAuth(session.access_token, session.user.id);
+
+            // Try auth module first (handles token refresh)
+            let tokenSet = false;
+            const supabaseAuth = (self as unknown as { supabaseAuth?: {
+              getSession: () => Promise<{ session?: { user?: { id: string }; access_token?: string }; user?: { id: string } }>;
+            } }).supabaseAuth;
+            if (supabaseAuth) {
+              try {
+                const { session: refreshedSession } = await supabaseAuth.getSession();
+                if (refreshedSession?.access_token) {
+                  tokenSet = true;
+                  console.log('[ServiceWorker] Session refreshed via auth module');
+                }
+              } catch (refreshErr) {
+                console.warn('[ServiceWorker] Auth module refresh failed:', refreshErr);
+              }
             }
+
+            // Fallback: only set token if not expired
+            if (!tokenSet) {
+              const isExpired = session.expires_at && (Date.now() / 1000) > session.expires_at;
+              const supabaseClient = (self as unknown as { supabase?: { setAuth: (token: string, userId?: string) => void } }).supabase;
+              if (!isExpired && supabaseClient && session.access_token) {
+                supabaseClient.setAuth(session.access_token, session.user.id);
+              } else if (isExpired) {
+                console.warn('[ServiceWorker] Stored JWT expired — user needs to re-authenticate');
+              }
+            }
+
             // Re-fetch sync status after restoration
             syncStatus = await getSyncStatusInfo();
           }
@@ -2824,6 +2888,17 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
           const result = await supabaseAuth.signIn(email, password);
           if (result.success && result.user) {
             setCurrentUserId(result.user.id);
+
+            // Mark extension as logged in on the user's profile
+            try {
+              const sbClient = (self as unknown as { supabase?: { from: (t: string) => { update: (d: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } } } }).supabase;
+              if (sbClient) {
+                await sbClient.from('profiles').update({ extension_logged_in: true, extension_last_active_at: new Date().toISOString() }).eq('id', result.user.id);
+                console.log('[ServiceWorker] Marked extension_logged_in=true for user');
+              }
+            } catch (e) {
+              console.warn('[ServiceWorker] Failed to update extension_logged_in:', e);
+            }
 
             // Check if migration is needed
             const migrationCheck = await chrome.storage.local.get([
@@ -2942,6 +3017,19 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
 
           setCurrentUserId(sessionData.user?.id);
 
+          // Mark extension as logged in on the user's profile
+          if (sessionData.user?.id) {
+            try {
+              const sbClient = (self as unknown as { supabase?: { from: (t: string) => { update: (d: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } } } }).supabase;
+              if (sbClient) {
+                await sbClient.from('profiles').update({ extension_logged_in: true, extension_last_active_at: new Date().toISOString() }).eq('id', sessionData.user.id);
+                console.log('[ServiceWorker] Marked extension_logged_in=true for user');
+              }
+            } catch (e) {
+              console.warn('[ServiceWorker] Failed to update extension_logged_in:', e);
+            }
+          }
+
           // Check if data migration is needed
           const migrationCheck = await chrome.storage.local.get([
             'supabase_migration_complete',
@@ -2968,6 +3056,21 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       case 'SUPABASE_AUTH_SIGN_OUT': {
         console.log('[ServiceWorker] SUPABASE_AUTH_SIGN_OUT received');
         try {
+          // Mark extension as logged out before clearing session
+          const sessionForLogout = await chrome.storage.local.get('supabase_session');
+          const logoutUserId = sessionForLogout.supabase_session?.user?.id;
+          if (logoutUserId) {
+            try {
+              const sbClient = (self as unknown as { supabase?: { from: (t: string) => { update: (d: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } } } }).supabase;
+              if (sbClient) {
+                await sbClient.from('profiles').update({ extension_logged_in: false }).eq('id', logoutUserId);
+                console.log('[ServiceWorker] Marked extension_logged_in=false for user');
+              }
+            } catch (e) {
+              console.warn('[ServiceWorker] Failed to clear extension_logged_in:', e);
+            }
+          }
+
           const supabaseAuth = (self as unknown as { supabaseAuth?: {
             signOut: () => Promise<{ success: boolean; error?: string }>;
           } }).supabaseAuth;

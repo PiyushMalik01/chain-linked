@@ -103,6 +103,10 @@ export interface ProfileData {
   dashboard_tour_completed: boolean
   /** User onboarding type: 'owner' (org) or 'member' (individual) */
   onboarding_type: string | null
+  /** Whether the Chrome extension is currently logged in */
+  extension_logged_in: boolean
+  /** Last time the extension was active */
+  extension_last_active_at: string | null
 }
 
 /**
@@ -252,6 +256,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         onboarding_current_step: profileData.onboarding_current_step ?? 1,
         dashboard_tour_completed: profileData.dashboard_tour_completed ?? false,
         onboarding_type: profileData.onboarding_type ?? null,
+        extension_logged_in: profileData.extension_logged_in ?? false,
+        extension_last_active_at: profileData.extension_last_active_at ?? null,
         linkedin_profile: linkedinProfile ? {
           ...linkedinProfile,
           raw_data: linkedinProfile.raw_data as LinkedInProfile['raw_data'],

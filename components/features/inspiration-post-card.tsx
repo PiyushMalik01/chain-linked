@@ -78,6 +78,10 @@ const CATEGORY_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
   "growth": "secondary",
   "design": "outline",
   "general": "outline",
+  "ai": "secondary",
+  "engineering": "secondary",
+  "startup": "outline",
+  "product": "default",
 }
 
 /**
@@ -93,6 +97,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   "growth": "Growth",
   "design": "Design",
   "general": "General",
+  "ai": "AI",
+  "engineering": "Engineering",
+  "startup": "Startup",
+  "product": "Product",
 }
 
 /**
@@ -272,6 +280,28 @@ export function InspirationPostCard({
               <p className="text-xs text-muted-foreground truncate">
                 {post.author.headline}
               </p>
+              {/* Tag badges */}
+              {post.tags && post.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {post.tags.slice(0, 3).map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* Primary cluster badge */}
+              {post.primaryCluster && post.primaryCluster !== post.category && (
+                <Badge
+                  variant={CATEGORY_VARIANTS[post.primaryCluster] || "outline"}
+                  className="text-[10px] mt-1 w-fit"
+                >
+                  {CATEGORY_LABELS[post.primaryCluster] || post.primaryCluster}
+                </Badge>
+              )}
             </div>
 
             {/* Save/Bookmark Button */}

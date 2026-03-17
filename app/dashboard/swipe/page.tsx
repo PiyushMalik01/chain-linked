@@ -78,7 +78,7 @@ function EmptyState({
 }) {
   return (
     <motion.div
-      className="flex h-[400px] w-full max-w-md flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25 bg-gradient-to-br from-muted/30 via-muted/20 to-primary/5 p-8 text-center"
+      className="flex h-[520px] w-full max-w-lg flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25 bg-gradient-to-br from-muted/30 via-muted/20 to-primary/5 p-8 text-center"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -677,7 +677,7 @@ function SwipeContent() {
       {currentCard ? (
         <div
           ref={containerRef}
-          className="relative h-[400px] w-full max-w-md select-none"
+          className="relative h-[520px] w-full max-w-lg select-none"
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}

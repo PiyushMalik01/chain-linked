@@ -889,6 +889,22 @@ export async function processPendingChanges(): Promise<{
     return { success: 0, failed: 0, errors: ['Not authenticated'] };
   }
 
+  // Ensure JWT is fresh before attempting sync
+  try {
+    const supabaseAuth = (self as unknown as { supabaseAuth?: {
+      getSession: () => Promise<{ session?: { user?: { id: string }; access_token?: string }; user?: { id: string } }>;
+    } }).supabaseAuth;
+    if (supabaseAuth) {
+      const { session } = await supabaseAuth.getSession();
+      if (!session?.access_token) {
+        console.warn('[SyncBridge] No valid session after refresh attempt - skipping sync');
+        return { success: 0, failed: 0, errors: ['Session expired, please log in again'] };
+      }
+    }
+  } catch (authErr) {
+    console.warn('[SyncBridge] JWT refresh check failed:', authErr instanceof Error ? authErr.message : authErr);
+  }
+
   isSyncing = true;
   const errors: string[] = [];
   let success = 0;
@@ -1043,9 +1059,20 @@ export async function processPendingChanges(): Promise<{
           const isFkError =
             error.message.includes('violates foreign key constraint');
 
+          const isAuthError =
+            error.message.includes('JWT expired') ||
+            error.message.includes('row-level security policy') ||
+            error.message.includes('JWSError') ||
+            error.message.includes('invalid token');
+
           if (isDuplicateError || isFkError) {
             console.log(`[CL:SYNC] --- ${isDuplicateError ? 'DUPLICATE' : 'FK_CONSTRAINT'}: table=${table} (removing from queue to prevent retry loop)`);
             processedChanges.push(...changes);
+          } else if (isAuthError) {
+            console.warn(`[CL:SYNC] --- AUTH_ERROR: table=${table} — JWT expired or RLS denied. Stopping sync, user needs to re-authenticate.`);
+            // Break out of the table loop — no point retrying other tables with a bad JWT
+            failed += changes.length;
+            break;
           } else {
             failed += changes.length;
           }
@@ -1695,14 +1722,23 @@ export async function initSyncBridge(): Promise<void> {
       const session = result.supabase_session;
       console.log('[SyncBridge] Storage session check:', session ? 'found' : 'not found', session?.user?.id ? `user: ${session.user.id.substring(0, 8)}...` : 'no user');
       if (session?.user?.id) {
-        currentUserId = session.user.id;
-        console.log(`[SyncBridge] Restored user session from storage: ${currentUserId!.substring(0, 8)}...`);
+        // Check if the stored JWT is expired before using it
+        const isExpired = session.expires_at && (Date.now() / 1000) > session.expires_at;
 
-        // Also set auth on supabase client if available
-        const supabase = (self as unknown as { supabase?: { setAuth: (token: string, userId?: string) => void } }).supabase;
-        if (supabase && session.access_token) {
-          supabase.setAuth(session.access_token, session.user.id);
-          console.log('[SyncBridge] Set auth on Supabase client');
+        if (isExpired) {
+          console.warn('[SyncBridge] Stored session JWT is expired — skipping auth set to avoid RLS errors');
+          // Still set userId so we know who the user is, but don't set expired JWT
+          currentUserId = session.user.id;
+        } else {
+          currentUserId = session.user.id;
+          console.log(`[SyncBridge] Restored user session from storage: ${currentUserId!.substring(0, 8)}...`);
+
+          // Only set auth if token is not expired
+          const supabase = (self as unknown as { supabase?: { setAuth: (token: string, userId?: string) => void } }).supabase;
+          if (supabase && session.access_token) {
+            supabase.setAuth(session.access_token, session.user.id);
+            console.log('[SyncBridge] Set auth on Supabase client');
+          }
         }
       }
     }

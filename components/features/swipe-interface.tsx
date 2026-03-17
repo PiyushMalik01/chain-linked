@@ -69,7 +69,7 @@ function getEngagementLevel(score: number): { label: string; colorClass: string 
 function SwipeInterfaceSkeleton() {
   return (
     <div className="flex flex-col items-center gap-6">
-      <div className="relative h-[400px] w-full max-w-md">
+      <div className="relative h-[520px] w-full max-w-lg">
         <Skeleton className="h-full w-full rounded-xl" />
       </div>
       <div className="flex gap-4">
@@ -87,7 +87,7 @@ function SwipeInterfaceSkeleton() {
  */
 function EmptyState() {
   return (
-    <div className="flex h-[400px] w-full max-w-md flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25 bg-gradient-to-br from-muted/30 to-primary/5 p-8 text-center">
+    <div className="flex h-[520px] w-full max-w-lg flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25 bg-gradient-to-br from-muted/30 to-primary/5 p-8 text-center">
       <div className="rounded-full bg-gradient-to-br from-primary/15 to-secondary/10 p-5 mb-4">
         <IconMoodEmpty className="size-10 text-muted-foreground/60" />
       </div>
@@ -282,7 +282,7 @@ export function SwipeInterface({
       {/* Card Stack Container */}
       <div
         ref={containerRef}
-        className="relative h-[400px] w-full max-w-md select-none"
+        className="relative h-[520px] w-full max-w-lg select-none"
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}

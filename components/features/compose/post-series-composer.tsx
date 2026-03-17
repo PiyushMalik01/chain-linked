@@ -20,6 +20,7 @@ import {
   IconFile,
   IconLoader2,
   IconSend,
+  IconDeviceFloppy,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -142,6 +143,7 @@ export function PostSeriesComposer({
     setCurrentPostIndex(0)
   }, [clearConversation])
 
+  const [isSavingDraft, setIsSavingDraft] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
 
   /**
@@ -175,6 +177,36 @@ export function PostSeriesComposer({
       setTimeout(() => setCopied(false), 2000)
     } catch {
       console.error("Failed to copy")
+    }
+  }, [posts])
+
+  /**
+   * Save all series posts as individual drafts
+   */
+  const handleSaveDrafts = React.useCallback(async () => {
+    if (posts.length === 0) return
+
+    setIsSavingDraft(true)
+    try {
+      let savedCount = 0
+      for (const post of posts) {
+        const res = await fetch('/api/drafts/auto-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: post.post,
+            postType: 'series',
+            source: 'series',
+          }),
+        })
+        if (res.ok) savedCount++
+      }
+
+      showSuccess(`${savedCount} post${savedCount !== 1 ? 's' : ''} saved as drafts!`)
+    } catch (err) {
+      console.error('Failed to save drafts:', err)
+    } finally {
+      setIsSavingDraft(false)
     }
   }, [posts])
 
@@ -302,6 +334,20 @@ export function PostSeriesComposer({
                 >
                   <IconFile className="size-3.5" />
                   Copy All
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSaveDrafts}
+                  disabled={isSavingDraft}
+                  className="gap-1.5 text-xs"
+                >
+                  {isSavingDraft ? (
+                    <IconLoader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <IconDeviceFloppy className="size-3.5" />
+                  )}
+                  {isSavingDraft ? "Saving..." : "Save Drafts"}
                 </Button>
               </div>
 

@@ -659,6 +659,10 @@ export function PostComposer({
     // Toggle: if already styled, strip back to normal; otherwise apply the style
     const targetStyle = alreadyStyled ? 'normal' : style
     const result = transformSelection(content, start, end, targetStyle)
+
+    // Preserve scroll position before the state update triggers a re-render
+    const savedScrollTop = textareaRef.current?.scrollTop ?? 0
+
     handleContentChange(result.text)
     setActiveFontStyle(targetStyle)
     cursorPositionRef.current = { start, end: result.newEnd }
@@ -666,8 +670,12 @@ export function PostComposer({
     setTimeout(() => {
       const textarea = textareaRef.current
       if (textarea) {
-        textarea.focus()
+        // Restore scroll position before focusing to prevent jump-to-top
+        textarea.scrollTop = savedScrollTop
+        textarea.focus({ preventScroll: true })
         textarea.setSelectionRange(start, result.newEnd)
+        // Ensure scroll stays put after selection change
+        textarea.scrollTop = savedScrollTop
       }
     }, 0)
   }
@@ -761,6 +769,10 @@ export function PostComposer({
 
     const newContent =
       content.slice(0, clampedStart) + prefix + selectedText + suffix + content.slice(clampedEnd)
+
+    // Preserve scroll position before the state update triggers a re-render
+    const savedScrollTop = textareaRef.current?.scrollTop ?? 0
+
     handleContentChange(newContent)
 
     const newPosition = selectedText
@@ -771,8 +783,10 @@ export function PostComposer({
     setTimeout(() => {
       const textarea = textareaRef.current
       if (textarea) {
-        textarea.focus()
+        textarea.scrollTop = savedScrollTop
+        textarea.focus({ preventScroll: true })
         textarea.setSelectionRange(newPosition, newPosition)
+        textarea.scrollTop = savedScrollTop
       }
     }, 0)
   }
@@ -788,6 +802,10 @@ export function PostComposer({
     const clampedEnd = Math.min(end, content.length)
 
     const newContent = content.slice(0, clampedStart) + emoji + content.slice(clampedEnd)
+
+    // Preserve scroll position before the state update triggers a re-render
+    const savedScrollTop = textareaRef.current?.scrollTop ?? 0
+
     handleContentChange(newContent)
 
     const newPosition = clampedStart + emoji.length
@@ -798,8 +816,10 @@ export function PostComposer({
     setTimeout(() => {
       const textarea = textareaRef.current
       if (textarea) {
-        textarea.focus()
+        textarea.scrollTop = savedScrollTop
+        textarea.focus({ preventScroll: true })
         textarea.setSelectionRange(newPosition, newPosition)
+        textarea.scrollTop = savedScrollTop
       }
     }, 0)
   }

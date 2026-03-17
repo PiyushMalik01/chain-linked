@@ -736,6 +736,9 @@ export type Database = {
           scraped_at: string
           source: string
           topics: string[]
+          tags: string[] | null
+          primary_cluster: string | null
+          linkedin_post_id: string | null
         }
         Insert: {
           author_avatar_url?: string | null
@@ -758,6 +761,9 @@ export type Database = {
           scraped_at?: string
           source?: string
           topics?: string[]
+          tags?: string[] | null
+          primary_cluster?: string | null
+          linkedin_post_id?: string | null
         }
         Update: {
           author_avatar_url?: string | null
@@ -780,6 +786,9 @@ export type Database = {
           scraped_at?: string
           source?: string
           topics?: string[]
+          tags?: string[] | null
+          primary_cluster?: string | null
+          linkedin_post_id?: string | null
         }
         Relationships: []
       }
@@ -914,6 +923,7 @@ export type Database = {
           status: string
           updated_at: string | null
           user_id: string
+          last_seen_at: string | null
         }
         Insert: {
           author_headline?: string | null
@@ -922,6 +932,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           last_scraped_at?: string | null
+          last_seen_at?: string | null
           linkedin_url: string
           linkedin_username?: string | null
           posts_count?: number | null
@@ -936,6 +947,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           last_scraped_at?: string | null
+          last_seen_at?: string | null
           linkedin_url?: string
           linkedin_username?: string | null
           posts_count?: number | null
@@ -1130,6 +1142,9 @@ export type Database = {
           rejection_reason: string | null
           reposts_count: number | null
           scraped_at: string | null
+          tags: string[] | null
+          primary_cluster: string | null
+          linkedin_post_id: string | null
           user_id: string
         }
         Insert: {
@@ -1139,15 +1154,18 @@ export type Database = {
           id?: string
           influencer_id: string
           likes_count?: number | null
+          linkedin_post_id?: string | null
           linkedin_url?: string | null
           post_type?: string | null
           posted_at?: string | null
+          primary_cluster?: string | null
           quality_score?: number | null
           quality_status?: string | null
           raw_data?: Json | null
           rejection_reason?: string | null
           reposts_count?: number | null
           scraped_at?: string | null
+          tags?: string[] | null
           user_id: string
         }
         Update: {
@@ -1157,15 +1175,18 @@ export type Database = {
           id?: string
           influencer_id?: string
           likes_count?: number | null
+          linkedin_post_id?: string | null
           linkedin_url?: string | null
           post_type?: string | null
           posted_at?: string | null
+          primary_cluster?: string | null
           quality_score?: number | null
           quality_status?: string | null
           raw_data?: Json | null
           rejection_reason?: string | null
           reposts_count?: number | null
           scraped_at?: string | null
+          tags?: string[] | null
           user_id?: string
         }
         Relationships: [
@@ -2411,6 +2432,8 @@ export type Database = {
           onboarding_completed: boolean | null
           onboarding_current_step: number | null
           onboarding_type: string | null
+          extension_logged_in: boolean
+          extension_last_active_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -2426,6 +2449,8 @@ export type Database = {
           discover_topics?: string[] | null
           discover_topics_selected?: boolean | null
           email?: string | null
+          extension_logged_in?: boolean
+          extension_last_active_at?: string | null
           full_name?: string | null
           id: string
           linkedin_access_token?: string | null
@@ -2453,6 +2478,8 @@ export type Database = {
           discover_topics?: string[] | null
           discover_topics_selected?: boolean | null
           email?: string | null
+          extension_logged_in?: boolean
+          extension_last_active_at?: string | null
           full_name?: string | null
           id?: string
           linkedin_access_token?: string | null

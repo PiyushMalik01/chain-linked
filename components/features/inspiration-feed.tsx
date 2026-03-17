@@ -19,6 +19,7 @@ import {
   IconUsers,
 } from "@tabler/icons-react"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -87,6 +88,10 @@ export interface InspirationPost {
   metrics: InspirationPostMetrics
   /** ISO 8601 timestamp of when the post was published */
   postedAt: string
+  /** Tags associated with the post */
+  tags?: string[]
+  /** Primary cluster classification from clustering pipeline */
+  primaryCluster?: string | null
 }
 
 /**
@@ -117,6 +122,8 @@ export interface InspirationFeedProps {
   isLoading?: boolean
   /** Error message if any */
   error?: string | null
+  /** Filter posts by a specific followed influencer ID */
+  filterByInfluencerId?: string | null
   /** Additional CSS classes to apply to the container */
   className?: string
   /**
@@ -137,19 +144,26 @@ export interface InspirationFeedProps {
    * @param id - Record ID
    */
   onUnfollow?: (id: string) => Promise<void>
+  /** Metadata from AI-powered smart search, shown as contextual badges */
+  searchMeta?: {
+    searchTerms: string[]
+    clusters: string[]
+    tags: string[]
+    intent: string
+  } | null
 }
 
-/** Available category options for filtering - matches inferred categories from posts */
+/** Available category options for filtering - maps to cluster-based categories */
 export const INSPIRATION_CATEGORIES = [
   { id: "all", label: "All" },
+  { id: "ai", label: "AI" },
   { id: "marketing", label: "Marketing" },
-  { id: "technology", label: "Technology" },
-  { id: "leadership", label: "Leadership" },
   { id: "sales", label: "Sales" },
-  { id: "entrepreneurship", label: "Startup" },
-  { id: "product-management", label: "Product" },
+  { id: "leadership", label: "Leadership" },
+  { id: "startup", label: "Startup" },
+  { id: "product", label: "Product" },
   { id: "growth", label: "Growth" },
-  { id: "design", label: "Design" },
+  { id: "engineering", label: "Engineering" },
 ] as const
 
 /** Category type derived from the constants */
@@ -380,6 +394,7 @@ export function InspirationFeed({
   isFollowing,
   onFollow,
   onUnfollow,
+  searchMeta,
 }: InspirationFeedProps) {
   // Local state for internal filtering when props not provided
   const [localCategory, setLocalCategory] = React.useState<InspirationCategory>("all")
@@ -622,6 +637,26 @@ export function InspirationFeed({
               )}
             </div>
           </div>
+
+          {/* Smart Search Context */}
+          {searchMeta && searchQuery && searchQuery.length >= 3 && (
+            <div className="flex items-center gap-2 flex-wrap mt-2">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <IconSparkles className="size-3 text-primary" />
+                <span>AI search:</span>
+              </div>
+              {searchMeta.clusters.length > 0 && searchMeta.clusters.map((cluster: string) => (
+                <Badge key={cluster} variant="secondary" className="text-[10px] px-1.5 py-0">
+                  {cluster}
+                </Badge>
+              ))}
+              {searchMeta.tags.slice(0, 3).map((tag: string) => (
+                <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Category Tabs and Niche Filter */}

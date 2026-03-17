@@ -51,6 +51,20 @@ interface ChartDataPoint {
 }
 
 /**
+ * Today's data capture summary
+ */
+interface TodayCaptureInfo {
+  /** Number of API calls captured today */
+  apiCalls: number
+  /** Number of feed posts captured today */
+  feedPosts: number
+  /** Last sync timestamp (ISO string) */
+  lastSynced: string | null
+  /** Whether any data was captured today */
+  hasData: boolean
+}
+
+/**
  * Analytics hook return type
  */
 interface UseAnalyticsReturn {
@@ -62,6 +76,10 @@ interface UseAnalyticsReturn {
   rawData: Tables<'linkedin_analytics'>[]
   /** Analytics metadata (last updated, capture method) */
   metadata: AnalyticsMetadata | null
+  /** Label for the comparison period (e.g. "vs yesterday", "vs Mar 13") */
+  periodLabel: string
+  /** Today's capture info for the banner */
+  todayCapture: TodayCaptureInfo | null
   /** Loading state */
   isLoading: boolean
   /** Error message if any */
@@ -104,6 +122,8 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([])
   const [rawData, setRawData] = useState<Tables<'linkedin_analytics'>[]>([])
   const [metadata, setMetadata] = useState<AnalyticsMetadata | null>(null)
+  const [periodLabel, setPeriodLabel] = useState<string>('vs yesterday')
+  const [todayCapture, setTodayCapture] = useState<TodayCaptureInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true) // Start true while waiting for auth
   const [error, setError] = useState<string | null>(null)
   const supabaseRef = React.useRef(createClient())
@@ -136,13 +156,19 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       setIsLoading(true)
       setError(null)
 
+      // Today's date in YYYY-MM-DD for capture queries
+      const todayStr = new Date().toISOString().split('T')[0]
+      const todayStart = `${todayStr}T00:00:00.000Z`
+
       // Run ALL independent queries in parallel
-      const [cacheResult, analyticsResult, profileResult, myPostsResult] = await Promise.all([
+      const [historyResult, analyticsResult, profileResult, myPostsResult, capturedTodayResult, syncResult, summaryResult, profileViewsHistoryResult] = await Promise.all([
+        // Latest 2 analytics_history records for daily comparison
         supabase
-          .from('analytics_summary_cache')
-          .select('metric, pct_change')
+          .from('analytics_history')
+          .select('date, impressions, members_reached, engagements, followers, profile_views')
           .eq('user_id', targetUserId)
-          .eq('period', '30d'),
+          .order('date', { ascending: false })
+          .limit(2),
         supabase
           .from('linkedin_analytics')
           .select('*')
@@ -157,16 +183,168 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
           .from('my_posts')
           .select('impressions, reactions, comments, reposts, posted_at, created_at')
           .eq('user_id', targetUserId),
+        // Count all data synced today across all tables
+        Promise.all([
+          supabase.from('captured_apis').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId).gte('captured_at', todayStart),
+          supabase.from('linkedin_analytics').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId).gte('captured_at', todayStart),
+          supabase.from('post_analytics').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId).gte('captured_at', todayStart),
+          supabase.from('my_posts').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId).gte('created_at', todayStart),
+        ]).then(results => ({
+          count: results.reduce((sum, r) => sum + (r.count ?? 0), 0),
+        })),
+        // Latest sync timestamp - check both sync_metadata and actual data tables
+        Promise.all([
+          supabase
+            .from('sync_metadata')
+            .select('last_synced_at')
+            .eq('user_id', targetUserId)
+            .order('last_synced_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('linkedin_analytics')
+            .select('captured_at')
+            .eq('user_id', targetUserId)
+            .order('captured_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('post_analytics')
+            .select('captured_at')
+            .eq('user_id', targetUserId)
+            .order('captured_at', { ascending: false })
+            .limit(1),
+        ]).then(([syncMeta, analyticsCapture, postCapture]) => {
+          // Return the most recent timestamp across all sources
+          const timestamps = [
+            syncMeta.data?.[0]?.last_synced_at,
+            analyticsCapture.data?.[0]?.captured_at,
+            postCapture.data?.[0]?.captured_at,
+          ].filter(Boolean) as string[]
+          const mostRecent = timestamps.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
+          return { data: [{ last_synced_at: mostRecent || null }] }
+        }),
+        // Pre-computed summary metrics from Inngest pipeline (fetch both 7d and 30d)
+        supabase
+          .from('analytics_summary_cache')
+          .select('metric, current_total, current_avg, pct_change, period, timeseries')
+          .eq('user_id', targetUserId)
+          .in('period', ['7d', '30d']),
+        // Latest analytics_history row with non-null profile_views
+        supabase
+          .from('analytics_history')
+          .select('profile_views')
+          .eq('user_id', targetUserId)
+          .not('profile_views', 'is', null)
+          .gt('profile_views', 0)
+          .order('date', { ascending: false })
+          .limit(1),
       ])
 
-      /** Lookup map from metric name to its cached percentage change */
-      const changeMap = new Map<string, number>(
-        cacheResult.data?.map((c) => [c.metric, c.pct_change]) ?? []
-      )
+      // Build today's capture info
+      const capturedTodayCount = capturedTodayResult.count ?? 0
+      const lastSyncRow = syncResult.data?.[0]
+      const lastSyncedAt = lastSyncRow?.last_synced_at ?? null
+      // Consider data captured if we have API calls today OR if last sync was today
+      const hasTodaySync = lastSyncedAt ? new Date(lastSyncedAt).toISOString().startsWith(todayStr) : false
+      setTodayCapture({
+        apiCalls: capturedTodayCount,
+        feedPosts: 0,
+        lastSynced: lastSyncedAt,
+        hasData: capturedTodayCount > 0 || hasTodaySync,
+      })
+
+      // Build daily change map from analytics_history (latest vs previous)
+      const historyRows = historyResult.data ?? []
+      const changeMap = new Map<string, number>()
+
+      if (historyRows.length >= 2) {
+        const latest = historyRows[0]
+        const previous = historyRows[1]
+
+        // Compute percentage change for each metric
+        const computeChange = (curr: number, prev: number): number => {
+          if (prev === 0 && curr === 0) return 0
+          if (prev === 0) return curr > 0 ? 100 : 0
+          return Math.round(((curr - prev) / prev) * 10000) / 100
+        }
+
+        changeMap.set('impressions', computeChange(latest.impressions ?? 0, previous.impressions ?? 0))
+        changeMap.set('profile_views', computeChange(latest.profile_views ?? 0, previous.profile_views ?? 0))
+        changeMap.set('followers', computeChange(latest.followers ?? 0, previous.followers ?? 0))
+        changeMap.set('engagements', computeChange(latest.engagements ?? 0, previous.engagements ?? 0))
+
+        // Compute engagement rate change
+        const latestRate = (latest.impressions ?? 0) > 0 ? ((latest.engagements ?? 0) / (latest.impressions ?? 0)) * 100 : 0
+        const prevRate = (previous.impressions ?? 0) > 0 ? ((previous.engagements ?? 0) / (previous.impressions ?? 0)) * 100 : 0
+        changeMap.set('engagement_rate', computeChange(latestRate, prevRate))
+
+        // Format period label with the previous sync date
+        const prevDate = new Date(previous.date + 'T00:00:00')
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        setPeriodLabel(`vs last sync (${monthNames[prevDate.getMonth()]} ${prevDate.getDate()})`)
+      } else if (historyRows.length === 1) {
+        setPeriodLabel('first sync')
+      } else {
+        setPeriodLabel('no syncs yet')
+      }
 
       const analytics = analyticsResult.data
       const profile = profileResult.data
       const myPosts = myPostsResult.data
+
+      // Compute total impressions/engagements from individual posts as fallback
+      const postImpressions = (myPosts ?? []).reduce((sum, p) => sum + (p.impressions || 0), 0)
+      const postReactions = (myPosts ?? []).reduce((sum, p) => sum + (p.reactions || 0), 0)
+      const postComments = (myPosts ?? []).reduce((sum, p) => sum + (p.comments || 0), 0)
+      const postReposts = (myPosts ?? []).reduce((sum, p) => sum + (p.reposts || 0), 0)
+      const postEngagements = postReactions + postComments + postReposts
+
+      // Summary cache from Inngest pipeline - split by period
+      const summaryCache = summaryResult.data ?? []
+      const cache7d = summaryCache.filter(s => s.period === '7d')
+      const cache30d = summaryCache.filter(s => s.period === '30d')
+      const cachedImpressions7d = cache7d.find(s => s.metric === 'impressions')
+      const cachedImpressions30d = cache30d.find(s => s.metric === 'impressions')
+      const cachedEngagements7d = cache7d.find(s => s.metric === 'engagements')
+
+      // REAL impressions value = sum of all individual post impressions from my_posts
+      // This is what users care about: their total lifetime impressions across all posts
+      const bestImpressions = postImpressions > 0 ? postImpressions : 0
+
+      // REAL engagements value = sum from individual posts
+      const bestEngagements = postEngagements > 0 ? postEngagements : 0
+
+      // REAL engagement rate computed from actual post data
+      const bestEngagementRate = bestImpressions > 0
+        ? (bestEngagements / bestImpressions) * 100
+        : 0
+
+      // Change percentages: compute from timeseries (latest vs previous datapoint)
+      // This gives a "since last sync" comparison rather than aggregate period comparison
+      const computeTimeseriesChange = (cached: { timeseries?: unknown } | undefined): number => {
+        const ts = cached?.timeseries as Array<{ date: string; value: number }> | undefined
+        if (!ts || ts.length < 2) return 0
+        const latest = ts[ts.length - 1].value
+        const previous = ts[ts.length - 2].value
+        if (previous === 0 && latest === 0) return 0
+        if (previous === 0) return latest > 0 ? 100 : 0
+        return Math.round(((latest - previous) / previous) * 10000) / 100
+      }
+
+      const bestImpressionsChange = computeTimeseriesChange(cachedImpressions30d) || computeTimeseriesChange(cachedImpressions7d) || changeMap.get('impressions') || 0
+      const cachedEngagements30d = cache30d.find(s => s.metric === 'engagements')
+      const bestEngagementsChange = computeTimeseriesChange(cachedEngagements30d) || computeTimeseriesChange(cachedEngagements7d) || changeMap.get('engagements') || 0
+
+      // Latest non-null profile views from analytics_history
+      const latestProfileViews = profileViewsHistoryResult.data?.[0]?.profile_views ?? 0
+
+      // Build period label from last two timeseries datapoints
+      const impressionTs = (cachedImpressions30d?.timeseries ?? cachedImpressions7d?.timeseries) as Array<{ date: string; value: number }> | undefined
+      if (impressionTs && impressionTs.length >= 2) {
+        const prevPoint = impressionTs[impressionTs.length - 2]
+        const prevDate = new Date(prevPoint.date + 'T00:00:00')
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        setPeriodLabel(`vs last sync (${monthNames[prevDate.getMonth()]} ${prevDate.getDate()})`)
+      }
 
       if (profileResult.error && profileResult.error.code !== 'PGRST116') {
         console.warn('Profile fetch warning:', profileResult.error)
@@ -183,22 +361,16 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       }
 
       if (!analytics || analytics.length === 0) {
-        // No linkedin_analytics data — try deriving metrics from my_posts + profile
-        if (myPosts && myPosts.length > 0) {
-          const totalImpressions = myPosts.reduce((sum, p) => sum + (p.impressions || 0), 0)
-          const totalReactions = myPosts.reduce((sum, p) => sum + (p.reactions || 0), 0)
-          const totalComments = myPosts.reduce((sum, p) => sum + (p.comments || 0), 0)
-          const totalReposts = myPosts.reduce((sum, p) => sum + (p.reposts || 0), 0)
-          const totalEngagements = totalReactions + totalComments + totalReposts
-          const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0
+        // No linkedin_analytics data — use best available sources
+        if (bestImpressions > 0 || (myPosts && myPosts.length > 0)) {
           const totalFollowers = profile?.followers_count || 0
           const totalConnections = profile?.connections_count || 0
 
           setMetrics({
-            impressions: { value: totalImpressions, change: changeMap.get('impressions') ?? 0 },
-            engagementRate: { value: engagementRate, change: changeMap.get('engagement_rate') ?? 0 },
+            impressions: { value: bestImpressions, change: bestImpressionsChange },
+            engagementRate: { value: bestEngagementRate, change: bestEngagementsChange },
             followers: { value: totalFollowers, change: changeMap.get('followers') ?? 0 },
-            profileViews: { value: 0, change: changeMap.get('profile_views') ?? 0 },
+            profileViews: { value: latestProfileViews, change: changeMap.get('profile_views') ?? 0 },
             searchAppearances: { value: 0, change: 0 },
             connections: { value: totalConnections, change: 0 },
             membersReached: { value: 0, change: 0 },
@@ -206,7 +378,7 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
 
           // Build simple chart data from posts
           const postChartMap = new Map<string, ChartDataPoint>()
-          myPosts.forEach((post) => {
+          ;(myPosts ?? []).forEach((post) => {
             const date = (post.posted_at || post.created_at || '').split('T')[0]
             if (!date) return
             const existing = postChartMap.get(date) || { date, impressions: 0, engagements: 0, profileViews: 0 }
@@ -237,25 +409,20 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
 
       // Extract data from raw_data if available
       const rawDataObj = latestAnalytics.raw_data as {
-        impressionGrowth?: number
         captureMethod?: string
         last_updated?: string
         extractedAt?: string
       } | null
-      const impressionGrowth = rawDataObj?.impressionGrowth ?? 0
 
-      // Start with analytics record values for impressions/engagements
-      let impressions = latestAnalytics.impressions || 0
-      let engagements = latestAnalytics.engagements || 0
+      // Use REAL values from my_posts (sum of individual post impressions/engagements)
+      // Fall back to analytics record only if my_posts has nothing
+      const impressions = bestImpressions > 0
+        ? bestImpressions
+        : latestAnalytics.impressions || 0
 
-      // If analytics records lack impressions data, derive from my_posts (already fetched)
-      if (impressions === 0 && myPosts && myPosts.length > 0) {
-        impressions = myPosts.reduce((sum, p) => sum + (p.impressions || 0), 0)
-        const totalReactions = myPosts.reduce((sum, p) => sum + (p.reactions || 0), 0)
-        const totalComments = myPosts.reduce((sum, p) => sum + (p.comments || 0), 0)
-        const totalReposts = myPosts.reduce((sum, p) => sum + (p.reposts || 0), 0)
-        engagements = totalReactions + totalComments + totalReposts
-      }
+      const engagements = bestEngagements > 0
+        ? bestEngagements
+        : latestAnalytics.engagements || 0
 
       const engagementRate = impressions > 0 ? (engagements / impressions) * 100 : 0
 
@@ -263,21 +430,26 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       const totalFollowers = profile?.followers_count || latestAnalytics.new_followers || 0
       const totalConnections = profile?.connections_count || 0
 
+      // Profile views: prefer latest non-null history row, then analytics record
+      const profileViewsValue = latestProfileViews > 0
+        ? latestProfileViews
+        : latestAnalytics.profile_views || 0
+
       const aggregatedMetrics: AnalyticsMetrics = {
         impressions: {
           value: impressions,
-          change: changeMap.get('impressions') ?? impressionGrowth,
+          change: bestImpressionsChange,
         },
         engagementRate: {
           value: engagementRate,
-          change: changeMap.get('engagement_rate') ?? 0,
+          change: bestEngagementsChange,
         },
         followers: {
           value: totalFollowers,
           change: changeMap.get('followers') ?? 0,
         },
         profileViews: {
-          value: latestAnalytics.profile_views || 0,
+          value: profileViewsValue,
           change: changeMap.get('profile_views') ?? 0,
         },
         searchAppearances: {
@@ -366,6 +538,8 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
     chartData,
     rawData,
     metadata,
+    periodLabel,
+    todayCapture,
     isLoading: combinedLoading,
     error,
     refetch: fetchAnalytics,

@@ -230,6 +230,10 @@ const CATEGORY_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
   "growth": "secondary",
   "design": "outline",
   "general": "outline",
+  "ai": "secondary",
+  "engineering": "secondary",
+  "startup": "outline",
+  "product": "default",
 }
 
 /**
@@ -245,6 +249,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   "growth": "Growth",
   "design": "Design",
   "general": "General",
+  "ai": "AI",
+  "engineering": "Engineering",
+  "startup": "Startup",
+  "product": "Product",
 }
 
 /**
@@ -390,6 +398,8 @@ function ViralPostsTab() {
   const router = useRouter()
   const { loadForRemix } = useDraft()
 
+  const [selectedInfluencerId, setSelectedInfluencerId] = React.useState<string | null>(null)
+
   const {
     posts,
     savedPostIds,
@@ -403,7 +413,8 @@ function ViralPostsTab() {
     savePost,
     unsavePost,
     isPostSaved,
-  } = useInspiration()
+    searchMeta,
+  } = useInspiration(undefined, selectedInfluencerId || undefined)
 
   const {
     influencers,
@@ -411,12 +422,21 @@ function ViralPostsTab() {
     followInfluencer,
     unfollowInfluencer,
     isFollowing,
+    markAsSeen,
+    fetchLatestPosts,
   } = useFollowedInfluencers()
 
   const [selectedPost, setSelectedPost] = React.useState<InspirationPost | null>(null)
   const [isDetailOpen, setIsDetailOpen] = React.useState(false)
   const [isRemixOpen, setIsRemixOpen] = React.useState(false)
   const [postToRemix, setPostToRemix] = React.useState<InspirationPost | null>(null)
+
+  // Auto-enable followingOnly when an influencer is selected
+  React.useEffect(() => {
+    if (selectedInfluencerId) {
+      setFilters({ followingOnly: true })
+    }
+  }, [selectedInfluencerId, setFilters])
 
   const { status: apiKeyStatus } = useApiKeys()
   const hasApiKey = apiKeyStatus?.hasKey ?? false
@@ -479,7 +499,39 @@ function ViralPostsTab() {
         isLoading={isInfluencersLoading}
         onFollow={followInfluencer}
         onUnfollow={unfollowInfluencer}
+        onSelectInfluencer={setSelectedInfluencerId}
+        selectedInfluencerId={selectedInfluencerId}
+        onMarkAsSeen={markAsSeen}
+        onFetchLatest={fetchLatestPosts}
       />
+
+      {/* Influencer filter bar */}
+      {selectedInfluencerId && (
+        <div className="flex items-center justify-between px-1">
+          <p className="text-sm text-muted-foreground">
+            Showing posts from {influencers.find(i => i.id === selectedInfluencerId)?.author_name || 'selected influencer'}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-7"
+              onClick={() => fetchLatestPosts(selectedInfluencerId)}
+            >
+              <IconRefresh className="size-3" />
+              Fetch latest
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setSelectedInfluencerId(null)}
+            >
+              Clear filter
+            </Button>
+          </div>
+        </div>
+      )}
 
       <ErrorBoundary>
         <InspirationFeed
@@ -498,6 +550,7 @@ function ViralPostsTab() {
           isFollowing={isFollowing}
           onFollow={followInfluencer}
           onUnfollow={unfollowInfluencer}
+          searchMeta={searchMeta}
         />
       </ErrorBoundary>
 
@@ -1033,7 +1086,7 @@ function SwipeEmptyState({
 }) {
   return (
     <motion.div
-      className="flex h-[400px] w-full max-w-md flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25 bg-gradient-to-br from-muted/30 via-muted/20 to-primary/5 p-8 text-center"
+      className="flex h-[520px] w-full max-w-lg flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25 bg-gradient-to-br from-muted/30 via-muted/20 to-primary/5 p-8 text-center"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -1460,7 +1513,7 @@ function SwipeTab() {
       {currentCard ? (
         <div
           ref={containerRef}
-          className="relative h-[400px] w-full max-w-md select-none"
+          className="relative h-[520px] w-full max-w-lg select-none"
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}

@@ -191,3 +191,60 @@ export async function DELETE(request: Request) {
 
   return NextResponse.json({ success: true })
 }
+
+/**
+ * PATCH /api/influencers
+ * @description Triggers an on-demand scrape for a specific influencer.
+ * Verifies the influencer belongs to the authenticated user before triggering.
+ * @param request - Body: { influencer_id }
+ * @returns Success response with confirmation message
+ */
+export async function PATCH(request: Request) {
+  const supabase = await createClient()
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  const { influencer_id } = body as { influencer_id?: string }
+
+  if (!influencer_id || typeof influencer_id !== 'string') {
+    return NextResponse.json({ error: 'influencer_id is required' }, { status: 400 })
+  }
+
+  // Verify ownership
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: influencer, error: fetchError } = await (supabase as any)
+    .from('followed_influencers')
+    .select('id, linkedin_url, linkedin_username')
+    .eq('id', influencer_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (fetchError || !influencer) {
+    return NextResponse.json({ error: 'Influencer not found' }, { status: 404 })
+  }
+
+  // Trigger scrape via Inngest
+  await inngest.send({
+    name: 'influencer/follow',
+    data: {
+      userId: user.id,
+      linkedinUrl: influencer.linkedin_url,
+      linkedinUsername: influencer.linkedin_username,
+    },
+  }).catch((err) => {
+    console.error('Failed to trigger influencer scrape:', err)
+  })
+
+  return NextResponse.json({ success: true, message: 'Scrape triggered' })
+}

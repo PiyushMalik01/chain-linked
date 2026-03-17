@@ -53,6 +53,7 @@ import {
   IconFileText,
   IconTemplate,
   IconCarouselHorizontal,
+  IconCloudDownload,
 } from "@tabler/icons-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -119,6 +120,7 @@ function QuickStatCard({
   isLoading = false,
   accent = "primary",
   tooltip,
+  periodLabel = "vs last period",
 }: {
   title: string
   value: number
@@ -129,6 +131,7 @@ function QuickStatCard({
   isLoading?: boolean
   accent?: "primary" | "blue" | "emerald" | "amber"
   tooltip?: string
+  periodLabel?: string
 }) {
   const isPositive = change >= 0
   const TrendIcon = isPositive ? IconTrendingUp : IconTrendingDown
@@ -213,7 +216,7 @@ function QuickStatCard({
               {isPositive ? "+" : ""}
               {change.toFixed(1)}%
             </span>
-            <span className="text-xs text-muted-foreground">vs last period</span>
+            <span className="text-xs text-muted-foreground">{periodLabel}</span>
           </div>
         </CardContent>
       </Card>
@@ -473,7 +476,7 @@ function DashboardContent() {
   const supabase = createClient()
   const { posts: scheduledPosts, isLoading: scheduleLoading } =
     useScheduledPosts(30)
-  const { metrics, isLoading: analyticsLoading } = useAnalytics(user?.id)
+  const { metrics, isLoading: analyticsLoading, periodLabel, todayCapture } = useAnalytics(user?.id)
   const { posts: recentPosts, isLoading: postsLoading } = useMyRecentPosts(user?.id, 9)
 
   /** Derive display name and avatar for the recent posts section */
@@ -620,6 +623,60 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* Today's Data Capture Banner */}
+      {!analyticsLoading && todayCapture && (
+        <div className="mx-4 lg:mx-6">
+          <div className={cn(
+            "flex items-center gap-3 rounded-lg border p-3",
+            todayCapture.hasData
+              ? "border-emerald-500/50 bg-emerald-500/10"
+              : "border-muted-foreground/20 bg-muted/30"
+          )}>
+            <IconCloudDownload className={cn(
+              "size-5 shrink-0",
+              todayCapture.hasData
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-muted-foreground"
+            )} />
+            <div className="flex-1 min-w-0">
+              <p className={cn(
+                "text-sm font-medium",
+                todayCapture.hasData
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-muted-foreground"
+              )}>
+                {todayCapture.hasData
+                  ? `Synced today: ${todayCapture.apiCalls} data point${todayCapture.apiCalls !== 1 ? 's' : ''}`
+                  : 'No data synced today'}
+              </p>
+              <p className={cn(
+                "text-xs",
+                todayCapture.hasData
+                  ? "text-emerald-600/80 dark:text-emerald-400/80"
+                  : "text-muted-foreground/70"
+              )}>
+                {todayCapture.lastSynced
+                  ? `Last sync: ${formatDistanceToNow(new Date(todayCapture.lastSynced), { addSuffix: true })}`
+                  : 'Open LinkedIn with the extension to start syncing'}
+              </p>
+            </div>
+            {/* Extension login status badge */}
+            <div className={cn(
+              "shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+              profile?.extension_logged_in
+                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                : "bg-muted text-muted-foreground"
+            )}>
+              <span className={cn(
+                "size-1.5 rounded-full",
+                profile?.extension_logged_in ? "bg-emerald-500" : "bg-muted-foreground/50"
+              )} />
+              {profile?.extension_logged_in ? "Extension active" : "Extension offline"}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Getting Started Checklist */}
       {!checklistDismissed && (
         <GettingStartedChecklist
@@ -751,6 +808,7 @@ function DashboardContent() {
               accent="primary"
               isLoading={analyticsLoading}
               tooltip="Total times your posts appeared in someone's feed"
+              periodLabel={periodLabel}
             />
           </motion.div>
           <motion.div variants={staggerItemVariants}>
@@ -762,6 +820,7 @@ function DashboardContent() {
               accent="blue"
               isLoading={analyticsLoading}
               tooltip="Your current LinkedIn follower count"
+              periodLabel={periodLabel}
             />
           </motion.div>
           <motion.div variants={staggerItemVariants}>
@@ -775,6 +834,7 @@ function DashboardContent() {
               accent="emerald"
               isLoading={analyticsLoading}
               tooltip="Percentage of viewers who liked, commented, or shared your posts"
+              periodLabel={periodLabel}
             />
           </motion.div>
           <motion.div variants={staggerItemVariants}>
@@ -786,6 +846,7 @@ function DashboardContent() {
               accent="amber"
               isLoading={analyticsLoading}
               tooltip="Number of people who visited your LinkedIn profile"
+              periodLabel={periodLabel}
             />
           </motion.div>
         </motion.div>
