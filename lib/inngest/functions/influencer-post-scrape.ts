@@ -107,19 +107,16 @@ export const influencerPostScrape = inngest.createFunction(
       const isEventTriggered = event?.name === 'influencer/follow'
       const eventData = isEventTriggered ? event?.data as { userId?: string; linkedinUrl?: string; linkedinUsername?: string } : undefined
 
-      console.log(`[InfluencerScrape] Trigger: ${isEventTriggered ? 'event' : 'cron'}, eventName=${event?.name || 'none'}, linkedinUrl=${eventData?.linkedinUrl || 'all'}`)
+      console.log(`[InfluencerScrape] Trigger: ${isEventTriggered ? 'event' : 'cron'}, eventName=${event?.name || 'none'}, userId=${eventData?.userId?.substring(0, 8) || 'all'}`)
 
       let query = supabase
         .from('followed_influencers')
         .select('id, user_id, linkedin_url, linkedin_username')
         .eq('status', 'active')
 
-      // Filter to specific influencer if event-triggered with a URL
-      if (eventData?.linkedinUrl) {
-        query = query.eq('linkedin_url', eventData.linkedinUrl)
-        console.log(`[InfluencerScrape] Event-triggered: scraping only ${eventData.linkedinUrl}`)
-      } else if (eventData?.userId) {
-        // If no URL but has userId, scrape all influencers for that user
+      // When event-triggered, scrape ALL influencers for the triggering user
+      // (not just the specific one — user expects all their followed influencers to be refreshed)
+      if (eventData?.userId) {
         query = query.eq('user_id', eventData.userId)
         console.log(`[InfluencerScrape] Event-triggered: scraping all influencers for user ${eventData.userId.substring(0, 8)}...`)
       }
