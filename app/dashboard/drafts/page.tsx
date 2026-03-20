@@ -107,6 +107,20 @@ const SOURCE_STYLES: Record<DraftSource, {
     dot: "bg-teal-500",
     filterActive: "bg-teal-500 text-white",
   },
+  series: {
+    label: "Series",
+    badge: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+    gradient: "from-orange-500/8 via-transparent to-transparent",
+    dot: "bg-orange-500",
+    filterActive: "bg-orange-500 text-white",
+  },
+  scheduled: {
+    label: "Scheduled",
+    badge: "bg-green-500/15 text-green-700 dark:text-green-400",
+    gradient: "from-green-500/8 via-transparent to-transparent",
+    dot: "bg-green-500",
+    filterActive: "bg-green-500 text-white",
+  },
 }
 
 /** Sort options */
@@ -121,6 +135,8 @@ const SORT_OPTIONS: { value: DraftSortBy; label: string }[] = [
 const FILTER_OPTIONS: { value: DraftSource | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "compose", label: "Compose" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "series", label: "Series" },
   { value: "swipe", label: "Swipe" },
   { value: "discover", label: "Discover" },
   { value: "inspiration", label: "Inspiration" },
@@ -903,6 +919,33 @@ function DraftsContent() {
           }
         } catch {
           // Fall through to compose if slide data is invalid
+        }
+      }
+
+      // Scheduled drafts: navigate to compose in edit mode
+      if (d.source === "scheduled") {
+        sessionStorage.setItem('editScheduledPost', JSON.stringify({
+          id: d.id,
+          content: d.content,
+          scheduledFor: d.additionalContext,
+        }))
+        toast.success("Scheduled post loaded for editing")
+        router.push(`/dashboard/compose?edit=${d.id}`)
+        return
+      }
+
+      // Series drafts: restore series data and navigate to series tab
+      if (d.source === "series" && d.additionalContext) {
+        try {
+          const seriesData = JSON.parse(d.additionalContext)
+          if (seriesData?.type === "series" && Array.isArray(seriesData.posts)) {
+            localStorage.setItem("chainlinked-series-draft", d.additionalContext)
+            toast.success("Series loaded into editor")
+            router.push("/dashboard/compose?tab=series")
+            return
+          }
+        } catch {
+          // Fall through to single post compose
         }
       }
 

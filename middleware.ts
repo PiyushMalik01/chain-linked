@@ -133,6 +133,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
+    // Allow redirect to extension callback (extension Google sign-in flow)
+    if (redirectParam === '/auth/extension-callback') {
+      const url = request.nextUrl.clone()
+      url.pathname = redirectParam
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+
     // Default redirect to dashboard
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'

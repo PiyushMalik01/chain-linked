@@ -6,11 +6,12 @@
  * @module app/dashboard/schedule/page
  */
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
+import { format } from "date-fns"
 import {
   IconPencil,
   IconCalendarEvent,
@@ -18,6 +19,8 @@ import {
   IconSend,
   IconCalendarStats,
   IconBulb,
+  IconEdit,
+  IconX,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -41,13 +44,19 @@ function ScheduleContent() {
   const { posts: scheduledPosts, rawPosts, isLoading, deletePost, updatePost } = useScheduledPosts(60)
 
   // Transform scheduled posts for the list view - use real data only
-  const listPosts: ScheduledPost[] = rawPosts.map((post) => ({
-    id: post.id,
-    content: post.content,
-    scheduledFor: post.scheduled_for,
-    status: mapListStatus(post.status),
-    mediaUrls: post.media_urls as string[] | undefined,
-  }))
+  // Filter out already-posted and cancelled posts so only actionable items appear
+  const listPosts: ScheduledPost[] = useMemo(() => rawPosts
+    .filter((post) => {
+      const s = post.status.toLowerCase()
+      return s !== 'posted' && s !== 'completed' && s !== 'cancelled'
+    })
+    .map((post) => ({
+      id: post.id,
+      content: post.content,
+      scheduledFor: post.scheduled_for,
+      status: mapListStatus(post.status),
+      mediaUrls: post.media_urls as string[] | undefined,
+    })), [rawPosts])
 
   // Compute stats
   const stats = useMemo(() => {
@@ -56,6 +65,9 @@ function ScheduleContent() {
     const failed = rawPosts.filter(p => p.status === 'failed').length
     return { pending, posted, failed, total: rawPosts.length }
   }, [rawPosts])
+
+  // State for date posts dialog
+  const [selectedDate, setSelectedDate] = useState<{ date: Date; posts: typeof listPosts } | null>(null)
 
   // Navigate to compose page for scheduling new posts
   const handleScheduleNew = useCallback(() => {
@@ -74,6 +86,32 @@ function ScheduleContent() {
       router.push("/dashboard/compose?edit=" + postId)
     }
   }, [rawPosts, router])
+
+  /** Handle calendar date click — show posts for that date */
+  const handleDateClick = useCallback((date: Date) => {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date)
+    dayEnd.setHours(23, 59, 59, 999)
+
+    const postsOnDate = listPosts.filter(p => {
+      const postDate = new Date(p.scheduledFor)
+      return postDate >= dayStart && postDate <= dayEnd
+    })
+
+    if (postsOnDate.length === 0) {
+      router.push(`/dashboard/compose?scheduleDate=${date.toISOString()}`)
+    } else if (postsOnDate.length === 1) {
+      handleEdit(postsOnDate[0].id)
+    } else {
+      setSelectedDate({ date, posts: postsOnDate })
+    }
+  }, [listPosts, router, handleEdit])
+
+  /** Handle calendar post indicator click — edit that post directly */
+  const handlePostClick = useCallback((post: { id: string }) => {
+    handleEdit(post.id)
+  }, [handleEdit])
 
   // Handle delete
   const handleDelete = useCallback(async (postId: string) => {
@@ -175,7 +213,78 @@ function ScheduleContent() {
       <ScheduleCalendar
         posts={scheduledPosts}
         isLoading={isLoading}
+        onDateClick={handleDateClick}
+        onPostClick={handlePostClick}
       />
+
+      {/* Date Posts Picker Dialog */}
+      <AnimatePresence>
+        {selectedDate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setSelectedDate(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-background rounded-xl border shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <div>
+                  <h3 className="text-sm font-semibold">Scheduled Posts</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {format(selectedDate.date, 'EEEE, MMMM d, yyyy')}
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => setSelectedDate(null)}>
+                  <IconX className="size-4" />
+                </Button>
+              </div>
+              <div className="divide-y max-h-[400px] overflow-y-auto">
+                {selectedDate.posts.map((post) => (
+                  <button
+                    key={post.id}
+                    onClick={() => {
+                      setSelectedDate(null)
+                      handleEdit(post.id)
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm line-clamp-2">{post.content}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {format(new Date(post.scheduledFor), 'h:mm a')}
+                        </p>
+                      </div>
+                      <IconEdit className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="px-4 py-3 border-t">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full gap-1.5"
+                  onClick={() => {
+                    setSelectedDate(null)
+                    router.push(`/dashboard/compose?scheduleDate=${selectedDate.date.toISOString()}`)
+                  }}
+                >
+                  <IconPencil className="size-3.5" />
+                  Schedule New Post for This Date
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Scheduled Posts List (full width below calendar) */}
       <ScheduledPosts
@@ -259,6 +368,8 @@ function QuickTipCard() {
 
 /**
  * Map database status to list component status
+ * @param status - Raw status string from the database
+ * @returns Normalized status for the ScheduledPost component
  */
 function mapListStatus(status: string): ScheduledPost["status"] {
   switch (status.toLowerCase()) {
@@ -268,6 +379,8 @@ function mapListStatus(status: string): ScheduledPost["status"] {
     case "failed":
     case "error":
       return "failed"
+    case "pending":
+    case "scheduled":
     default:
       return "pending"
   }

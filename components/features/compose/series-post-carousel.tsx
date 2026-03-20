@@ -211,18 +211,18 @@ export function SeriesPostCarousel({
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') setIsEditing(false)
                 }}
-                className="w-full resize-none bg-transparent text-sm leading-relaxed outline-none min-h-[200px]"
+                className="w-full resize-none bg-transparent text-sm leading-relaxed outline-none min-h-[300px] max-h-[600px] overflow-y-auto"
                 autoFocus
               />
             ) : (
               <div
-                className="group relative cursor-text min-h-[200px]"
+                className="group relative cursor-text min-h-[300px]"
                 onDoubleClick={() => setIsEditing(true)}
                 role="button"
                 tabIndex={0}
                 aria-label="Double-click to edit"
               >
-                <div className="whitespace-pre-wrap break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto">
+                <div className="whitespace-pre-wrap break-words text-sm leading-relaxed max-h-[600px] overflow-y-auto">
                   {currentPost.post}
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center rounded-md bg-muted/30 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none">

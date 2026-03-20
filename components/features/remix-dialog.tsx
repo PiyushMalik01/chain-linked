@@ -342,6 +342,7 @@ export function RemixDialog({
                 placeholder="e.g., 'Add a personal story' or 'Focus on actionable takeaways'"
                 value={customInstructions}
                 onChange={(e) => setCustomInstructions(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
                 className="min-h-[60px] resize-none"
                 disabled={isRemixing}
               />

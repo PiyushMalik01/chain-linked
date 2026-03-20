@@ -322,7 +322,11 @@ export type MessageType =
   | 'BACKGROUND_SYNC_UPDATE_CONFIG'
   | 'BACKGROUND_SYNC_RESET_CIRCUIT_BREAKER'
   | 'BACKGROUND_SYNC_HISTORY'
-  | 'BACKGROUND_SYNC_DIAGNOSTIC';
+  | 'BACKGROUND_SYNC_DIAGNOSTIC'
+  // Platform ↔ Extension communication
+  | 'CHAINLINKED_PING'
+  | 'EXTENSION_AUTH_SESSION'
+  | 'SUPABASE_AUTH_GOOGLE';
 
 // Storage Keys
 export type StorageKey =

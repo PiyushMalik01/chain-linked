@@ -37,32 +37,36 @@ export function EditorTopActions({
   onPostToLinkedIn,
 }: EditorTopActionsProps) {
   return (
-    <div className="absolute right-3 top-3 z-10 flex gap-2 rounded-lg border bg-background/80 px-2 py-1.5 shadow-sm backdrop-blur-sm">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onReset}
-        className="h-8 text-muted-foreground hover:text-destructive"
-      >
-        <IconTrash className="mr-1.5 h-4 w-4" />
-        Reset
-      </Button>
-      <Button variant="outline" size="sm" className="h-8" onClick={onSaveTemplate}>
-        <IconDeviceFloppy className="mr-1.5 h-4 w-4" />
-        Save
-      </Button>
-      <Button size="sm" className="h-8" onClick={onExport}>
-        <IconDownload className="mr-1.5 h-4 w-4" />
-        Export
-      </Button>
-      <Button
-        size="sm"
-        className="h-8 bg-[#0A66C2] text-white hover:bg-[#004182]"
-        onClick={onPostToLinkedIn}
-      >
-        <IconBrandLinkedin className="mr-1.5 h-4 w-4" />
-        Create Post
-      </Button>
+    <div className="shrink-0 border-b border-l bg-background px-3 py-3 space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          size="sm"
+          className="h-9 w-full bg-[#0A66C2] text-white hover:bg-[#004182] gap-1.5"
+          onClick={onPostToLinkedIn}
+        >
+          <IconBrandLinkedin className="h-4 w-4" />
+          Create Post
+        </Button>
+        <Button variant="outline" size="sm" className="h-9 w-full gap-1.5" onClick={onExport}>
+          <IconDownload className="h-4 w-4" />
+          Export
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" size="sm" className="h-9 w-full gap-1.5" onClick={onSaveTemplate}>
+          <IconDeviceFloppy className="h-4 w-4" />
+          Save
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onReset}
+          className="h-9 w-full text-muted-foreground hover:text-destructive gap-1.5"
+        >
+          <IconTrash className="h-4 w-4" />
+          Reset
+        </Button>
+      </div>
     </div>
   );
 }

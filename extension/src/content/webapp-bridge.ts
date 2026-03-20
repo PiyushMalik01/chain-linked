@@ -22,6 +22,18 @@ window.addEventListener('chainlinked-extension-ping', () => {
   window.dispatchEvent(new CustomEvent('chainlinked-extension-pong'))
 })
 
+// Listen for status request from the web app and relay through ISOLATED world
+window.addEventListener('message', (event: MessageEvent) => {
+  if (event.source !== window) return
+  if (event.data?.type !== '__CL_STATUS_REQUEST__') return
+
+  // Forward to ISOLATED world relay which has chrome.runtime access
+  window.postMessage({
+    type: '__CL_STATUS_RELAY__',
+    payload: { requestId: event.data.requestId },
+  }, window.location.origin)
+})
+
 /** Allowed origins for postMessage communication */
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',

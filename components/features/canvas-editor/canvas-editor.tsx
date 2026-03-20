@@ -630,17 +630,17 @@ export function CanvasEditor({
           totalSlides={slides.length}
         />
 
-        {/* Top actions (top-right) */}
+      </div>
+
+      {/* Right sidebar: Actions toolbar + Property panel */}
+      <div className="flex h-full flex-col">
         <EditorTopActions
           onReset={handleReset}
           onSaveTemplate={() => setShowSaveTemplateDialog(true)}
           onExport={() => setShowExportDialog(true)}
           onPostToLinkedIn={handlePostToCompose}
         />
-      </div>
-
-      {/* Right sidebar: Property panel */}
-      <PropertyPanel
+        <PropertyPanel
         selectedElement={selectedElement}
         currentSlide={currentSlide}
         templateColors={templateColors}
@@ -651,6 +651,7 @@ export function CanvasEditor({
         onDeleteElement={deleteElement}
         onSwitchLeftTab={setActiveLeftTab}
       />
+      </div>
 
       {/* Template selector modal (first load + full preview) */}
       <TemplateSelectorModal

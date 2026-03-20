@@ -45,11 +45,17 @@ export function useConversationPersistence(
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const conversationIdRef = useRef<string | null>(null)
+  const pendingMessagesRef = useRef<PersistedMessage[] | null>(null)
+  const userRef = useRef(user)
 
-  // Keep ref in sync
+  // Keep refs in sync
   useEffect(() => {
     conversationIdRef.current = conversationId
   }, [conversationId])
+
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
 
   // Load active conversation on mount
   useEffect(() => {
@@ -68,7 +74,7 @@ export function useConversationPersistence(
           .eq('is_active', true)
           .order('updated_at', { ascending: false })
           .limit(1)
-          .single()
+          .maybeSingle()
 
         if (data) {
           setConversationId(data.id)
@@ -87,72 +93,93 @@ export function useConversationPersistence(
   }, [user, mode, supabase])
 
   /**
+   * Immediately persist messages to Supabase (no debounce)
+   */
+  const flushSave = useCallback(
+    async (messages: PersistedMessage[]) => {
+      const currentUser = userRef.current
+      if (!currentUser || messages.length === 0) return
+
+      try {
+        const currentId = conversationIdRef.current
+
+        // Auto-generate title from first user message
+        const firstUserMsg = messages.find((m) => m.role === 'user')
+        const title = firstUserMsg?.parts
+          ?.filter((p) => p.type === 'text' && p.text)
+          .map((p) => p.text)
+          .join('')
+          .slice(0, 50) || 'Untitled'
+
+        if (currentId) {
+          await supabase
+            .from('compose_conversations')
+            .update({
+              messages: JSON.parse(JSON.stringify(messages)),
+              title,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', currentId)
+        } else {
+          const { data } = await supabase
+            .from('compose_conversations')
+            .insert({
+              user_id: currentUser.id,
+              mode,
+              title,
+              messages: JSON.parse(JSON.stringify(messages)),
+              is_active: true,
+            })
+            .select('id')
+            .single()
+
+          if (data) {
+            setConversationId(data.id)
+            conversationIdRef.current = data.id
+          }
+        }
+        pendingMessagesRef.current = null
+      } catch (err) {
+        console.error('Failed to save conversation:', err)
+      }
+    },
+    [mode, supabase]
+  )
+
+  /**
    * Save messages to database with 2-second debounce
    */
   const saveMessages = useCallback(
     (messages: PersistedMessage[]) => {
-      if (!user) return
+      if (!userRef.current) return
+
+      // Don't persist if there's no user message (just the default greeting)
+      const hasUserMessage = messages.some((m) => m.role === 'user')
+      if (!hasUserMessage) return
+
+      pendingMessagesRef.current = messages
 
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
 
-      saveTimeoutRef.current = setTimeout(async () => {
-        try {
-          const currentId = conversationIdRef.current
-
-          // Auto-generate title from first user message
-          const firstUserMsg = messages.find((m) => m.role === 'user')
-          const title = firstUserMsg?.parts
-            ?.filter((p) => p.type === 'text' && p.text)
-            .map((p) => p.text)
-            .join('')
-            .slice(0, 50) || 'Untitled'
-
-          if (currentId) {
-            // Update existing conversation
-            await supabase
-              .from('compose_conversations')
-              .update({
-                messages: JSON.parse(JSON.stringify(messages)),
-                title,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', currentId)
-          } else {
-            // Create new conversation
-            const { data } = await supabase
-              .from('compose_conversations')
-              .insert({
-                user_id: user.id,
-                mode,
-                title,
-                messages: JSON.parse(JSON.stringify(messages)),
-                is_active: true,
-              })
-              .select('id')
-              .single()
-
-            if (data) {
-              setConversationId(data.id)
-              conversationIdRef.current = data.id
-            }
-          }
-        } catch (err) {
-          console.error('Failed to save conversation:', err)
-        }
+      saveTimeoutRef.current = setTimeout(() => {
+        flushSave(messages)
       }, 2000)
     },
-    [user, mode, supabase]
+    [flushSave]
   )
 
   /**
    * Clear the current conversation (mark inactive) and reset state
    */
   const clearConversation = useCallback(async () => {
+    // Cancel any pending debounced save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)
     }
+    // Prevent flush-on-unmount from re-saving cleared messages
+    pendingMessagesRef.current = null
 
     const currentId = conversationIdRef.current
     if (currentId && user) {
@@ -171,13 +198,18 @@ export function useConversationPersistence(
     setPersistedMessages([])
   }, [user, supabase])
 
-  // Cleanup timeout on unmount
+  // Flush pending save on unmount instead of discarding
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
+      // If there are unsaved messages, flush them immediately
+      if (pendingMessagesRef.current) {
+        flushSave(pendingMessagesRef.current)
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return {

@@ -269,7 +269,7 @@ function DayCell({
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-[200px]">
                 <p className="text-xs font-medium capitalize mb-1">
-                  {post.status}
+                  {post.status === 'pending' ? 'Scheduled' : post.status}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {truncateContent(post.content, 60)}
@@ -527,7 +527,7 @@ export function ScheduleCalendar({
                 <span className="size-4 rounded-full bg-green-500 flex items-center justify-center text-white">
                   <IconClock className="size-2" />
                 </span>
-                <span>Pending</span>
+                <span>Scheduled</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="size-4 rounded-full bg-blue-500 flex items-center justify-center text-white">

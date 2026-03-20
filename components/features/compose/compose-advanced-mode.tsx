@@ -103,7 +103,10 @@ export function ComposeAdvancedMode({
     },
   ], [])
 
-  const initialMessages = persistedMsgs && persistedMsgs.length > 0 ? persistedMsgs : defaultGreeting
+  // Capture initial messages once so useChat isn't reset on re-renders
+  const initialMessagesRef = React.useRef(
+    persistedMsgs && persistedMsgs.length > 0 ? persistedMsgs : defaultGreeting
+  )
 
   const {
     messages,
@@ -113,8 +116,37 @@ export function ComposeAdvancedMode({
     setMessages,
   } = useChat({
     transport,
-    messages: initialMessages,
+    messages: initialMessagesRef.current,
   })
+
+  /** Restore chat messages when persisted data loads asynchronously (e.g. route change) */
+  const hasRestoredRef = React.useRef(
+    !!(persistedMsgs && persistedMsgs.length > 0)
+  )
+  React.useEffect(() => {
+    if (hasRestoredRef.current) return
+    if (persistedMsgs && persistedMsgs.length > 0) {
+      hasRestoredRef.current = true
+      setMessages(persistedMsgs)
+    }
+  }, [persistedMsgs, setMessages])
+
+  /** Track previous conversationId to detect "New Chat" resets from parent */
+  const prevConversationIdRef = React.useRef(conversationId)
+
+  React.useEffect(() => {
+    const wasActive = prevConversationIdRef.current !== undefined && prevConversationIdRef.current !== null
+    const isNowCleared = conversationId === null || conversationId === undefined
+    if (wasActive && isNowCleared) {
+      setMessages(defaultGreeting)
+      setHasGeneratedPost(false)
+      setInput('')
+      setCustomInputId(null)
+      setCustomInputValue('')
+      hasRestoredRef.current = false
+    }
+    prevConversationIdRef.current = conversationId
+  }, [conversationId, defaultGreeting, setMessages])
 
   /** Notify parent when messages change (for persistence) */
   const onMessagesChangeRef = React.useRef(onMessagesChange)
@@ -397,6 +429,9 @@ export function ComposeAdvancedMode({
                               variant="ghost"
                               onClick={() => {
                                 setHasGeneratedPost(false)
+                                setInput('')
+                                setCustomInputId(null)
+                                setCustomInputValue('')
                                 setMessages(defaultGreeting)
                                 if (onNewChat) onNewChat()
                               }}
@@ -500,13 +535,11 @@ export function ComposeAdvancedMode({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
-            !hasApiKey
-              ? "API key required"
-              : hasGeneratedPost
-                ? "Ask to adjust tone, length, add a hook..."
-                : "Type your message..."
+            hasGeneratedPost
+              ? "Ask to adjust tone, length, add a hook..."
+              : "Type your message..."
           }
-          disabled={status !== 'ready' || !hasApiKey}
+          disabled={status !== 'ready'}
           className={cn(
             "flex-1 rounded-full border border-destructive/30 bg-background px-4 py-2.5 text-sm",
             "placeholder:text-muted-foreground",
@@ -518,7 +551,7 @@ export function ComposeAdvancedMode({
         <Button
           type="submit"
           size="icon"
-          disabled={status !== 'ready' || !input.trim() || !hasApiKey}
+          disabled={status !== 'ready' || !input.trim()}
           className="shrink-0 rounded-full bg-destructive hover:bg-destructive/90 size-10"
         >
           {status !== 'ready' ? (

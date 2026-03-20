@@ -9,7 +9,7 @@
  */
 
 import * as React from "react"
-import { motion, useSpring, useTransform } from "framer-motion"
+import { motion, useSpring, useTransform, AnimatePresence } from "framer-motion"
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { format, formatDistanceToNow } from "date-fns"
@@ -472,10 +472,15 @@ function UpcomingPostsPanel({
  */
 function DashboardContent() {
   const { user, profile, extensionInstalled, extensionStatus } = useAuthContext()
+
+
   const router = useRouter()
   const supabase = createClient()
-  const { posts: scheduledPosts, isLoading: scheduleLoading } =
+  const { posts: scheduledPosts, rawPosts: rawScheduledPosts, isLoading: scheduleLoading } =
     useScheduledPosts(30)
+
+  // State for date posts picker dialog
+  const [selectedDatePosts, setSelectedDatePosts] = useState<{ date: Date; posts: Array<{ id: string; content: string; scheduled_for: string }> } | null>(null)
   const { metrics, isLoading: analyticsLoading, periodLabel, todayCapture } = useAnalytics(user?.id)
   const { posts: recentPosts, isLoading: postsLoading } = useMyRecentPosts(user?.id, 9)
 
@@ -552,15 +557,44 @@ function DashboardContent() {
   /**
    * When a date is clicked in the calendar, navigate to compose with the date pre-filled
    */
-  const handleDateClick = React.useCallback(
-    (date: Date) => {
-      const scheduleDate = new Date(date)
-      scheduleDate.setHours(9, 0, 0, 0)
-      router.push(
-        `/dashboard/compose?scheduleDate=${encodeURIComponent(scheduleDate.toISOString())}`
-      )
+  /** Navigate to compose in edit mode for a scheduled post */
+  const handleEditScheduledPost = React.useCallback(
+    (post: { id: string; content: string; scheduled_for: string }) => {
+      sessionStorage.setItem('editScheduledPost', JSON.stringify({
+        id: post.id,
+        content: post.content,
+        scheduledFor: post.scheduled_for,
+      }))
+      router.push(`/dashboard/compose?edit=${post.id}`)
     },
     [router]
+  )
+
+  const handleDateClick = React.useCallback(
+    (date: Date) => {
+      const dayStart = new Date(date)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(date)
+      dayEnd.setHours(23, 59, 59, 999)
+
+      const postsOnDate = rawScheduledPosts.filter(p => {
+        const s = p.status.toLowerCase()
+        if (s === 'posted' || s === 'completed' || s === 'cancelled') return false
+        const postDate = new Date(p.scheduled_for)
+        return postDate >= dayStart && postDate <= dayEnd
+      })
+
+      if (postsOnDate.length === 0) {
+        const scheduleDate = new Date(date)
+        scheduleDate.setHours(9, 0, 0, 0)
+        router.push(`/dashboard/compose?scheduleDate=${encodeURIComponent(scheduleDate.toISOString())}`)
+      } else if (postsOnDate.length === 1) {
+        handleEditScheduledPost(postsOnDate[0])
+      } else {
+        setSelectedDatePosts({ date, posts: postsOnDate })
+      }
+    },
+    [rawScheduledPosts, router, handleEditScheduledPost]
   )
 
   return (
@@ -628,9 +662,11 @@ function DashboardContent() {
         <div className="mx-4 lg:mx-6">
           <div className={cn(
             "flex items-center gap-3 rounded-lg border p-3",
-            todayCapture.hasData
-              ? "border-emerald-500/50 bg-emerald-500/10"
-              : "border-muted-foreground/20 bg-muted/30"
+            extensionStatus?.platformLoggedIn === false
+              ? "border-amber-500/50 bg-amber-500/10"
+              : todayCapture.hasData
+                ? "border-emerald-500/50 bg-emerald-500/10"
+                : "border-muted-foreground/20 bg-muted/30"
           )}>
             <IconCloudDownload className={cn(
               "size-5 shrink-0",
@@ -660,18 +696,18 @@ function DashboardContent() {
                   : 'Open LinkedIn with the extension to start syncing'}
               </p>
             </div>
-            {/* Extension login status badge */}
+            {/* Extension login status badge — only trust live PING status */}
             <div className={cn(
               "shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-              profile?.extension_logged_in
+              extensionStatus?.platformLoggedIn
                 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                : "bg-muted text-muted-foreground"
+                : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
             )}>
               <span className={cn(
                 "size-1.5 rounded-full",
-                profile?.extension_logged_in ? "bg-emerald-500" : "bg-muted-foreground/50"
+                extensionStatus?.platformLoggedIn ? "bg-emerald-500" : "bg-amber-500"
               )} />
-              {profile?.extension_logged_in ? "Extension active" : "Extension offline"}
+              {extensionStatus?.platformLoggedIn ? "Extension active" : "Extension offline"}
             </div>
           </div>
         </div>
@@ -888,6 +924,78 @@ function DashboardContent() {
           authorAvatar={userInfo.avatarUrl}
         />
       </motion.div>
+
+      {/* Date posts picker dialog */}
+      <AnimatePresence>
+        {selectedDatePosts && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setSelectedDatePosts(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-background rounded-xl border shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <div>
+                  <h3 className="text-sm font-semibold">Scheduled Posts</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {format(selectedDatePosts.date, 'EEEE, MMMM d, yyyy')}
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => setSelectedDatePosts(null)}>
+                  <IconX className="size-4" />
+                </Button>
+              </div>
+              <div className="divide-y max-h-[400px] overflow-y-auto">
+                {selectedDatePosts.posts.map((post) => (
+                  <button
+                    key={post.id}
+                    onClick={() => {
+                      setSelectedDatePosts(null)
+                      handleEditScheduledPost(post)
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm line-clamp-2">{post.content}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {format(new Date(post.scheduled_for), 'h:mm a')}
+                        </p>
+                      </div>
+                      <IconPencil className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="px-4 py-3 border-t">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full gap-1.5"
+                  onClick={() => {
+                    const d = selectedDatePosts.date
+                    setSelectedDatePosts(null)
+                    const scheduleDate = new Date(d)
+                    scheduleDate.setHours(9, 0, 0, 0)
+                    router.push(`/dashboard/compose?scheduleDate=${encodeURIComponent(scheduleDate.toISOString())}`)
+                  }}
+                >
+                  <IconPencil className="size-3.5" />
+                  Schedule New Post
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

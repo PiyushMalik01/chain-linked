@@ -180,61 +180,96 @@ export const viralPostIngest = inngest.createFunction(
       return { success: true, message: 'No active source profiles', postsIngested: 0 }
     }
 
-    // Step 2: Scrape via Apify in batches of 5
-    const allScrapedPosts: ApifyLinkedInPost[] = []
-
-    const batches = []
+    // Step 2a: Start Apify runs for all profile batches (fast — async start)
+    const batches: Array<Array<{ linkedin_url: string }>> = []
     for (let i = 0; i < sourceProfiles.length; i += 5) {
       batches.push(sourceProfiles.slice(i, i + 5))
     }
 
-    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-      const batch = batches[batchIdx]
-      const batchPosts = await step.run(`scrape-batch-${batchIdx}`, async () => {
-        const urls = batch.map((p: { linkedin_url: string }) => p.linkedin_url)
-        const token = process.env.APIFY_API_TOKEN
-        if (!token) {
-          console.error('[ViralIngest] APIFY_API_TOKEN not set!')
-          throw new Error('APIFY_API_TOKEN not set')
-        }
+    const apifyRunIds = await step.run('start-apify-runs', async () => {
+      const token = process.env.APIFY_API_TOKEN
+      if (!token) throw new Error('APIFY_API_TOKEN not set')
 
-        try {
-          const response = await fetch(
-            `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync-get-dataset-items?token=${token}&timeout=180`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                targetUrls: urls,
-                profileUrls: urls,
-                maxPosts: LIMIT_PER_PROFILE,
-              }),
-            }
-          )
+      const runIds: string[] = []
+      for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+        const urls = batches[batchIdx].map((p) =>
+          p.linkedin_url.replace(/^https?:\/\/(www\.)?linkedin\.com/, 'https://www.linkedin.com')
+        )
 
-          if (!response.ok) {
-            const errorText = await response.text()
-            throw new Error(`Apify run failed (${response.status}): ${errorText.slice(0, 200)}`)
+        console.log(`[ViralIngest] Starting Apify batch ${batchIdx} for ${urls.length} profiles`)
+
+        const res = await fetch(
+          `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${token}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUrls: urls, maxPosts: LIMIT_PER_PROFILE }),
           }
+        )
 
-          const items: ApifyLinkedInPost[] = await response.json()
-          console.log(`[ViralIngest] Batch ${batchIdx}: Apify returned ${items.length} total items`)
+        if (res.ok) {
+          const data = await res.json() as { data?: { id?: string } }
+          if (data?.data?.id) {
+            runIds.push(data.data.id)
+            console.log(`[ViralIngest] Apify run started: ${data.data.id}`)
+          }
+        } else {
+          console.error(`[ViralIngest] Apify start failed: ${res.status}`)
+        }
+      }
 
-          // Filter to posts from last 3 days (wider window for daily runs)
-          const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000
-          const recentItems = items.filter(item => {
-            // Accept posts with no date info
-            if (!item.postedAt?.timestamp && !item.postedAt?.date) return true
-            const postedTime = item.postedAt.timestamp || new Date(item.postedAt.date!).getTime()
-            return postedTime >= threeDaysAgo
-          })
+      return runIds
+    })
 
-          console.log(`[ViralIngest] Batch ${batchIdx}: ${recentItems.length}/${items.length} passed date filter from ${urls.length} profiles`)
-          return recentItems
-        } catch (error) {
-          console.error(`[ViralIngest] Batch ${batchIdx} scrape failed:`, error instanceof Error ? error.message : error)
+    // Step 2b: Wait for Apify to finish
+    await step.sleep('wait-for-apify', '60s')
+
+    // Step 2c: Fetch results from all Apify runs
+    const allScrapedPosts: ApifyLinkedInPost[] = []
+
+    for (let runIdx = 0; runIdx < apifyRunIds.length; runIdx++) {
+      const runId = apifyRunIds[runIdx]
+      const batchPosts = await step.run(`fetch-apify-results-${runIdx}`, async () => {
+        const token = process.env.APIFY_API_TOKEN!
+
+        const statusRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${token}`)
+        const statusData = await statusRes.json() as { data?: { status?: string } }
+        const status = statusData?.data?.status
+
+        console.log(`[ViralIngest] Apify run ${runId} status: ${status}`)
+
+        if (status !== 'SUCCEEDED') {
+          console.error(`[ViralIngest] Apify run ${runId} not succeeded: ${status}`)
           return [] as ApifyLinkedInPost[]
         }
+
+        const datasetRes = await fetch(
+          `https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${token}`
+        )
+
+        let items: ApifyLinkedInPost[] = []
+        if (datasetRes.ok) {
+          try {
+            items = await datasetRes.json() as ApifyLinkedInPost[]
+          } catch {
+            console.error(`[ViralIngest] Failed to parse dataset for run ${runId}`)
+          }
+        }
+
+        if (!Array.isArray(items)) items = []
+
+        console.log(`[ViralIngest] Apify returned ${items.length} raw items`)
+
+        // Filter to posts from last 3 days
+        const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000
+        const recentItems = items.filter(item => {
+          if (!item.postedAt?.timestamp && !item.postedAt?.date) return true
+          const postedTime = item.postedAt.timestamp || new Date(item.postedAt.date!).getTime()
+          return postedTime >= threeDaysAgo
+        })
+
+        console.log(`[ViralIngest] ${recentItems.length}/${items.length} passed 3-day date filter`)
+        return recentItems
       })
 
       allScrapedPosts.push(...batchPosts)

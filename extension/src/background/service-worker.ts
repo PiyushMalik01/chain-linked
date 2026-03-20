@@ -23,7 +23,7 @@ declare const self: typeof globalThis & {
     signIn: (email: string, password: string) => Promise<{ success: boolean; user?: { id: string; email: string }; session?: unknown; error?: string }>;
     signUp: (email: string, password: string) => Promise<{ success: boolean; user?: { id: string; email: string }; session?: unknown; error?: string; message?: string }>;
     signOut: () => Promise<{ error?: { message: string } }>;
-    getSession: () => Promise<{ session?: { user?: { id: string } }; user?: { id: string; email: string } }>;
+    getSession: () => Promise<{ session?: { user?: { id: string; email?: string } }; user?: { id: string; email: string } }>;
     getUser: () => Promise<{ user?: { id: string; email: string } }>;
   };
   isSupabaseConfigured?: () => boolean;
@@ -1700,6 +1700,33 @@ async function handleMentionSearch(query: string): Promise<{
   }
 }
 
+/**
+ * Broadcast auth state change to all tabs running the ChainLinked platform
+ * so the dashboard updates instantly without needing a refresh.
+ * @param event - Auth event type (SIGNED_IN or SIGNED_OUT)
+ * @param platformLoggedIn - Whether the extension is now logged in
+ */
+function broadcastAuthStateChange(event: string, platformLoggedIn: boolean): void {
+  chrome.tabs.query({}, (tabs) => {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://chainlinked.app',
+      'https://www.chainlinked.app',
+      'https://chainlinked.ai',
+      'https://www.chainlinked.ai',
+    ];
+    for (const tab of tabs) {
+      if (tab.id && tab.url && allowedOrigins.some((o) => tab.url!.startsWith(o))) {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'CHAINLINKED_AUTH_STATE_CHANGED',
+          event,
+          platformLoggedIn,
+        }).catch(() => { /* tab may not have content script */ });
+      }
+    }
+  });
+}
+
 // ============================================
 // EXTERNAL MESSAGE HANDLING (from web app)
 // ============================================
@@ -1716,12 +1743,14 @@ chrome.runtime.onMessageExternal.addListener(
       ]).then(([liAtCookie, sessionResult]) => {
         const linkedInLoggedIn = !!liAtCookie?.value;
         const platformLoggedIn = !!(sessionResult?.session?.user || sessionResult?.user);
-        console.log(`[ExternalMsg] PING response: linkedIn=${linkedInLoggedIn}, platform=${platformLoggedIn}`);
+        const extensionEmail = sessionResult?.session?.user?.email || sessionResult?.user?.email || null;
+        console.log(`[ExternalMsg] PING response: linkedIn=${linkedInLoggedIn}, platform=${platformLoggedIn}, email=${extensionEmail}`);
         sendResponse({
           installed: true,
           version: chrome.runtime.getManifest().version,
           linkedInLoggedIn,
           platformLoggedIn,
+          email: extensionEmail,
         });
       }).catch((err) => {
         console.error('[ExternalMsg] PING status check error:', err);
@@ -1732,6 +1761,82 @@ chrome.runtime.onMessageExternal.addListener(
           platformLoggedIn: false,
         });
       });
+    } else if (message?.type === 'CHAINLINKED_PUSH_SESSION') {
+      console.log('[ExternalMsg] CHAINLINKED_PUSH_SESSION received from platform');
+      (async () => {
+        try {
+          const sessionData = (message as unknown as { session?: { access_token?: string; refresh_token?: string; expires_in?: number; expires_at?: number; token_type?: string; user?: { id?: string; email?: string; user_metadata?: Record<string, unknown> } } }).session;
+          if (!sessionData?.access_token || !sessionData?.user?.email) {
+            sendResponse({ success: false, error: 'Invalid session data' });
+            return;
+          }
+
+          // Check if extension already has a session with a different email
+          const existingSession = await self.supabaseAuth?.getSession?.();
+          const existingEmail = existingSession?.session?.user?.email || existingSession?.user?.email;
+          if (existingEmail && existingEmail !== sessionData.user.email) {
+            console.log(`[ExternalMsg] Push rejected: extension=${existingEmail}, platform=${sessionData.user.email}`);
+            sendResponse({ success: false, error: 'different_user' });
+            return;
+          }
+
+          // Save the session (reuse EXTENSION_AUTH_SESSION logic)
+          await chrome.storage.local.set({
+            supabase_session: {
+              access_token: sessionData.access_token,
+              refresh_token: sessionData.refresh_token,
+              expires_in: sessionData.expires_in,
+              expires_at: sessionData.expires_at,
+              token_type: sessionData.token_type,
+              user: sessionData.user,
+            },
+          });
+
+          // Update the Supabase client auth state
+          const supabaseClient = (self as unknown as { supabase?: { setAuth: (token: string, userId: string) => void } }).supabase;
+          if (supabaseClient) {
+            supabaseClient.setAuth(sessionData.access_token, sessionData.user?.id || '');
+          }
+
+          // Update the auth module state
+          const supabaseAuth = (self as unknown as { supabaseAuth?: {
+            session: unknown;
+            currentUser: { id: string; email: string } | null;
+            notifyListeners: (event: string, user: unknown) => void;
+            ensureUserRecord: (user: unknown) => Promise<void>;
+          } }).supabaseAuth;
+
+          if (supabaseAuth) {
+            supabaseAuth.session = sessionData;
+            supabaseAuth.currentUser = {
+              id: sessionData.user?.id || '',
+              email: sessionData.user?.email || '',
+            };
+            supabaseAuth.notifyListeners('SIGNED_IN', supabaseAuth.currentUser);
+            await supabaseAuth.ensureUserRecord(sessionData.user);
+          }
+
+          setCurrentUserId(sessionData.user?.id || '');
+
+          // Mark extension as logged in on the user's profile
+          if (sessionData.user?.id) {
+            try {
+              const sbClient = (self as unknown as { supabase?: { from: (t: string) => { update: (d: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } } } }).supabase;
+              if (sbClient) {
+                await sbClient.from('profiles').update({ extension_logged_in: true, extension_last_active_at: new Date().toISOString() }).eq('id', sessionData.user.id);
+              }
+            } catch (e) {
+              console.warn('[ExternalMsg] Failed to update extension_logged_in:', e);
+            }
+          }
+
+          console.log('[ExternalMsg] Push session saved for:', sessionData.user?.email);
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('[ExternalMsg] CHAINLINKED_PUSH_SESSION error:', error);
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+        }
+      })();
     } else if (message?.type === 'LINKEDIN_MENTION_SEARCH' && message.query) {
       console.log(`[ExternalMsg] Mention search request: "${message.query}"`);
       // Search LinkedIn users via Voyager API — cookies never leave the extension
@@ -1777,6 +1882,43 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       case 'GET_COOKIES':
         response = await getLinkedInCookies();
         break;
+
+      case 'CHAINLINKED_PING': {
+        // Internal PING from webapp-relay content script
+        console.log('[ServiceWorker] Internal CHAINLINKED_PING received');
+        try {
+          const [liAtCookie, sessionResult] = await Promise.all([
+            chrome.cookies.get({ url: 'https://www.linkedin.com', name: 'li_at' }),
+            self.supabaseAuth?.getSession?.(),
+          ]);
+          const linkedInLoggedIn = !!liAtCookie?.value;
+          const platformLoggedIn = !!(sessionResult?.session?.user || sessionResult?.user);
+          const email = sessionResult?.session?.user?.email || sessionResult?.user?.email || null;
+          response = {
+            success: true,
+            data: {
+              installed: true,
+              version: chrome.runtime.getManifest().version,
+              linkedInLoggedIn,
+              platformLoggedIn,
+              email,
+            },
+          };
+        } catch (err) {
+          console.error('[ServiceWorker] Internal PING error:', err);
+          response = {
+            success: true,
+            data: {
+              installed: true,
+              version: chrome.runtime.getManifest().version,
+              linkedInLoggedIn: false,
+              platformLoggedIn: false,
+              email: null,
+            },
+          };
+        }
+        break;
+      }
 
       case 'LINKEDIN_MENTION_SEARCH': {
         // Internal message from webapp-bridge content script
@@ -3045,6 +3187,10 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
           }
 
           console.log('[ServiceWorker] Extension auth session saved for:', sessionData.user?.email);
+
+          // Broadcast auth state change to all tabs so the platform updates instantly
+          broadcastAuthStateChange('SIGNED_IN', true);
+
           response = { success: true, data: { userId: sessionData.user?.id, email: sessionData.user?.email } };
         } catch (error) {
           console.error('[ServiceWorker] EXTENSION_AUTH_SESSION error:', error);
@@ -3080,6 +3226,10 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
           }
 
           setCurrentUserId(null);
+
+          // Broadcast auth state change to all tabs so the platform updates instantly
+          broadcastAuthStateChange('SIGNED_OUT', false);
+
           response = { success: true };
         } catch (error) {
           response = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

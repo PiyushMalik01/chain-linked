@@ -184,8 +184,10 @@ class SupabaseAuth {
     try {
       console.log('[SupabaseAuth] Opening platform login for Google sign-in...');
 
-      // Open the platform login page which redirects to extension-callback after auth
-      const baseUrl = 'https://chainlinked.ai';
+      // Detect dev mode: unpacked extensions have no update_url in manifest
+      const manifest = chrome.runtime.getManifest();
+      const isDev = !manifest.update_url;
+      const baseUrl = isDev ? 'http://localhost:3000' : 'https://chainlinked.ai';
       const loginUrl = `${baseUrl}/login?redirect=/auth/extension-callback`;
       await chrome.tabs.create({ url: loginUrl });
 
@@ -292,20 +294,8 @@ class SupabaseAuth {
    * Sign out
    */
   async signOut() {
-    try {
-      if (self.supabase && this.session?.access_token) {
-        await self.fetchWithRetry(`${self.supabase.url}/auth/v1/logout`, {
-          method: 'POST',
-          headers: {
-            'apikey': self.supabase.anonKey,
-            'Authorization': `Bearer ${this.session.access_token}`
-          }
-        });
-      }
-    } catch (e) {
-      // Ignore logout errors
-    }
-
+    // Only clear the extension's local session — do NOT call Supabase /auth/v1/logout
+    // because that revokes the token server-side and logs out the web app too.
     self.supabase?.clearAuth();
     this.session = null;
     this.currentUser = null;

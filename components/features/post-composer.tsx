@@ -10,6 +10,7 @@ import {
   IconBrandLinkedin,
   IconCalendar,
   IconCheck,
+  IconDeviceFloppy,
   IconFile,
   IconHash,
   IconItalic,
@@ -35,7 +36,7 @@ import { useDraft } from "@/lib/store/draft-context"
 import { toast } from "sonner"
 import { postToast, showSuccess } from "@/lib/toast-utils"
 import { useAutoSave, formatLastSaved } from "@/hooks/use-auto-save"
-import { fadeSlideUpVariants, composeModeVariants } from "@/lib/animations"
+import { fadeSlideUpVariants } from "@/lib/animations"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -58,10 +59,10 @@ import { type MediaFile } from "./media-upload"
 import { ScheduleModal } from "./schedule-modal"
 import { AIGenerationDialog } from "./ai-generation-dialog"
 import { AIInlinePanel, type GenerationContext } from "./ai-inline-panel"
+import { getSavedHashtags } from "./default-hashtags-editor"
 import { PostActionsMenu } from "./post-actions-menu"
 import { PostGoalSelector } from "./post-goal-selector"
 import { FontPicker } from "./font-picker"
-import { LinkedInStatusBadge } from "./linkedin-status-badge"
 import { MentionPopover, type MentionSuggestion } from "./mention-popover"
 import { CarouselDocumentPreview } from "./carousel-document-preview"
 import { usePostingConfig } from "@/hooks/use-posting-config"
@@ -101,6 +102,10 @@ export interface PostComposerProps {
   onGenerationContext?: (ctx: GenerationContext) => void
   /** Initial date to pre-fill in the schedule modal (e.g. from calendar click) */
   initialScheduleDate?: Date
+  /** Whether the composer is in edit mode for a scheduled post */
+  isEditingScheduledPost?: boolean
+  /** Callback to save edits to a scheduled post without re-picking time */
+  onSaveEdit?: (content: string) => Promise<void>
 }
 
 /** Default LinkedIn character limit */
@@ -245,6 +250,8 @@ export function PostComposer({
   userProfile = DEFAULT_USER_PROFILE,
   onGenerationContext,
   initialScheduleDate,
+  isEditingScheduledPost,
+  onSaveEdit,
 }: PostComposerProps) {
   const router = useRouter()
   const { isPostingEnabled, disabledMessage } = usePostingConfig()
@@ -254,6 +261,7 @@ export function PostComposer({
   const [content, setContent] = React.useState(() => draft.content || initialContent)
   const [isPosting, setIsPosting] = React.useState(false)
   const [isScheduling, setIsScheduling] = React.useState(false)
+  const [isSavingEdit, setIsSavingEdit] = React.useState(false)
   const [showScheduleModal, setShowScheduleModal] = React.useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = React.useState(false)
   const [showAIDialog, setShowAIDialog] = React.useState(false)
@@ -265,6 +273,12 @@ export function PostComposer({
   const [selectedFormat, setSelectedFormat] = React.useState<PostTypeId | undefined>(undefined)
   const [activeFontStyle, setActiveFontStyle] = React.useState<UnicodeFontStyle>('normal')
   const [carouselSlideImages, setCarouselSlideImages] = React.useState<string[]>([])
+  const [savedHashtags, setSavedHashtags] = React.useState<string[]>([])
+
+  /** Load user's saved default hashtags from localStorage on mount */
+  React.useEffect(() => {
+    setSavedHashtags(getSavedHashtags())
+  }, [])
 
   const [mentionOpen, setMentionOpen] = React.useState(false)
   const [mentionQuery, setMentionQuery] = React.useState("")
@@ -719,6 +733,21 @@ export function PostComposer({
   }
 
   /**
+   * Saves edits to a scheduled post without re-picking time
+   */
+  const handleSaveEdit = async () => {
+    if (!onSaveEdit || !content.trim() || isOverLimit) return
+    setIsSavingEdit(true)
+    try {
+      await onSaveEdit(content)
+    } catch (err) {
+      console.error('Failed to save edit:', err)
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  /**
    * Handles the schedule confirmation from the modal
    */
   const handleScheduleConfirm = async (scheduledFor: Date, timezone: string) => {
@@ -997,7 +1026,6 @@ export function PostComposer({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <CardTitle>AI Generation</CardTitle>
-                  <LinkedInStatusBadge variant="badge" showReconnect={false} />
                 </div>
                 <div className="flex items-center gap-3">
                   {/* Auto-save indicator */}
@@ -1011,16 +1039,37 @@ export function PostComposer({
                       ) : lastSaved ? (
                         <>
                           <IconCheck className="size-3 text-green-500" />
-                          <span>Saved {formatLastSaved(lastSaved)}</span>
+                          <span>Saved</span>
                         </>
                       ) : null}
                     </div>
                   )}
-                  {composeMode === 'advanced' && (
+                  {composeMode === 'advanced' ? (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={clearConvo}
+                      onClick={() => {
+                        clearConvo()
+                        handleContentChange('')
+                        setIsEditing(false)
+                        setMediaFiles([])
+                      }}
+                      className="text-xs text-muted-foreground gap-1"
+                    >
+                      <IconX className="size-3" />
+                      New Chat
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        clearConvo()
+                        handleContentChange('')
+                        setIsEditing(false)
+                        setMediaFiles([])
+                        setComposeMode('advanced')
+                      }}
                       className="text-xs text-muted-foreground gap-1"
                     >
                       <IconX className="size-3" />
@@ -1075,56 +1124,39 @@ export function PostComposer({
                 </div>
               )}
 
-              {/* Mode content with animated transitions */}
-              <AnimatePresence mode="wait">
-                {composeMode === 'basic' ? (
-                  <motion.div
-                    key="basic"
-                    variants={composeModeVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                  >
-                    <ComposeBasicMode
-                      onGenerated={(generatedContent) => {
-                        handleContentChange(convertMarkdownToUnicode(generatedContent))
-                        trackFeatureUsed("ai_generation_basic")
-                        showSuccess('Post generated!')
-                        setIsEditing(false)
-                      }}
-                      hasApiKey={hasApiKey}
-                      defaultPostType={selectedFormat}
-                      onGenerationContext={onGenerationContext}
-                      initialTopic={aiSuggestion?.topic || (remixMeta ? remixMeta.originalContent.slice(0, 200) : undefined)}
-                      initialTone={remixMeta?.tone || aiSuggestion?.tone}
-                      initialLength={remixMeta?.length || aiSuggestion?.length}
-                      initialContext={remixMeta?.customInstructions || aiSuggestion?.context}
-                    />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="advanced"
-                    variants={composeModeVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                  >
-                    <ComposeAdvancedMode
-                      onGenerated={(generatedContent) => {
-                        handleContentChange(convertMarkdownToUnicode(generatedContent))
-                        trackFeatureUsed("ai_generation_advanced")
-                        showSuccess('Post generated!')
-                        setIsEditing(false)
-                      }}
-                      hasApiKey={hasApiKey}
-                      persistedMessages={persistedMessages.length > 0 ? persistedMessages as unknown as import("ai").UIMessage[] : undefined}
-                      conversationId={persistedConvoId}
-                      onMessagesChange={handleAdvancedMessagesChange}
-                      onNewChat={clearConvo}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Mode content — both mounted, inactive hidden to preserve chat state */}
+              <div style={{ display: composeMode === 'basic' ? undefined : 'none' }}>
+                <ComposeBasicMode
+                  onGenerated={(generatedContent) => {
+                    handleContentChange(convertMarkdownToUnicode(generatedContent))
+                    trackFeatureUsed("ai_generation_basic")
+                    showSuccess('Post generated!')
+                    setIsEditing(false)
+                  }}
+                  hasApiKey={hasApiKey}
+                  defaultPostType={selectedFormat}
+                  onGenerationContext={onGenerationContext}
+                  initialTopic={aiSuggestion?.topic || (remixMeta ? remixMeta.originalContent : undefined)}
+                  initialTone={remixMeta?.tone || aiSuggestion?.tone}
+                  initialLength={remixMeta?.length || aiSuggestion?.length}
+                  initialContext={remixMeta?.customInstructions || aiSuggestion?.context}
+                />
+              </div>
+              <div style={{ display: composeMode === 'advanced' ? undefined : 'none' }}>
+                <ComposeAdvancedMode
+                  onGenerated={(generatedContent) => {
+                    handleContentChange(convertMarkdownToUnicode(generatedContent))
+                    trackFeatureUsed("ai_generation_advanced")
+                    showSuccess('Post generated!')
+                    setIsEditing(false)
+                  }}
+                  hasApiKey={hasApiKey}
+                  persistedMessages={persistedMessages.length > 0 ? persistedMessages as unknown as import("ai").UIMessage[] : undefined}
+                  conversationId={persistedConvoId}
+                  onMessagesChange={handleAdvancedMessagesChange}
+                  onNewChat={clearConvo}
+                />
+              </div>
             </CardContent>
           </Card>
         </motion.div>
@@ -1626,19 +1658,13 @@ export function PostComposer({
                   )
                 })()}
 
-                {/* Engagement Stats (Placeholder) */}
+                {/* Engagement Stats (LinkedIn preview mock) */}
                 <div className="text-muted-foreground flex items-center px-4 py-2 text-xs">
                   <span className="flex items-center gap-1.5">
                     <span className="inline-flex -space-x-1">
                       <span className="inline-flex items-center justify-center size-4 rounded-full bg-[#378FE9] text-[8px] text-white ring-1 ring-white dark:ring-zinc-900">&#128077;</span>
                       <span className="inline-flex items-center justify-center size-4 rounded-full bg-[#DF704D] text-[8px] text-white ring-1 ring-white dark:ring-zinc-900">&#10084;</span>
                     </span>
-                    <span className="tabular-nums">0</span>
-                  </span>
-                  <span className="ml-auto flex items-center gap-2 tabular-nums">
-                    <span>0 comments</span>
-                    <span className="leading-none">&#183;</span>
-                    <span>0 reposts</span>
                   </span>
                 </div>
 
@@ -1744,6 +1770,31 @@ export function PostComposer({
                   ))}
                 </div>
               )}
+
+              {/* Add My Hashtags — only visible when user has saved default hashtags */}
+              {savedHashtags.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs h-7"
+                  onClick={() => {
+                    const existing = extractHashtags(content)
+                    const existingLower = new Set(existing.map(t => t.toLowerCase()))
+                    const newTags = savedHashtags.filter(t => !existingLower.has(t.toLowerCase()))
+                    if (newTags.length === 0) {
+                      toast.info('All your default hashtags are already in the post')
+                      return
+                    }
+                    const hashtagString = newTags.map(t => `#${t}`).join(' ')
+                    const separator = content.trim() ? '\n\n' : ''
+                    setContent(prev => prev.trimEnd() + separator + hashtagString)
+                    toast.success(`Added ${newTags.length} hashtag${newTags.length > 1 ? 's' : ''}`)
+                  }}
+                >
+                  <IconHash className="size-3.5" />
+                  Add My Hashtags
+                </Button>
+              )}
             </CardContent>
 
             {/* Action Buttons */}
@@ -1769,6 +1820,21 @@ export function PostComposer({
                   )}
                   {draftSaved ? 'Saved' : 'Save Draft'}
                 </Button>
+                {isEditingScheduledPost && onSaveEdit && (
+                  <Button
+                    variant="default"
+                    onClick={handleSaveEdit}
+                    disabled={isSavingEdit || isOverLimit || !content.trim()}
+                    className="gap-1.5"
+                  >
+                    {isSavingEdit ? (
+                      <IconLoader2 className="size-4 animate-spin" />
+                    ) : (
+                      <IconDeviceFloppy className="size-4" />
+                    )}
+                    Save
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={handleScheduleClick}

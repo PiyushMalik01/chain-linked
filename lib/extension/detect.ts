@@ -36,6 +36,8 @@ export interface ExtensionStatus {
   linkedInLoggedIn: boolean
   /** Whether the user is logged into ChainLinked platform in the extension */
   platformLoggedIn: boolean
+  /** Email of the user logged into the extension (null if not logged in) */
+  extensionUserEmail?: string | null
 }
 
 /**
@@ -92,35 +94,45 @@ export async function isExtensionInstalled(skipCache = false): Promise<boolean> 
   }
 
   try {
+    let detected = false
+
     // Method 1: Check for extension-injected global variable
     if ((window as Window & { __CHAINLINKED_EXTENSION__?: boolean }).__CHAINLINKED_EXTENSION__) {
-      cacheResult(true)
-      return true
+      detected = true
     }
 
     // Method 2: Check for custom DOM element injected by extension
-    const extensionMarker = document.getElementById('chainlinked-extension-marker')
-    if (extensionMarker) {
-      cacheResult(true)
-      return true
+    if (!detected) {
+      const extensionMarker = document.getElementById('chainlinked-extension-marker')
+      if (extensionMarker) {
+        detected = true
+      }
     }
 
     // Method 3: Dispatch custom event and wait for response
-    const eventResult = await checkExtensionViaEvent()
-    if (eventResult) {
-      cacheResult(true)
-      return true
+    if (!detected) {
+      const eventResult = await checkExtensionViaEvent()
+      if (eventResult) {
+        detected = true
+      }
     }
 
     // Method 4: External messaging via chrome.runtime.sendMessage
-    const externalResult = await checkExtensionViaExternalMessage()
-    if (externalResult) {
-      cacheResult(true)
-      return true
+    if (!detected) {
+      const externalResult = await checkExtensionViaExternalMessage()
+      if (externalResult) {
+        detected = true
+      }
     }
 
-    cacheResult(false)
-    return false
+    // If extension was detected, fetch live status via content script relay
+    // (works without knowing the extension ID, unlike chrome.runtime.sendMessage)
+    if (detected) {
+      await fetchExtensionStatusViaRelay()
+    }
+
+    cacheResult(detected)
+    return detected
   } catch (error) {
     console.warn('[Extension Detection] Error checking extension:', error)
     return false
@@ -137,6 +149,49 @@ function cacheResult(detected: boolean): void {
   } catch {
     // sessionStorage may be blocked
   }
+}
+
+/**
+ * Fetch extension login status via window.postMessage relay through the content script.
+ * This works without knowing the extension ID (unlike chrome.runtime.sendMessage).
+ * @returns Promise that resolves when status is received or times out
+ */
+function fetchExtensionStatusViaRelay(): Promise<void> {
+  return new Promise((resolve) => {
+    const requestId = Math.random().toString(36).slice(2)
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', handleResponse)
+      console.warn('[Extension Detection] Status relay timed out')
+      resolve()
+    }, 2000)
+
+    function handleResponse(event: MessageEvent) {
+      if (event.source !== window) return
+      if (event.data?.type !== '__CL_STATUS_RESPONSE__') return
+      if (event.data?.requestId !== requestId) return
+
+      clearTimeout(timeout)
+      window.removeEventListener('message', handleResponse)
+
+      const response = event.data.status
+      console.log('[Extension Detection] Status relay response:', response)
+      if (response?.installed) {
+        cacheStatus({
+          installed: true,
+          linkedInLoggedIn: response?.linkedInLoggedIn === true,
+          platformLoggedIn: response?.platformLoggedIn === true,
+          extensionUserEmail: response?.email || null,
+        })
+      }
+      resolve()
+    }
+
+    window.addEventListener('message', handleResponse)
+    window.postMessage({
+      type: '__CL_STATUS_REQUEST__',
+      requestId,
+    }, window.location.origin)
+  })
 }
 
 /**
@@ -189,11 +244,12 @@ function checkExtensionViaExternalMessage(): Promise<boolean> {
           }
           const installed = response?.installed === true
           if (installed) {
-            // Cache the full status including login states
+            // Cache the full status including login states and email
             cacheStatus({
               installed: true,
               linkedInLoggedIn: response?.linkedInLoggedIn === true,
               platformLoggedIn: response?.platformLoggedIn === true,
+              extensionUserEmail: response?.email || null,
             })
           }
           resolve(installed)
@@ -204,6 +260,33 @@ function checkExtensionViaExternalMessage(): Promise<boolean> {
       resolve(false)
     }
   })
+}
+
+/**
+ * Listen for real-time auth state changes from the extension.
+ * When the extension signs in or out, it broadcasts a message via the content script.
+ * @param callback - Called with the updated status when auth state changes
+ * @returns Cleanup function to remove the listener
+ */
+export function onExtensionAuthStateChange(callback: (status: ExtensionStatus) => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+
+  const handler = (event: MessageEvent) => {
+    if (event.source !== window) return
+    if (event.data?.type !== '__CL_AUTH_STATE_CHANGED__') return
+
+    const status: ExtensionStatus = {
+      installed: true,
+      linkedInLoggedIn: getCachedExtensionStatus()?.linkedInLoggedIn ?? false,
+      platformLoggedIn: event.data.platformLoggedIn === true,
+      extensionUserEmail: event.data.platformLoggedIn ? getCachedExtensionStatus()?.extensionUserEmail : null,
+    }
+    cacheStatus(status)
+    callback(status)
+  }
+
+  window.addEventListener('message', handler)
+  return () => window.removeEventListener('message', handler)
 }
 
 /**

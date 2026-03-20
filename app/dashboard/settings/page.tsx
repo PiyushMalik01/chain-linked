@@ -24,6 +24,7 @@ import {
   IconDeviceDesktop,
   IconDownload,
   IconExternalLink,
+  IconHash,
   IconKey,
   IconLink,
   IconLoader2,
@@ -82,6 +83,7 @@ import { useAuthContext } from "@/lib/auth/auth-provider"
 import { useSettings } from "@/hooks/use-settings"
 import { createClient } from "@/lib/supabase/client"
 import { ContentRulesEditor } from "@/components/features/content-rules-editor"
+import { DefaultHashtagsEditor } from "@/components/features/default-hashtags-editor"
 
 /* =============================================================================
    TYPES
@@ -1520,6 +1522,21 @@ function SettingsContent() {
         </CardHeader>
         <CardContent>
           <ContentRulesEditor scope="personal" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <IconHash className="size-4 text-primary" />
+            Default Hashtags
+          </CardTitle>
+          <CardDescription>
+            These hashtags will be available to add to all your posts
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DefaultHashtagsEditor />
         </CardContent>
       </Card>
     </motion.div>

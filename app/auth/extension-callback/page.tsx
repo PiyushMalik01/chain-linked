@@ -20,16 +20,13 @@ export default function ExtensionCallbackPage() {
   const [status, setStatus] = useState<'loading' | 'success' | 'no-session'>('loading')
 
   useEffect(() => {
-    async function transferSession() {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
+    const supabase = createClient()
 
-      if (!session) {
-        setStatus('no-session')
-        return
-      }
-
-      // Post the session to the window for the extension's webapp-relay to pick up
+    /**
+     * Post session to the extension's webapp-relay content script
+     * @param session - Supabase session to transfer
+     */
+    function postSessionToExtension(session: { access_token: string; refresh_token: string; expires_in: number; expires_at?: number; token_type: string; user: { id: string; email?: string; user_metadata?: Record<string, unknown> } }) {
       window.postMessage({
         type: '__CL_AUTH_SESSION__',
         payload: {
@@ -47,6 +44,32 @@ export default function ExtensionCallbackPage() {
       }, window.location.origin)
 
       setStatus('success')
+    }
+
+    async function transferSession() {
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (session) {
+        postSessionToExtension(session)
+        return
+      }
+
+      // Session may not be hydrated yet after OAuth redirect.
+      // Wait for onAuthStateChange to deliver it (up to 5 seconds).
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (event, newSession) => {
+          if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && newSession) {
+            subscription.unsubscribe()
+            clearTimeout(timeout)
+            postSessionToExtension(newSession)
+          }
+        }
+      )
+
+      const timeout = setTimeout(() => {
+        subscription.unsubscribe()
+        setStatus('no-session')
+      }, 5000)
     }
 
     transferSession()

@@ -183,7 +183,7 @@ export function PropertyPanel({
   onSwitchLeftTab,
 }: PropertyPanelProps) {
   return (
-    <div className="flex h-full w-72 flex-col border-l bg-muted/30">
+    <div className="flex min-h-0 w-72 flex-1 flex-col border-l bg-muted/30">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-2.5">
         <span className="text-sm font-semibold">Properties</span>

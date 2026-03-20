@@ -67,7 +67,22 @@ export function PostSeriesComposer({
   onScheduleConfirm,
   hasApiKey: hasApiKeyProp,
 }: PostSeriesComposerProps) {
-  const [posts, setPosts] = React.useState<SeriesPost[]>([])
+  const [posts, setPosts] = React.useState<SeriesPost[]>(() => {
+    // Restore series draft from localStorage if available
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('chainlinked-series-draft')
+        if (raw) {
+          localStorage.removeItem('chainlinked-series-draft')
+          const data = JSON.parse(raw)
+          if (data?.type === 'series' && Array.isArray(data.posts)) {
+            return data.posts as SeriesPost[]
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    return []
+  })
   const [currentPostIndex, setCurrentPostIndex] = React.useState(0)
   const { status: apiKeyStatus } = useApiKeys()
   const hasApiKey = hasApiKeyProp ?? (apiKeyStatus?.hasKey ?? false)
@@ -181,28 +196,42 @@ export function PostSeriesComposer({
   }, [posts])
 
   /**
-   * Save all series posts as individual drafts
+   * Save the entire series as a single draft with structured JSON
    */
   const handleSaveDrafts = React.useCallback(async () => {
     if (posts.length === 0) return
 
     setIsSavingDraft(true)
     try {
-      let savedCount = 0
-      for (const post of posts) {
-        const res = await fetch('/api/drafts/auto-save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: post.post,
-            postType: 'series',
-            source: 'series',
-          }),
-        })
-        if (res.ok) savedCount++
-      }
+      // Build a readable preview for the content field
+      const preview = posts
+        .map((p, i) => `[Post ${i + 1}: ${p.subtopic}]\n${p.post}`)
+        .join('\n\n---\n\n')
 
-      showSuccess(`${savedCount} post${savedCount !== 1 ? 's' : ''} saved as drafts!`)
+      // Store the full series data as JSON in source_snippet for restoring later
+      const seriesData = JSON.stringify({
+        type: 'series',
+        posts: posts.map(p => ({
+          subtopic: p.subtopic,
+          summary: p.summary,
+          post: p.post,
+        })),
+      })
+
+      const res = await fetch('/api/drafts/auto-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: preview,
+          postType: 'series',
+          source: 'series',
+          context: seriesData,
+        }),
+      })
+
+      if (res.ok) {
+        showSuccess(`Series with ${posts.length} posts saved as draft!`)
+      }
     } catch (err) {
       console.error('Failed to save drafts:', err)
     } finally {
@@ -254,6 +283,7 @@ export function PostSeriesComposer({
               onSeriesGenerated={handleSeriesGenerated}
               hasApiKey={hasApiKey}
               persistedMessages={persistedMessages.length > 0 ? persistedMessages as unknown as UIMessage[] : undefined}
+              conversationId={conversationId}
               onMessagesChange={handleMessagesChange}
               onNewChat={handleNewChat}
             />
@@ -329,15 +359,6 @@ export function PostSeriesComposer({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleCopyAllPosts}
-                  className="gap-1.5 text-xs"
-                >
-                  <IconFile className="size-3.5" />
-                  Copy All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
                   onClick={handleSaveDrafts}
                   disabled={isSavingDraft}
                   className="gap-1.5 text-xs"
@@ -352,15 +373,6 @@ export function PostSeriesComposer({
               </div>
 
               <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopyAndOpenLinkedIn}
-                  className="gap-1.5 text-xs"
-                >
-                  <IconBrandLinkedin className="size-3.5 text-[#0A66C2]" />
-                  Open LinkedIn
-                </Button>
                 <Button
                   size="sm"
                   onClick={handleCopyAndOpenLinkedIn}

@@ -8,7 +8,7 @@
  */
 
 import * as React from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { IconChevronDown, IconChevronUp, IconCheck, IconLoader2 } from "@tabler/icons-react"
 import { PageContent } from "@/components/shared/page-content"
@@ -45,10 +45,13 @@ function ComposeContent() {
   const { user, profile } = useAuthContext()
   const supabase = createClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { draft, updateDraft } = useDraft()
 
-  // Tab state for single/series mode
-  const [composeTab, setComposeTab] = React.useState<ComposeTab>('single')
+  // Tab state for single/series mode — check URL param for series tab
+  const [composeTab, setComposeTab] = React.useState<ComposeTab>(
+    () => (searchParams.get('tab') === 'series' ? 'series' : 'single')
+  )
 
   // State for editing an existing scheduled post
   const [editingPost, setEditingPost] = React.useState<EditingPost | null>(null)
@@ -489,7 +492,43 @@ function ComposeContent() {
       draftSavedRef.current = false
       throw new Error(error.message || 'Failed to schedule post')
     }
+
+    // Update existing draft to "scheduled" source if it was saved as a draft
+    if (savedDraftIdRef.current) {
+      await supabase
+        .from('generated_posts')
+        .update({ source: 'scheduled' })
+        .eq('id', savedDraftIdRef.current)
+        .eq('user_id', user.id)
+    }
   }, [user, supabase, editingPost])
+
+  /**
+   * Handle saving edits to a scheduled post without re-picking the time
+   */
+  const handleSaveEdit = React.useCallback(async (content: string) => {
+    if (!user || !editingPost) return
+
+    draftSavedRef.current = true
+
+    const { error } = await supabase
+      .from('scheduled_posts')
+      .update({ content })
+      .eq('id', editingPost.id)
+      .eq('user_id', user.id)
+
+    if (error) {
+      console.error('Failed to save edit:', error)
+      draftSavedRef.current = false
+      throw new Error(error.message || 'Failed to save changes')
+    }
+
+    setEditingPost(null)
+    toast.success('Post saved', {
+      description: 'Your scheduled post has been updated.',
+    })
+    router.push('/dashboard/schedule')
+  }, [user, supabase, editingPost, router])
 
   return (
     <PageContent>
@@ -500,7 +539,7 @@ function ComposeContent() {
           <TabsTrigger value="series">Post Series</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="single" className="space-y-4 mt-0">
+        <TabsContent value="single" className="space-y-4 mt-0" forceMount style={{ display: composeTab === 'single' ? undefined : 'none' }}>
           {/* Show edit mode indicator */}
           {editingPost && (
             <div className="rounded-lg border border-primary/50 bg-primary/5 p-3 flex items-center justify-between">
@@ -529,7 +568,7 @@ function ComposeContent() {
               ) : (
                 <>
                   <IconCheck className="size-3 text-green-500" />
-                  <span>Saved as draft</span>
+                  <span>Saved</span>
                 </>
               )}
             </div>
@@ -544,6 +583,8 @@ function ComposeContent() {
               onScheduleConfirm={handleSchedule}
               onGenerationContext={handleGenerationContext}
               initialScheduleDate={initialScheduleDate}
+              isEditingScheduledPost={!!editingPost}
+              onSaveEdit={editingPost ? handleSaveEdit : undefined}
             />
           </ErrorBoundary>
 
@@ -610,7 +651,7 @@ function ComposeContent() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="series" className="mt-0">
+        <TabsContent value="series" className="mt-0" forceMount style={{ display: composeTab === 'series' ? undefined : 'none' }}>
           <ErrorBoundary>
             <PostSeriesComposer
               userProfile={userProfile}

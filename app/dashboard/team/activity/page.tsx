@@ -27,7 +27,6 @@ import {
   IconArticle,
   IconChartPie,
   IconUsers,
-  IconUserPlus,
 } from "@tabler/icons-react"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
@@ -52,7 +51,6 @@ import { useAuthContext } from "@/lib/auth/auth-provider"
 import { createClient } from "@/lib/supabase/client"
 import { usePageMeta } from "@/lib/dashboard-context"
 import { cn, getInitials, formatMetricNumber } from "@/lib/utils"
-import { JoinRequestsList } from "@/components/features/join-requests-list"
 
 // ============================================================================
 // Types
@@ -543,8 +541,6 @@ function TeamActivityContent() {
   const [brandKitLogoUrl, setBrandKitLogoUrl] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
   const [teamMemberCount, setTeamMemberCount] = useState<number>(0)
-  const [teamId, setTeamId] = useState<string | null>(null)
-  const [userRole, setUserRole] = useState<string | null>(null)
 
   // Fetch brand kit logo and team info
   useEffect(() => {
@@ -562,16 +558,14 @@ function TeamActivityContent() {
         if (data?.logo_url) setBrandKitLogoUrl(data.logo_url)
       })
 
-    // Fetch team info + user role
+    // Fetch team info
     supabase
       .from('team_members')
-      .select('team_id, role')
+      .select('team_id')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(async ({ data: membership }) => {
         if (!membership?.team_id) return
-        setTeamId(membership.team_id)
-        setUserRole(membership.role)
         const { data: team } = await supabase
           .from('teams')
           .select('name')
@@ -839,21 +833,6 @@ function TeamActivityContent() {
           </div>
         </div>
       </div>
-
-      {/* Pending Join Requests (admin/owner only) */}
-      {teamId && (userRole === 'admin' || userRole === 'owner') && (
-        <div className="px-4 md:px-6 pt-4 max-w-5xl mx-auto">
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-amber-500/20">
-              <IconUserPlus className="size-4 text-amber-600 dark:text-amber-400" />
-              <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Pending Join Requests</h3>
-            </div>
-            <div className="p-4">
-              <JoinRequestsList teamId={teamId} />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Content */}
       <div className="p-4 md:p-6 flex-1">

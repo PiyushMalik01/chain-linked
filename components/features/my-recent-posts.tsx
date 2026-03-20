@@ -35,6 +35,7 @@ import {
   staggerGridContainerVariants,
   staggerScaleItemVariants,
 } from "@/lib/animations"
+import { RemixPostButton } from "@/components/features/remix-post-button"
 
 /**
  * Shape of a user's post from my_posts table
@@ -198,6 +199,17 @@ function PostGridCard({
           </div>
         </div>
       </button>
+
+      {/* Remix action bar — same style as team activity */}
+      {(post.content?.length ?? 0) > 20 && (
+        <div className="border-t border-border/30 px-2 py-1">
+          <RemixPostButton
+            postId={post.id}
+            content={post.content || ""}
+            className="w-full justify-center py-2 text-primary hover:text-primary hover:bg-primary/5"
+          />
+        </div>
+      )}
     </motion.div>
   )
 }
@@ -303,6 +315,14 @@ function LinkedInPostDialog({
                   {formatMetricNumber(impressions)} impressions
                 </span>
               )}
+            </div>
+
+            <div className="flex items-center justify-end border-t border-border/50 pt-2">
+              <RemixPostButton
+                postId={post.id}
+                content={post.content || ""}
+                authorName={authorName}
+              />
             </div>
           </div>
         </div>

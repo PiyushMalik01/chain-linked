@@ -20,7 +20,6 @@ import {
   IconChevronDown,
   IconPencil,
   IconRefresh,
-  IconPlus,
   IconChevronLeft,
   IconChevronRight,
 } from "@tabler/icons-react"
@@ -44,6 +43,8 @@ interface ComposeSeriesModeProps {
   hasApiKey: boolean
   /** Persisted messages from database */
   persistedMessages?: UIMessage[]
+  /** Current conversation ID (used to detect "New Chat" resets) */
+  conversationId?: string | null
   /** Callback when messages change */
   onMessagesChange?: (messages: UIMessage[]) => void
   /** Callback to start new chat */
@@ -68,13 +69,11 @@ function SeriesPreviewSlider({
   result,
   onUse,
   onRetry,
-  onNewTopic,
   isReady,
 }: {
   result: { posts: SeriesPost[]; seriesTheme: string }
   onUse: () => void
   onRetry: () => void
-  onNewTopic: () => void
   isReady: boolean
 }) {
   const [slideIndex, setSlideIndex] = React.useState(0)
@@ -105,15 +104,15 @@ function SeriesPreviewSlider({
             <IconChevronLeft className="size-3.5" />
           </Button>
 
-          <div className="flex-1 rounded-md border border-border/50 p-2.5 min-h-[80px]">
+          <div className="flex-1 rounded-md border border-border/50 p-2.5 min-h-[80px] max-h-[300px] overflow-y-auto">
             <p className="text-xs font-medium text-destructive mb-1">
               Post {slideIndex + 1}: {post?.subtopic}
             </p>
-            <p className="text-xs text-muted-foreground line-clamp-3">
+            <p className="text-xs text-muted-foreground">
               {post?.summary}
             </p>
-            <p className="text-[11px] text-muted-foreground/70 mt-1.5 line-clamp-2 whitespace-pre-wrap">
-              {post?.post.slice(0, 150)}{(post?.post.length ?? 0) > 150 ? '...' : ''}
+            <p className="text-[11px] text-muted-foreground/70 mt-1.5 whitespace-pre-wrap">
+              {post?.post}
             </p>
           </div>
 
@@ -165,15 +164,6 @@ function SeriesPreviewSlider({
           <IconRefresh className="size-3.5" />
           Try Again
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onNewTopic}
-          className="gap-1.5 text-muted-foreground"
-        >
-          <IconPlus className="size-3.5" />
-          New Topic
-        </Button>
       </div>
     </motion.div>
   )
@@ -188,6 +178,7 @@ export function ComposeSeriesMode({
   onSeriesGenerated,
   hasApiKey,
   persistedMessages: persistedMsgs,
+  conversationId,
   onMessagesChange,
   onNewChat,
 }: ComposeSeriesModeProps) {
@@ -217,7 +208,10 @@ export function ComposeSeriesMode({
     },
   ], [])
 
-  const initialMessages = persistedMsgs && persistedMsgs.length > 0 ? persistedMsgs : defaultGreeting
+  // Capture initial messages once so useChat isn't reset on re-renders
+  const initialMessagesRef = React.useRef(
+    persistedMsgs && persistedMsgs.length > 0 ? persistedMsgs : defaultGreeting
+  )
 
   const {
     messages,
@@ -227,8 +221,36 @@ export function ComposeSeriesMode({
     setMessages,
   } = useChat({
     transport,
-    messages: initialMessages,
+    messages: initialMessagesRef.current,
   })
+
+  /** Restore chat messages when persisted data loads asynchronously (e.g. route change) */
+  const hasRestoredRef = React.useRef(
+    !!(persistedMsgs && persistedMsgs.length > 0)
+  )
+  React.useEffect(() => {
+    if (hasRestoredRef.current) return
+    if (persistedMsgs && persistedMsgs.length > 0) {
+      hasRestoredRef.current = true
+      setMessages(persistedMsgs)
+    }
+  }, [persistedMsgs, setMessages])
+
+  /** Detect "New Chat" resets from parent via conversationId transition */
+  const prevConversationIdRef = React.useRef(conversationId)
+  React.useEffect(() => {
+    const wasActive = prevConversationIdRef.current !== undefined && prevConversationIdRef.current !== null
+    const isNowCleared = conversationId === null || conversationId === undefined
+    if (wasActive && isNowCleared) {
+      setMessages(defaultGreeting)
+      setHasGeneratedSeries(false)
+      setInput('')
+      setCustomInputId(null)
+      setCustomInputValue('')
+      hasRestoredRef.current = false
+    }
+    prevConversationIdRef.current = conversationId
+  }, [conversationId, defaultGreeting, setMessages])
 
   React.useEffect(() => {
     if (scrollRef.current) {
@@ -287,7 +309,7 @@ export function ComposeSeriesMode({
     <div className="flex flex-col h-full min-h-[400px]">
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-3 pr-1 mb-3 max-h-[500px]"
+        className="flex-1 overflow-y-auto space-y-3 pr-1 mb-3 max-h-[700px]"
       >
         {messages.map((message) => {
           if (message.role === 'user') {
@@ -455,11 +477,6 @@ export function ComposeSeriesMode({
                             setHasGeneratedSeries(false)
                             sendMessage({ text: 'Generate another version of this series' })
                           }}
-                          onNewTopic={() => {
-                            setHasGeneratedSeries(false)
-                            setMessages(defaultGreeting)
-                            if (onNewChat) onNewChat()
-                          }}
                           isReady={status === 'ready'}
                         />
                       )
@@ -553,13 +570,11 @@ export function ComposeSeriesMode({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
-            !hasApiKey
-              ? "API key required"
-              : hasGeneratedSeries
-                ? "Ask to adjust tone, length, add examples..."
-                : "Describe your series theme..."
+            hasGeneratedSeries
+              ? "Ask to adjust tone, length, add examples..."
+              : "Describe your series theme..."
           }
-          disabled={status !== 'ready' || !hasApiKey}
+          disabled={status !== 'ready'}
           className={cn(
             "flex-1 rounded-full border border-destructive/30 bg-background px-4 py-2.5 text-sm",
             "placeholder:text-muted-foreground",
@@ -571,7 +586,7 @@ export function ComposeSeriesMode({
         <Button
           type="submit"
           size="icon"
-          disabled={status !== 'ready' || !input.trim() || !hasApiKey}
+          disabled={status !== 'ready' || !input.trim()}
           className="shrink-0 rounded-full bg-destructive hover:bg-destructive/90 size-10"
         >
           {status !== 'ready' ? (

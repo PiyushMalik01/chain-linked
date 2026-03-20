@@ -152,7 +152,7 @@ function LeaderboardSkeleton() {
 }
 
 /** CSS grid template for leaderboard columns */
-const GRID_COLS = "grid-cols-[2rem_2.5rem_1fr_3.5rem_3.5rem_3.5rem_4rem]"
+const GRID_COLS = "grid-cols-[2rem_2.5rem_minmax(6rem,1fr)_4.5rem_4.5rem_4.5rem_5rem]"
 const GRID_COLS_MOBILE = "grid-cols-[2rem_2.5rem_1fr_4rem]"
 
 /**
@@ -225,13 +225,13 @@ function LeaderboardRow({
         </div>
 
         {/* Posts */}
-        <span className="text-sm font-medium tabular-nums text-right">{formatMetricNumber(postsCount)}</span>
+        <span className="text-sm font-medium tabular-nums text-center">{formatMetricNumber(postsCount)}</span>
         {/* Reactions */}
-        <span className="text-sm font-medium tabular-nums text-right">{formatMetricNumber(member.totalReactions)}</span>
+        <span className="text-sm font-medium tabular-nums text-center">{formatMetricNumber(member.totalReactions)}</span>
         {/* Comments */}
-        <span className="text-sm font-medium tabular-nums text-right">{formatMetricNumber(member.totalComments)}</span>
+        <span className="text-sm font-medium tabular-nums text-center">{formatMetricNumber(member.totalComments)}</span>
         {/* Impressions */}
-        <span className="text-sm font-medium tabular-nums text-right">{formatMetricNumber(member.totalImpressions)}</span>
+        <span className="text-sm font-medium tabular-nums text-center">{formatMetricNumber(member.totalImpressions)}</span>
       </div>
 
       {/* Mobile layout */}
@@ -371,10 +371,10 @@ export function TeamLeaderboard({
               <div /> {/* Rank column */}
               <div /> {/* Avatar column */}
               <div>Member</div>
-              <div className="text-right">Posts</div>
-              <div className="text-right">Reactions</div>
-              <div className="text-right">Comments</div>
-              <div className="text-right">Impress.</div>
+              <div className="text-center">Posts</div>
+              <div className="text-center">Reactions</div>
+              <div className="text-center">Comments</div>
+              <div className="text-center">Impress.</div>
             </div>
             {/* Column Headers - Mobile */}
             <div className={cn(

@@ -21,7 +21,7 @@ import {
   IconShare,
   IconSparkles,
   IconChevronRight,
-  IconUserPlus,
+  IconFilter,
 } from "@tabler/icons-react"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
@@ -33,12 +33,12 @@ import { TeamLeaderboard } from "@/components/features/team-leaderboard"
 import { TeamHeader } from "@/components/features/team-header"
 import { PendingInvitationsCard, type PendingInvitation } from "@/components/features/pending-invitations-card"
 import { NoTeamState } from "@/components/features/no-team-state"
-import { JoinRequestsList } from "@/components/features/join-requests-list"
 import { TeamMemberList } from "@/components/features/team-member-list"
 import { TeamSkeleton } from "@/components/skeletons/page-skeletons"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useTeamPosts } from "@/hooks/use-team-posts"
 import { useTeamLeaderboard } from "@/hooks/use-team-leaderboard"
 import { useTeam } from "@/hooks/use-team"
@@ -158,35 +158,6 @@ function AnimatedTabBar({
           </button>
         )
       })}
-    </div>
-  )
-}
-
-// ============================================================================
-// Join Requests Banner (only shows when there are pending requests)
-// ============================================================================
-
-/**
- * Banner for pending join requests - only renders when requests exist
- * @param props.teamId - Team ID to fetch join requests for
- */
-function JoinRequestsBanner({ teamId }: { teamId: string }) {
-  const { pendingRequests, isLoading } = useJoinRequests({ teamId })
-
-  // Don't render anything if loading or no requests
-  if (isLoading || pendingRequests.length === 0) return null
-
-  return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-amber-500/20">
-        <IconUserPlus className="size-4 text-amber-600 dark:text-amber-400" />
-        <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-          Pending Join Requests ({pendingRequests.length})
-        </h3>
-      </div>
-      <div className="p-4">
-        <JoinRequestsList teamId={teamId} />
-      </div>
     </div>
   )
 }
@@ -598,6 +569,26 @@ function TeamContent() {
     () => new Map(rawPosts.map((p) => [p.id, p.user_id])),
     [rawPosts]
   )
+
+  /** Member filter for Recent Team Activity */
+  const [activityMemberFilter, setActivityMemberFilter] = useState<string>("all")
+
+  /** Unique authors from posts for the filter dropdown */
+  const postAuthors = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const post of posts) {
+      if (!seen.has(post.author.name)) {
+        seen.set(post.author.name, post.author.name)
+      }
+    }
+    return Array.from(seen.values())
+  }, [posts])
+
+  /** Posts filtered by selected member */
+  const filteredPosts = useMemo(() => {
+    if (activityMemberFilter === "all") return posts
+    return posts.filter(p => p.author.name === activityMemberFilter)
+  }, [posts, activityMemberFilter])
   const {
     members: leaderboardMembers,
     isLoading: leaderboardLoading,
@@ -605,6 +596,13 @@ function TeamContent() {
     setTimeRange,
     currentUserId,
   } = useTeamLeaderboard(currentTeam?.id)
+
+  const {
+    pendingRequests: joinRequests,
+    isLoading: joinRequestsLoading,
+    approveRequest,
+    rejectRequest,
+  } = useJoinRequests({ teamId: currentTeam?.id })
 
   const {
     invitations,
@@ -728,13 +726,6 @@ function TeamContent() {
         onInvitationsSent={handleInvitationsSent}
       />
 
-      {/* Pending Join Requests (admin/owner only) */}
-      {canManage && currentTeam && (
-        <div className="px-4 md:px-6 pt-4 max-w-5xl mx-auto w-full">
-          <JoinRequestsBanner teamId={currentTeam.id} />
-        </div>
-      )}
-
       {/* Animated Tab Bar - centered */}
       <div className="flex justify-center px-4 md:px-6 pt-5 pb-0">
         <AnimatedTabBar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -768,15 +759,29 @@ function TeamContent() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-base font-semibold">Recent Team Activity</h3>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/dashboard/team/activity" className="gap-1.5">
-                      View All Activity
-                      <IconChevronRight className="size-3.5" />
-                    </Link>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Select value={activityMemberFilter} onValueChange={setActivityMemberFilter}>
+                      <SelectTrigger className="w-[160px] h-8 rounded-lg text-xs">
+                        <IconFilter className="size-3.5 mr-1.5 shrink-0" />
+                        <SelectValue placeholder="All Members" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Members</SelectItem>
+                        {postAuthors.map(name => (
+                          <SelectItem key={name} value={name}>{name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/dashboard/team/activity" className="gap-1.5">
+                        View All Activity
+                        <IconChevronRight className="size-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
                 <PostGrid
-                  posts={posts}
+                  posts={filteredPosts}
                   isLoading={postsLoading}
                   currentUserId={user?.id}
                   postUserIds={postUserIds}
@@ -804,6 +809,9 @@ function TeamContent() {
                     await fetchMembers(currentTeam.id)
                   }
                 }}
+                joinRequests={canManage ? joinRequests : []}
+                onApproveRequest={approveRequest}
+                onRejectRequest={rejectRequest}
               />
 
               {canManage && pendingInvitations.length > 0 && (

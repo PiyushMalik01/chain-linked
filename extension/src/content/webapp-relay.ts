@@ -31,6 +31,39 @@ window.addEventListener('message', (event: MessageEvent) => {
     return
   }
 
+  // Relay status request to the service worker
+  if (event.data?.type === '__CL_STATUS_RELAY__' && event.data?.payload) {
+    const { requestId } = event.data.payload
+    console.log('[ChainLinked Relay] Forwarding status request to service worker')
+
+    chrome.runtime.sendMessage(
+      { type: 'CHAINLINKED_PING' },
+      (response: unknown) => {
+        const error = chrome.runtime?.lastError
+        if (error) {
+          console.error('[ChainLinked Relay] Status request error:', error.message)
+          window.postMessage({
+            type: '__CL_STATUS_RESPONSE__',
+            requestId,
+            status: null,
+          }, window.location.origin)
+          return
+        }
+
+        // Internal handler wraps response as { success, data: { installed, ... } }
+        const raw = response as { success?: boolean; data?: Record<string, unknown> } | null
+        const statusData = raw?.data ?? raw
+        console.log('[ChainLinked Relay] Status response:', statusData)
+        window.postMessage({
+          type: '__CL_STATUS_RESPONSE__',
+          requestId,
+          status: statusData,
+        }, window.location.origin)
+      }
+    )
+    return
+  }
+
   // Relay mention search requests to the service worker
   if (event.data?.type === '__CL_MENTION_SEARCH__' && event.data?.payload) {
     const { query, requestId } = event.data.payload
@@ -67,6 +100,18 @@ window.addEventListener('message', (event: MessageEvent) => {
         }, window.location.origin)
       }
     )
+  }
+})
+
+// Listen for auth state change broadcasts from the service worker
+// and forward them to the page so the platform can update instantly
+chrome.runtime.onMessage.addListener((message: { type?: string; event?: string; platformLoggedIn?: boolean }) => {
+  if (message?.type === 'CHAINLINKED_AUTH_STATE_CHANGED') {
+    window.postMessage({
+      type: '__CL_AUTH_STATE_CHANGED__',
+      event: message.event,
+      platformLoggedIn: message.platformLoggedIn,
+    }, window.location.origin)
   }
 })
 

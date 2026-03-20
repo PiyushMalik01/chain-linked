@@ -159,105 +159,130 @@ export const influencerPostScrape = inngest.createFunction(
       return { success: true, message: 'No active influencers', postsScraped: 0 }
     }
 
-    // Step 2: Scrape via Apify in batches of 5 profiles
-    const allScrapedPosts: Array<{ influencerGroup: InfluencerGroup; posts: ApifyLinkedInPost[] }> = []
+    // Step 2a: Start Apify runs for all influencers (fast — just kicks off the actor)
+    const apifyRunIds = await step.run('start-apify-runs', async () => {
+      const token = process.env.APIFY_API_TOKEN
+      if (!token) throw new Error('APIFY_API_TOKEN not set')
 
-    const batches: InfluencerGroup[][] = []
-    for (let i = 0; i < influencerGroups.length; i += 5) {
-      batches.push(influencerGroups.slice(i, i + 5))
-    }
+      const runIds: Array<{ runId: string; groupIndices: number[] }> = []
 
-    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-      const batch = batches[batchIdx]
-      const batchResults = await step.run(`scrape-batch-${batchIdx}`, async () => {
-        const urls = batch.map(g => g.linkedin_url)
-        const usernames = batch.map(g => g.linkedin_username).filter(Boolean) as string[]
-        const token = process.env.APIFY_API_TOKEN
-        if (!token) {
-          console.error('[InfluencerScrape] APIFY_API_TOKEN not set!')
-          throw new Error('APIFY_API_TOKEN not set')
+      // Batch into groups of 5 profiles per Apify run
+      for (let i = 0; i < influencerGroups.length; i += 5) {
+        const batch = influencerGroups.slice(i, i + 5)
+        const groupIndices = batch.map((_, idx) => i + idx)
+        const normalizedUrls = batch.map(g =>
+          g.linkedin_url.replace(/^https?:\/\/(www\.)?linkedin\.com/, 'https://www.linkedin.com')
+        )
+
+        const input = { targetUrls: normalizedUrls, maxPosts: LIMIT_PER_PROFILE }
+        console.log(`[InfluencerScrape] Starting Apify for ${normalizedUrls.length} profiles: ${normalizedUrls.join(', ')}`)
+
+        const startRes = await fetch(
+          `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${token}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }
+        )
+
+        if (!startRes.ok) {
+          console.error(`[InfluencerScrape] Apify start failed: ${startRes.status}`)
+          continue
         }
 
-        console.log(`[InfluencerScrape] Batch ${batchIdx}: calling Apify for ${urls.length} profiles: ${urls.join(', ')}`)
+        const data = await startRes.json() as { data?: { id?: string } }
+        if (data?.data?.id) {
+          runIds.push({ runId: data.data.id, groupIndices })
+          console.log(`[InfluencerScrape] Apify run started: ${data.data.id}`)
+        }
+      }
 
-        try {
-          // Use both targetUrls (documented) and profileUrls (legacy) for maximum compatibility
-          const input = {
-            targetUrls: urls,
-            profileUrls: urls,
-            profilePublicIdentifiers: usernames,
-            maxPosts: LIMIT_PER_PROFILE,
-          }
+      return runIds
+    })
 
-          console.log(`[InfluencerScrape] Apify input: ${JSON.stringify(input)}`)
+    // Step 2b: Wait for Apify runs to complete (60 seconds should be enough)
+    await step.sleep('wait-for-apify', '60s')
 
-          const response = await fetch(
-            `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync-get-dataset-items?token=${token}&timeout=180`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(input),
-            }
-          )
+    // Step 2c: Fetch results from all Apify runs
+    const allScrapedPosts: Array<{ influencerGroup: InfluencerGroup; posts: ApifyLinkedInPost[] }> = []
 
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.error(`[InfluencerScrape] Apify HTTP ${response.status}: ${errorText.slice(0, 500)}`)
-            throw new Error(`Apify run failed (${response.status}): ${errorText.slice(0, 200)}`)
-          }
+    for (let runIdx = 0; runIdx < apifyRunIds.length; runIdx++) {
+      const { runId, groupIndices } = apifyRunIds[runIdx]
+      const batch = groupIndices.map(i => influencerGroups[i])
 
-          const rawText = await response.text()
-          let items: ApifyLinkedInPost[]
+      const batchResults = await step.run(`fetch-apify-results-${runIdx}`, async () => {
+        const token = process.env.APIFY_API_TOKEN!
+
+        // Check run status
+        const statusRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${token}`)
+        const statusData = await statusRes.json() as { data?: { status?: string } }
+        const status = statusData?.data?.status
+
+        console.log(`[InfluencerScrape] Apify run ${runId} status: ${status}`)
+
+        if (status !== 'SUCCEEDED') {
+          console.error(`[InfluencerScrape] Apify run ${runId} not succeeded: ${status}`)
+          return batch.map(g => ({ influencerGroup: g, posts: [] as ApifyLinkedInPost[] }))
+        }
+
+        // Fetch dataset items
+        const datasetRes = await fetch(
+          `https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${token}`
+        )
+
+        let items: ApifyLinkedInPost[] = []
+        if (datasetRes.ok) {
           try {
-            items = JSON.parse(rawText)
+            items = await datasetRes.json() as ApifyLinkedInPost[]
           } catch {
-            console.error(`[InfluencerScrape] Failed to parse Apify response (${rawText.length} chars): ${rawText.slice(0, 300)}`)
-            throw new Error(`Apify returned invalid JSON (${rawText.length} chars)`)
+            console.error(`[InfluencerScrape] Failed to parse dataset for run ${runId}`)
           }
+        }
 
-          if (!Array.isArray(items)) {
-            console.error(`[InfluencerScrape] Apify returned non-array: ${typeof items}`, JSON.stringify(items).slice(0, 300))
-            items = []
-          }
+        if (!Array.isArray(items)) items = []
 
-          console.log(`[InfluencerScrape] Apify returned ${items.length} raw items`)
+        console.log(`[InfluencerScrape] Apify returned ${items.length} raw items`)
 
           // Log first item's structure for debugging
           if (items.length > 0) {
             const first = items[0]
-            console.log(`[InfluencerScrape] First item: author=${first.author?.publicIdentifier}, query=${first.query?.slice(0, 80)}, postedAt=${JSON.stringify(first.postedAt)}`)
+            console.log(`[InfluencerScrape] First item: author=${first.author?.publicIdentifier}, query=${String(first.query || '').slice(0, 80)}, postedAt=${JSON.stringify(first.postedAt)}`)
           }
 
-          // Filter to posts from last 14 days; accept posts with no date
-          const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
-          const recentItems = items.filter(item => {
-            if (!item.postedAt?.timestamp && !item.postedAt?.date) return true
-            const postedTime = item.postedAt.timestamp || new Date(item.postedAt.date!).getTime()
-            return postedTime >= fourteenDaysAgo
+        // Filter to posts from last 14 days
+        const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
+        const recentItems = items.filter(item => {
+          if (!item.postedAt?.timestamp && !item.postedAt?.date) return true
+          const postedTime = item.postedAt.timestamp || new Date(item.postedAt.date!).getTime()
+          return postedTime >= fourteenDaysAgo
+        })
+
+        console.log(`[InfluencerScrape] Date filter: ${recentItems.length}/${items.length} passed (14-day window)`)
+
+        // Match posts to influencers
+        const result = batch.map(group => {
+          const username = (group.linkedin_username || '').toLowerCase()
+          const profileUrlNorm = group.linkedin_url.toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
+
+          const groupPosts = recentItems.filter(item => {
+            const authorId = (item.author?.publicIdentifier || '').toLowerCase()
+            const authorUrl = (item.author?.linkedinUrl || '').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
+            const queryUrl = String(item.query || '').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
+
+            if (username && authorId === username) return true
+            if (username && (authorUrl.includes(`/in/${username}`) || queryUrl.includes(`/in/${username}`))) return true
+            if (queryUrl.includes(profileUrlNorm) || authorUrl.includes(profileUrlNorm)) return true
+            return false
           })
 
-          console.log(`[InfluencerScrape] Date filter: ${recentItems.length}/${items.length} passed (14-day window)`)
+          console.log(`[InfluencerScrape] Match ${group.linkedin_username}: ${groupPosts.length}/${recentItems.length} posts`)
+          return { influencerGroup: group, posts: groupPosts }
+        })
 
-          // Map posts back to their influencer groups by author publicIdentifier or URL
-          return batch.map(group => {
-            const groupPosts = recentItems.filter(item => {
-              const authorId = (item.author?.publicIdentifier || '').toLowerCase()
-              const authorUrl = (item.author?.linkedinUrl || '').toLowerCase()
-              const queryUrl = (item.query || '').toLowerCase()
-              const username = (group.linkedin_username || '__none__').toLowerCase()
-              const profileUrl = group.linkedin_url.toLowerCase()
-              return authorId === username ||
-                     queryUrl.includes(username) ||
-                     authorUrl.includes(username) ||
-                     queryUrl.includes(profileUrl)
-            })
-            console.log(`[InfluencerScrape] Match ${group.linkedin_username}: ${groupPosts.length}/${recentItems.length} posts`)
-            return { influencerGroup: group, posts: groupPosts }
-          })
-        } catch (error) {
-          console.error(`[InfluencerScrape] Batch ${batchIdx} scrape failed:`, error instanceof Error ? error.message : error)
-          return batch.map(group => ({ influencerGroup: group, posts: [] as ApifyLinkedInPost[] }))
+        // Fallback for single-profile batches
+        if (result.length === 1 && result[0].posts.length === 0 && recentItems.length > 0) {
+          console.log(`[InfluencerScrape] Fallback: assigning all ${recentItems.length} posts to sole influencer`)
+          result[0].posts = recentItems
         }
+
+        return result
       })
 
       allScrapedPosts.push(...batchResults)

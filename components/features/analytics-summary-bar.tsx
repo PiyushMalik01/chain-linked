@@ -100,7 +100,7 @@ export function AnalyticsSummaryBar({ summary, metric, isLoading }: AnalyticsSum
   if (isLoading) {
     return (
       <Card className="border-border/50">
-        <CardContent className="py-4">
+        <CardContent className="py-4 pr-10">
           <div className="grid grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="space-y-1.5">
@@ -164,7 +164,7 @@ export function AnalyticsSummaryBar({ summary, metric, isLoading }: AnalyticsSum
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
     >
       <Card className="border-border/50">
-        <CardContent className="py-4">
+        <CardContent className="py-4 pr-10">
           <div className="grid grid-cols-3 gap-4">
             {/* Total */}
             <div>

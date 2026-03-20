@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 /**
  * The source from which a draft originated
  */
-export type DraftSource = 'compose' | 'swipe' | 'discover' | 'inspiration' | 'research' | 'carousel'
+export type DraftSource = 'compose' | 'swipe' | 'discover' | 'inspiration' | 'research' | 'carousel' | 'series' | 'scheduled'
 
 /**
  * Unified draft item combining data from multiple Supabase tables
@@ -160,7 +160,30 @@ export function useDrafts(): UseDraftsReturn {
         updatedAt: row.updated_at,
       }))
 
-      setDrafts(unified)
+      // Also fetch scheduled posts as a "scheduled" draft source
+      const { data: scheduledData } = await supabase
+        .from('scheduled_posts')
+        .select('id, content, scheduled_for, status, created_at, updated_at')
+        .eq('user_id', user.id)
+        .in('status', ['pending', 'scheduled'])
+        .order('scheduled_for', { ascending: true })
+
+      const scheduledDrafts: SavedDraft[] = (scheduledData || []).map((row) => ({
+        id: row.id,
+        content: row.content,
+        source: 'scheduled' as DraftSource,
+        table: 'generated_posts' as const,
+        postType: 'scheduled',
+        category: null,
+        wordCount: countWords(row.content),
+        topic: null,
+        tone: null,
+        additionalContext: row.scheduled_for,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }))
+
+      setDrafts([...unified, ...scheduledDrafts])
     } catch (err) {
       console.error('Fetch drafts error:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch drafts')

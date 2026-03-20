@@ -184,7 +184,7 @@ function getStatusBadge(status: ScheduledPost["status"]): {
     default:
       return {
         variant: "secondary",
-        label: "Pending",
+        label: "Scheduled",
         icon: IconClock,
       }
   }

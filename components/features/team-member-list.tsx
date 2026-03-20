@@ -8,6 +8,7 @@
 
 import * as React from 'react'
 import {
+  IconCheck,
   IconCrown,
   IconDotsVertical,
   IconLoader2,
@@ -15,7 +16,9 @@ import {
   IconTrash,
   IconUser,
   IconUserCog,
+  IconUserPlus,
   IconUsers,
+  IconX,
 } from '@tabler/icons-react'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -42,6 +45,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { TeamMemberWithUser } from '@/hooks/use-team'
 import type { TeamMemberRole } from '@/types/database'
+import type { JoinRequest } from '@/hooks/use-join-requests'
 
 /**
  * Props for the TeamMemberList component
@@ -57,6 +61,12 @@ export interface TeamMemberListProps {
   onRemoveMember: (userId: string) => Promise<void>
   /** Callback to change a member's role */
   onRoleChange: (userId: string, role: 'admin' | 'member') => Promise<void>
+  /** Pending join requests to display inline (admin/owner only) */
+  joinRequests?: JoinRequest[]
+  /** Callback to approve a join request */
+  onApproveRequest?: (requestId: string) => Promise<boolean>
+  /** Callback to reject a join request */
+  onRejectRequest?: (requestId: string) => Promise<boolean>
   /** Custom class name */
   className?: string
 }
@@ -100,14 +110,115 @@ function getRoleBadgeProps(role: TeamMemberRole) {
 }
 
 /**
+ * Inline join request row matching the member row layout
+ * @param props.request - The join request to display
+ * @param props.onApprove - Callback when approve is clicked
+ * @param props.onReject - Callback when reject is clicked
+ */
+function InlineJoinRequestRow({
+  request,
+  onApprove,
+  onReject,
+}: {
+  request: JoinRequest
+  onApprove: () => Promise<boolean>
+  onReject: () => Promise<boolean>
+}) {
+  const [loading, setLoading] = React.useState<'approve' | 'reject' | null>(null)
+
+  const handleApprove = async () => {
+    setLoading('approve')
+    await onApprove()
+    setLoading(null)
+  }
+
+  const handleReject = async () => {
+    setLoading('reject')
+    await onReject()
+    setLoading(null)
+  }
+
+  const displayName = request.user?.full_name || request.user?.email || 'Unknown user'
+  const subtitle = request.user?.headline || request.user?.email || ''
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 -mx-1">
+      <div className="flex items-center gap-3">
+        {/* Avatar */}
+        <Avatar className="size-11 ring-2 ring-amber-500/20">
+          {request.user?.avatar_url ? (
+            <AvatarImage src={request.user.avatar_url} alt={displayName} />
+          ) : null}
+          <AvatarFallback className="text-sm font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+            {getInitials(displayName)}
+          </AvatarFallback>
+        </Avatar>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-medium truncate">{displayName}</p>
+            <Badge
+              variant="outline"
+              className="gap-1 shrink-0 border-amber-500/40 text-amber-700 bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30 text-[10px] px-1.5 py-0"
+            >
+              <IconUserPlus className="size-2.5" />
+              Join Request
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Requested {formatDistanceToNow(new Date(request.created_at), { addSuffix: true })}
+          </p>
+        </div>
+
+        {/* Accept / Reject buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10 gap-1"
+            onClick={handleReject}
+            disabled={loading !== null}
+          >
+            {loading === 'reject' ? (
+              <IconLoader2 className="size-3.5 animate-spin" />
+            ) : (
+              <IconX className="size-3.5" />
+            )}
+            Decline
+          </Button>
+          <Button
+            size="sm"
+            className="h-8 gap-1"
+            onClick={handleApprove}
+            disabled={loading !== null}
+          title="Approve request"
+        >
+          {loading === 'approve' ? (
+            <IconLoader2 className="size-3.5 animate-spin" />
+          ) : (
+            <IconCheck className="size-3.5" />
+          )}
+          Accept
+        </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Team Member List Component
  *
  * Displays a list of team members with their roles.
  * Allows owners to manage member roles and remove members.
+ * Pending join requests are shown inline as the first rows.
  *
  * Features:
  * - Avatar and name display
  * - Role badges
+ * - Inline join request rows with accept/reject actions
  * - Role management dropdown (for owners)
  * - Member removal with confirmation
  * - Loading state
@@ -121,6 +232,9 @@ function getRoleBadgeProps(role: TeamMemberRole) {
  *   currentUserRole="owner"
  *   onRemoveMember={handleRemove}
  *   onRoleChange={handleRoleChange}
+ *   joinRequests={pendingRequests}
+ *   onApproveRequest={approveRequest}
+ *   onRejectRequest={rejectRequest}
  * />
  */
 export function TeamMemberList({
@@ -129,6 +243,9 @@ export function TeamMemberList({
   currentUserRole,
   onRemoveMember,
   onRoleChange,
+  joinRequests = [],
+  onApproveRequest,
+  onRejectRequest,
   className,
 }: TeamMemberListProps) {
   const [memberToRemove, setMemberToRemove] = React.useState<TeamMemberWithUser | null>(null)
@@ -189,6 +306,18 @@ export function TeamMemberList({
   return (
     <>
       <div className={cn('divide-y', className)}>
+        {/* Inline join request rows (shown first) */}
+        {joinRequests.length > 0 && onApproveRequest && onRejectRequest && (
+          joinRequests.map((request) => (
+            <InlineJoinRequestRow
+              key={`jr-${request.id}`}
+              request={request}
+              onApprove={() => onApproveRequest(request.id)}
+              onReject={() => onRejectRequest(request.id)}
+            />
+          ))
+        )}
+
         {members.map((member) => {
           const roleProps = getRoleBadgeProps(member.role)
           const RoleIcon = roleProps.icon

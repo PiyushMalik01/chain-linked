@@ -8,7 +8,7 @@
 
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { isExtensionInstalled as detectExtension, getCachedExtensionStatus, type ExtensionStatus } from '@/lib/extension/detect'
+import { isExtensionInstalled as detectExtension, getCachedExtensionStatus, onExtensionAuthStateChange, type ExtensionStatus } from '@/lib/extension/detect'
 import type { User, Session } from '@supabase/supabase-js'
 
 /**
@@ -519,10 +519,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [supabase, fetchProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check extension status when user becomes authenticated
+  // Check extension status when user becomes authenticated,
+  // re-check on tab focus, and listen for real-time auth state changes
   useEffect(() => {
-    if (user && extensionInstalled === null) {
+    if (!user) return
+
+    // Initial check
+    if (extensionInstalled === null) {
       checkExtension()
+    }
+
+    // Re-check on tab focus so status updates after extension login/logout
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkExtension()
+      }
+    }
+
+    // Listen for real-time auth state changes from the extension
+    // (instant updates when user signs in/out of the extension)
+    const removeAuthListener = onExtensionAuthStateChange((status) => {
+      setExtensionStatus(status)
+      setExtensionInstalled(status.installed)
+    })
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      removeAuthListener()
     }
   }, [user, extensionInstalled, checkExtension])
 
