@@ -3121,6 +3121,15 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
             break;
           }
 
+          // Guard: reject if extension is already logged in as a different user
+          const existingSession = await chrome.storage.local.get('supabase_session');
+          const existingEmail = existingSession?.supabase_session?.user?.email;
+          if (existingEmail && sessionData.user?.email && existingEmail !== sessionData.user.email) {
+            console.warn(`[ServiceWorker] Rejecting session push: extension logged in as ${existingEmail}, push is for ${sessionData.user.email}`);
+            response = { success: false, error: 'Different user already logged in' };
+            break;
+          }
+
           // Save the session to chrome.storage.local (same format as SupabaseAuth)
           await chrome.storage.local.set({
             supabase_session: {

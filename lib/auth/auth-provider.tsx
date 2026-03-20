@@ -8,7 +8,7 @@
 
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { isExtensionInstalled as detectExtension, getCachedExtensionStatus, onExtensionAuthStateChange, type ExtensionStatus } from '@/lib/extension/detect'
+import { isExtensionInstalled as detectExtension, getCachedExtensionStatus, onExtensionAuthStateChange, pushSessionToExtension, type ExtensionStatus } from '@/lib/extension/detect'
 import type { User, Session } from '@supabase/supabase-js'
 
 /**
@@ -549,6 +549,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
       removeAuthListener()
     }
   }, [user, extensionInstalled, checkExtension])
+
+  // Auto-push session to extension when user is logged in but extension is not
+  useEffect(() => {
+    if (!session || !user) return
+    if (!extensionStatus?.installed) return
+    if (extensionStatus.platformLoggedIn) return // Already logged in
+    // Don't push if extension has a different user
+    if (extensionStatus.extensionUserEmail && extensionStatus.extensionUserEmail !== user.email) return
+
+    const timer = setTimeout(async () => {
+      console.log('[AuthProvider] Auto-pushing session to extension for:', user.email)
+      const accepted = await pushSessionToExtension(session)
+      if (accepted) {
+        console.log('[AuthProvider] Session auto-push accepted by extension')
+        checkExtension()
+      }
+    }, 1500)
+
+    return () => clearTimeout(timer)
+  }, [session, user, extensionStatus?.installed, extensionStatus?.platformLoggedIn, extensionStatus?.extensionUserEmail, checkExtension])
 
   // Re-fetch profile after a delay if LinkedIn data is missing.
   // This handles the race condition where the extension sync writes to

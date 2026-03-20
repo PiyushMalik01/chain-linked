@@ -63,4 +63,75 @@ window.addEventListener('message', (event: MessageEvent) => {
   }, window.location.origin)
 })
 
+/**
+ * Auto-session transfer: When the extension is not logged in but the webapp
+ * has a Supabase session, automatically push it via the relay.
+ * Runs as a fallback in case the React auth provider hasn't triggered yet.
+ */
+async function attemptAutoSessionTransfer(): Promise<void> {
+  // Wait for page and Supabase client to initialize
+  await new Promise(resolve => setTimeout(resolve, 4000))
+
+  // Check if extension is already logged in
+  const isLoggedIn = await new Promise<boolean>((resolve) => {
+    const reqId = Math.random().toString(36).slice(2)
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', handler)
+      resolve(false)
+    }, 2000)
+
+    function handler(event: MessageEvent) {
+      if (event.source !== window) return
+      if (event.data?.type !== '__CL_STATUS_RESPONSE__') return
+      if (event.data?.requestId !== reqId) return
+      clearTimeout(timeout)
+      window.removeEventListener('message', handler)
+      resolve(event.data.status?.platformLoggedIn === true)
+    }
+
+    window.addEventListener('message', handler)
+    window.postMessage({
+      type: '__CL_STATUS_RELAY__',
+      payload: { requestId: reqId },
+    }, window.location.origin)
+  })
+
+  if (isLoggedIn) return
+
+  // Try to read Supabase session from localStorage
+  const storageKey = Object.keys(localStorage).find(k =>
+    k.startsWith('sb-') && k.endsWith('-auth-token')
+  )
+  if (!storageKey) return
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '{}')
+    if (!stored?.access_token || !stored?.user?.id) return
+
+    console.log('[ChainLinked Bridge] Auto-pushing session to extension')
+    window.postMessage({
+      type: '__CL_AUTH_SESSION__',
+      payload: {
+        access_token: stored.access_token,
+        refresh_token: stored.refresh_token,
+        expires_in: stored.expires_in,
+        expires_at: stored.expires_at,
+        token_type: stored.token_type,
+        user: {
+          id: stored.user.id,
+          email: stored.user.email,
+          user_metadata: stored.user.user_metadata,
+        },
+      },
+    }, window.location.origin)
+  } catch {
+    // Silently fail
+  }
+}
+
+// Only attempt on allowed origins
+if (ALLOWED_ORIGINS.includes(window.location.origin)) {
+  attemptAutoSessionTransfer()
+}
+
 console.log('[ChainLinked Extension] WebApp bridge loaded')

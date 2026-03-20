@@ -289,6 +289,70 @@ export function onExtensionAuthStateChange(callback: (status: ExtensionStatus) =
   return () => window.removeEventListener('message', handler)
 }
 
+/** Session storage key for deduplicating session pushes */
+const SESSION_PUSH_KEY = 'chainlinked_session_push_ts'
+
+/**
+ * Push the current Supabase session to the extension via the content script relay.
+ * Uses the same __CL_AUTH_SESSION__ message type that /auth/extension-callback uses.
+ * @param session - Supabase session object
+ * @returns Promise resolving to true if the extension confirmed sign-in
+ */
+export function pushSessionToExtension(session: {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  expires_at?: number
+  token_type: string
+  user: { id: string; email?: string; user_metadata?: Record<string, unknown> }
+}): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false)
+
+  // Deduplicate: skip if pushed within last 30 seconds
+  try {
+    const lastPush = sessionStorage.getItem(SESSION_PUSH_KEY)
+    if (lastPush && Date.now() - parseInt(lastPush) < 30000) {
+      return Promise.resolve(true)
+    }
+    sessionStorage.setItem(SESSION_PUSH_KEY, String(Date.now()))
+  } catch { /* noop */ }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', handler)
+      resolve(false)
+    }, 5000)
+
+    function handler(event: MessageEvent) {
+      if (event.source !== window) return
+      if (event.data?.type !== '__CL_AUTH_STATE_CHANGED__') return
+      if (event.data?.event !== 'SIGNED_IN') return
+      clearTimeout(timeout)
+      window.removeEventListener('message', handler)
+      resolve(true)
+    }
+
+    window.addEventListener('message', handler)
+
+    // Post session via the relay channel (same as extension-callback page)
+    window.postMessage({
+      type: '__CL_AUTH_SESSION__',
+      payload: {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_in: session.expires_in,
+        expires_at: session.expires_at,
+        token_type: session.token_type,
+        user: {
+          id: session.user.id,
+          email: session.user.email,
+          user_metadata: session.user.user_metadata,
+        },
+      },
+    }, window.location.origin)
+  })
+}
+
 /**
  * Check if the prompt has been dismissed
  * Permanent dismissal uses localStorage (survives logout).

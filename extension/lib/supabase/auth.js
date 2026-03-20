@@ -184,10 +184,7 @@ class SupabaseAuth {
     try {
       console.log('[SupabaseAuth] Opening platform login for Google sign-in...');
 
-      // Detect dev mode: unpacked extensions have no update_url in manifest
-      const manifest = chrome.runtime.getManifest();
-      const isDev = !manifest.update_url;
-      const baseUrl = isDev ? 'http://localhost:3000' : 'https://chainlinked.ai';
+      const baseUrl = 'https://chainlinked.ai';
       const loginUrl = `${baseUrl}/login?redirect=/auth/extension-callback`;
       await chrome.tabs.create({ url: loginUrl });
 
