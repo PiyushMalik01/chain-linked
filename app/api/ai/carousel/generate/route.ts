@@ -22,6 +22,7 @@ import {
 } from '@/lib/ai/carousel-prompts'
 import type { TemplateSlot, SlideBreakdown } from '@/lib/ai/template-analyzer'
 import { PromptService, PromptType } from '@/lib/prompts'
+import { trackAIEvent } from '@/lib/posthog-server'
 
 /**
  * Request validation schema
@@ -287,6 +288,9 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Track AI generation start
+    try { trackAIEvent(user.id, 'ai_generation_started', { feature: 'carousel', topic: input.topic, tone: input.tone, totalSlides: input.templateAnalysis.totalSlides }) } catch {}
+
     // Call AI
     const completion = await client.chat.completions.create({
       model: 'openai/gpt-4o',
@@ -400,10 +404,16 @@ export async function POST(request: NextRequest) {
       console.error('[Carousel] Failed to log usage:', logError)
     }
 
+    // Track AI generation completed
+    try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'carousel', topic: input.topic, tone: input.tone, model: 'gpt-4o', tokens: completion.usage?.total_tokens ?? 0, response_time_ms: generationTime, slotsGenerated: slots.length }) } catch {}
+
     return NextResponse.json(response)
 
   } catch (error) {
     console.error('Carousel generation error:', error)
+
+    // Track AI generation failure
+    try { trackAIEvent('anonymous', 'ai_generation_failed', { feature: 'carousel', error: error instanceof Error ? error.message : 'Unknown error' }) } catch {}
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
