@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthContext } from '@/lib/auth/auth-provider'
 import type { Tables } from '@/types/database'
@@ -116,7 +116,7 @@ export function usePostAnalytics(userId?: string, limit = 10): UsePostAnalyticsR
   const [rawPosts, setRawPosts] = useState<Tables<'post_analytics'>[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
 
   /**
    * Fetch post analytics from database
@@ -144,7 +144,7 @@ export function usePostAnalytics(userId?: string, limit = 10): UsePostAnalyticsR
       setError(null)
 
       // Fetch post analytics ordered by impressions
-      const { data: analyticsData, error: analyticsError } = await supabase
+      const { data: analyticsData, error: analyticsError } = await supabaseRef.current
         .from('post_analytics')
         .select('*')
         .eq('user_id', targetUserId)
@@ -161,7 +161,7 @@ export function usePostAnalytics(userId?: string, limit = 10): UsePostAnalyticsR
       }
 
       // Fetch user's profile for author info
-      const { data: profileData } = await supabase
+      const { data: profileData } = await supabaseRef.current
         .from('linkedin_profiles')
         .select('first_name, last_name, profile_picture_url')
         .eq('user_id', targetUserId)
@@ -177,7 +177,7 @@ export function usePostAnalytics(userId?: string, limit = 10): UsePostAnalyticsR
       if (!analyticsData || analyticsData.length === 0) {
         console.info('No post_analytics found, checking my_posts...')
 
-        const { data: myPostsData, error: myPostsError } = await supabase
+        const { data: myPostsData, error: myPostsError } = await supabaseRef.current
           .from('my_posts')
           .select('*')
           .eq('user_id', targetUserId)
@@ -280,7 +280,7 @@ export function usePostAnalytics(userId?: string, limit = 10): UsePostAnalyticsR
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, userId, user?.id, limit, authLoading])
+  }, [userId, user?.id, limit, authLoading])
 
   /**
    * Select a post for detailed view

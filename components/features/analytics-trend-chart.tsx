@@ -244,9 +244,11 @@ export function AnalyticsTrendChart({
       return data.map((d) => ({ date: d.date, value: d.value }))
     }
 
-    return data.map((d, i) => ({
-      date: d.date,
-      value: d.value,
+    // Align comparison data by relative day offset within the period
+    const maxLen = Math.max(data.length, comparisonData.length)
+    return Array.from({ length: maxLen }, (_, i) => ({
+      date: data[i]?.date ?? `offset-${i}`,
+      value: data[i]?.value ?? null,
       compValue: comparisonData[i]?.value ?? null,
     }))
   }, [data, comparisonData, showComparison, isAllMode, allChartData])

@@ -137,7 +137,7 @@ function SignupForm() {
       }
 
       toast.success('Account created successfully!')
-      router.push('/dashboard')
+      router.push('/onboarding')
       router.refresh()
     } catch (error) {
       console.error('Signup error:', error)

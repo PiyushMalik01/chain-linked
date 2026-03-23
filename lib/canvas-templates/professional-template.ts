@@ -1,7 +1,8 @@
 /**
  * Professional Template
- * Clean business style with navy and blue accent colors
- * Enhanced with decorative geometric shapes for visual depth
+ * @description Clean business style with navy and blue accent colors.
+ * Enhanced with decorative geometric shapes for visual depth.
+ * @module lib/canvas-templates/professional-template
  */
 
 import type { CanvasTemplate, CanvasSlide } from '@/types/canvas-editor';

@@ -278,8 +278,8 @@ export function stripUnicodeFont(text: string): string {
  * Returns the new full text and the updated end position of the selection.
  *
  * @param fullText - The complete text content
- * @param start - Selection start index (code-point index)
- * @param end - Selection end index (code-point index)
+ * @param start - Selection start index (UTF-16 code unit index, as provided by textarea.selectionStart)
+ * @param end - Selection end index (UTF-16 code unit index)
  * @param style - Target font style
  * @returns Object with the new text and updated end position
  * @example
@@ -390,14 +390,3 @@ export function isTextStyled(text: string, style: UnicodeFontStyle): boolean {
   return hasAlpha
 }
 
-/**
- * Returns the code-point-aware length of a string.
- * Use this instead of `.length` for accurate LinkedIn character counting,
- * since Unicode math chars are surrogate pairs in UTF-16.
- *
- * @param text - Text to measure
- * @returns Code point count
- */
-export function codePointLength(text: string): number {
-  return [...text].length
-}

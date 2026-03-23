@@ -1,7 +1,8 @@
 /**
  * Story Template
- * Narrative flow style for storytelling carousels
- * Enhanced with visual storytelling elements - framing shapes, progress indicators, motifs
+ * @description Narrative flow style for storytelling carousels.
+ * Enhanced with visual storytelling elements including framing shapes, progress indicators, and motifs.
+ * @module lib/canvas-templates/story-template
  */
 
 import type { CanvasTemplate, CanvasSlide } from '@/types/canvas-editor';

@@ -48,7 +48,7 @@ export function validatePostContent(content: string): void {
     throw new Error('Post content cannot be empty')
   }
 
-  if ([...content].length > MAX_POST_LENGTH) {
+  if (content.length > MAX_POST_LENGTH) {
     throw new Error(`Post content exceeds maximum length of ${MAX_POST_LENGTH} characters`)
   }
 }
@@ -185,6 +185,7 @@ async function registerMediaUpload(
  * @returns True if upload succeeded
  */
 async function uploadMediaBinary(
+  accessToken: string,
   uploadUrl: string,
   mediaData: ArrayBuffer,
   contentType: string
@@ -192,6 +193,7 @@ async function uploadMediaBinary(
   const response = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': contentType,
     },
     body: new Blob([mediaData], { type: contentType }),
@@ -248,6 +250,7 @@ export async function uploadImageFromBuffer(
     ? imageData
     : imageData.buffer.slice(imageData.byteOffset, imageData.byteOffset + imageData.byteLength) as ArrayBuffer
   const uploadSuccess = await uploadMediaBinary(
+    client.getAccessToken(),
     uploadInfo.uploadUrl,
     arrayBuffer,
     contentType
@@ -285,6 +288,7 @@ export async function uploadImage(
 
   // Step 3: Upload the binary
   const uploadSuccess = await uploadMediaBinary(
+    client.getAccessToken(),
     uploadInfo.uploadUrl,
     buffer,
     contentType
@@ -449,6 +453,5 @@ export function extractPostIdFromUrn(urn: string): string {
  * @returns URL to view the post on LinkedIn
  */
 export function buildPostUrl(urn: string): string {
-  const postId = extractPostIdFromUrn(urn)
   return `https://www.linkedin.com/feed/update/${urn}`
 }

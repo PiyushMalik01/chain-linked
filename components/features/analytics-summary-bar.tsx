@@ -8,8 +8,7 @@
  * @module components/features/analytics-summary-bar
  */
 
-import { useEffect } from "react"
-import { motion, useSpring, useTransform } from "framer-motion"
+import { motion } from "framer-motion"
 import {
   IconTrendingUp,
   IconTrendingDown,
@@ -22,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import type { AnalyticsSummary } from "@/hooks/use-analytics-v2"
 import { isProfileMetric } from "@/hooks/use-analytics-v2"
 import { LottieEmptyState } from "@/components/shared/lottie-empty-state"
+import { AnimatedNumber } from "@/components/shared/animated-number"
 
 /** Metric display labels */
 const METRIC_LABELS: Record<string, string> = {
@@ -51,41 +51,6 @@ interface AnalyticsSummaryBarProps {
   metric: string
   /** Whether data is loading */
   isLoading: boolean
-}
-
-/**
- * Animated number counter with spring physics
- * @param props.value - Target value to animate to
- * @param props.decimals - Number of decimal places
- * @param props.suffix - Suffix to append (e.g., "%")
- * @returns Animated number span
- */
-function AnimatedNumber({
-  value,
-  decimals = 0,
-  suffix = "",
-}: {
-  value: number
-  decimals?: number
-  suffix?: string
-}) {
-  const spring = useSpring(0, { stiffness: 50, damping: 20 })
-  const display = useTransform(spring, (current) => {
-    if (decimals > 0) {
-      return `${current.toFixed(decimals)}${suffix}`
-    }
-    return `${Math.round(current).toLocaleString()}${suffix}`
-  })
-
-  useEffect(() => {
-    if (value === 0) {
-      spring.jump(0)
-    } else {
-      spring.set(value)
-    }
-  }, [spring, value])
-
-  return <motion.span>{display}</motion.span>
 }
 
 /**

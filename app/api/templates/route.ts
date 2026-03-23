@@ -144,10 +144,10 @@ export async function PATCH(request: Request) {
 
       const newUsageCount = (template.usage_count || 0) + 1
 
-      // For public templates not owned by user, update without user_id filter
+      // Only update usage_count when incrementing — ignore any other fields in the request
       const updateQuery = template.is_public && template.user_id !== user.id
         ? supabase.from('templates').update({ usage_count: newUsageCount }).eq('id', id)
-        : supabase.from('templates').update({ ...updates, usage_count: newUsageCount }).eq('id', id).eq('user_id', user.id)
+        : supabase.from('templates').update({ usage_count: newUsageCount }).eq('id', id).eq('user_id', user.id)
 
       const { data: updatedTemplate, error: updateError } = await updateQuery.select().single()
 

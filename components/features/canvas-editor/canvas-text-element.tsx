@@ -2,7 +2,9 @@
 
 /**
  * Canvas Text Element Component
- * Editable text element with selection and transformation
+ * @description Renders an editable text element on the Konva canvas with inline editing,
+ * selection highlighting, and drag/resize transformation handles.
+ * @module components/features/canvas-editor/canvas-text-element
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';

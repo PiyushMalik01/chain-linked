@@ -1,6 +1,8 @@
 /**
  * Canvas Editor Type Definitions
- * Types for the Canva-style carousel template editor
+ * @description Types for the Canva-style carousel template editor including slides, elements,
+ * templates, and editor state management
+ * @module types/canvas-editor
  */
 
 /**

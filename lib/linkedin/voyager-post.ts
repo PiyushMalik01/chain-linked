@@ -125,7 +125,7 @@ function extractMentionsAndHashtags(content: string): Array<Record<string, unkno
   const attributes: Array<Record<string, unknown>> = []
 
   // Extract hashtags
-  const hashtagRegex = /#(\w+)/g
+  const hashtagRegex = /#([\p{L}\p{N}_]+)/gu
   let match
 
   while ((match = hashtagRegex.exec(content)) !== null) {
@@ -329,6 +329,11 @@ export class VoyagerPostService {
 
   /**
    * Repost/share an existing post
+   *
+   * NOTE: Even when commentary is empty, the profile URN is still required by
+   * the Voyager API to set the `author` field on the share payload, so the
+   * profile fetch inside `createPost` cannot be skipped.
+   *
    * @param originalPostUrn - URN of post to repost
    * @param commentary - Optional commentary to add
    * @returns Promise resolving to CreatePostResult

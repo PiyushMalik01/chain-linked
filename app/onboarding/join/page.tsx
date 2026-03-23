@@ -22,6 +22,7 @@ import {
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -69,10 +70,6 @@ function StepDots({ current, total }: { current: number; total: number }) {
   )
 }
 
-function cn(...classes: (string | undefined | false | null)[]): string {
-  return classes.filter(Boolean).join(' ')
-}
-
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -95,7 +92,7 @@ export default function JoinPage() {
   const [isCompleting, setIsCompleting] = useState(false)
   const [linkedinConnected, setLinkedinConnected] = useState(false)
 
-  const stepIndex: Record<JoinStep, number> = { connect: 0, search: 1, request: 2 }
+  const stepIndex: Record<JoinStep, number> = { connect: 0, search: 1, request: 1 }
 
   /**
    * Handles proceeding from LinkedIn connect to company search step
@@ -117,22 +114,6 @@ export default function JoinPage() {
   }, [])
 
   /**
-   * Handles submitting a join request to the selected team
-   */
-  const handleSubmitRequest = useCallback(async () => {
-    if (!selectedTeam) return
-
-    setIsSubmitting(true)
-    const request = await submitRequest(selectedTeam.id, message.trim() || undefined)
-    setIsSubmitting(false)
-
-    if (request) {
-      toast.success('Request sent! You can now enter the platform.')
-      await handleCompleteOnboarding()
-    }
-  }, [selectedTeam, message, submitRequest])
-
-  /**
    * Completes onboarding and navigates to the dashboard
    */
   const handleCompleteOnboarding = useCallback(async () => {
@@ -151,6 +132,22 @@ export default function JoinPage() {
       setIsCompleting(false)
     }
   }, [refreshProfile, router])
+
+  /**
+   * Handles submitting a join request to the selected team
+   */
+  const handleSubmitRequest = useCallback(async () => {
+    if (!selectedTeam) return
+
+    setIsSubmitting(true)
+    const request = await submitRequest(selectedTeam.id, message.trim() || undefined)
+    setIsSubmitting(false)
+
+    if (request) {
+      toast.success('Request sent! You can now enter the platform.')
+      await handleCompleteOnboarding()
+    }
+  }, [selectedTeam, message, submitRequest, handleCompleteOnboarding])
 
   /**
    * Skips company search and completes onboarding

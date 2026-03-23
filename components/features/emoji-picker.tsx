@@ -1,3 +1,10 @@
+/**
+ * Emoji Picker Component
+ * @description Popover-based emoji picker with categorized tabs, search functionality,
+ * and a recent-emojis section. Mirrors LinkedIn's emoji palette.
+ * @module components/features/emoji-picker
+ */
+
 "use client"
 
 import * as React from "react"

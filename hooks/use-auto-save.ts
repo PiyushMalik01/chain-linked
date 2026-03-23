@@ -1,32 +1,59 @@
 "use client"
 
+/**
+ * Auto-Save Hook
+ * @description Debounced auto-save with real persistence feedback
+ * @module hooks/use-auto-save
+ */
+
 import * as React from "react"
 
 /**
- * Hook to provide auto-save status indication.
- * Debounces the value changes and returns saving status.
+ * Callback type for the actual save operation
+ * @returns Promise that resolves to true if save succeeded, false otherwise
+ */
+type SaveFn = () => Promise<boolean>
+
+/**
+ * Hook to provide auto-save functionality with real persistence feedback.
+ * Debounces value changes and invokes a save callback, reporting actual success/failure.
  *
  * @param value - The value to monitor for changes
+ * @param saveFn - Async function that performs the actual save. Must return true on success.
  * @param delay - Debounce delay in milliseconds (default: 1500ms)
- * @returns Object with isSaving status and lastSaved timestamp
+ * @returns Object with isSaving status, lastSaved timestamp, and hasChanges flag
  *
  * @example
  * ```tsx
- * const { isSaving, lastSaved } = useAutoSave(content)
+ * const { isSaving, lastSaved } = useAutoSave(
+ *   content,
+ *   async () => {
+ *     const res = await fetch('/api/drafts/auto-save', { method: 'POST', body: ... })
+ *     return res.ok
+ *   },
+ *   2000
+ * )
  *
  * return (
  *   <div>
- *     {isSaving ? "Saving..." : `Last saved ${formatTime(lastSaved)}`}
+ *     {isSaving ? "Saving..." : lastSaved ? `Saved ${formatLastSaved(lastSaved)}` : null}
  *   </div>
  * )
  * ```
  */
-export function useAutoSave(value: unknown, delay: number = 1500) {
+export function useAutoSave(value: unknown, saveFn?: SaveFn | null, delay: number = 1500) {
   const [isSaving, setIsSaving] = React.useState(false)
   const [lastSaved, setLastSaved] = React.useState<Date | null>(null)
   const [hasChanges, setHasChanges] = React.useState(false)
+  const [saveError, setSaveError] = React.useState(false)
   const previousValueRef = React.useRef<unknown>(value)
   const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveFnRef = React.useRef(saveFn)
+
+  // Keep saveFn ref up to date without triggering effect re-runs
+  React.useEffect(() => {
+    saveFnRef.current = saveFn
+  }, [saveFn])
 
   React.useEffect(() => {
     // Check if value has changed
@@ -35,18 +62,36 @@ export function useAutoSave(value: unknown, delay: number = 1500) {
 
     if (valueStr !== prevValueStr) {
       setHasChanges(true)
-      setIsSaving(true)
+      setSaveError(false)
 
       // Clear existing timeout
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
       }
 
-      // Set new timeout for "save complete"
-      timeoutRef.current = setTimeout(() => {
-        setIsSaving(false)
-        setLastSaved(new Date())
-        setHasChanges(false)
+      // Debounce: wait for user to stop typing, then perform the actual save
+      timeoutRef.current = setTimeout(async () => {
+        if (saveFnRef.current) {
+          setIsSaving(true)
+          try {
+            const success = await saveFnRef.current()
+            if (success) {
+              setLastSaved(new Date())
+              setHasChanges(false)
+              setSaveError(false)
+            } else {
+              setSaveError(true)
+            }
+          } catch {
+            setSaveError(true)
+          } finally {
+            setIsSaving(false)
+          }
+        } else {
+          // No save function provided — act as a change indicator only
+          setLastSaved(new Date())
+          setHasChanges(false)
+        }
       }, delay)
 
       previousValueRef.current = value
@@ -59,7 +104,7 @@ export function useAutoSave(value: unknown, delay: number = 1500) {
     }
   }, [value, delay])
 
-  return { isSaving, lastSaved, hasChanges }
+  return { isSaving, lastSaved, hasChanges, saveError }
 }
 
 /**

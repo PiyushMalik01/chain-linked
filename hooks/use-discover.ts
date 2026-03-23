@@ -85,6 +85,8 @@ interface DiscoverState {
   showTopicSelection: boolean
   /** Whether topic preferences are still loading from DB */
   isLoadingTopics: boolean
+  /** Counter to force re-fetch without toggling activeTopic */
+  fetchKey: number
 }
 
 /**
@@ -286,6 +288,7 @@ export function useDiscover() {
     searchQuery: "",
     showTopicSelection: false,
     isLoadingTopics: true,
+    fetchKey: 0,
   })
 
   /**
@@ -438,7 +441,7 @@ export function useDiscover() {
     return () => {
       cancelled = true
     }
-  }, [state.activeTopic, state.sort, state.searchQuery])
+  }, [state.activeTopic, state.sort, state.searchQuery, state.fetchKey])
 
   /**
    * Load more articles for infinite scroll
@@ -597,36 +600,24 @@ export function useDiscover() {
   }, [])
 
   /**
-   * Retry loading articles
+   * Retry loading articles by incrementing fetchKey
    */
   const retry = React.useCallback(() => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }))
-    const currentTopic = state.activeTopic
-    setState((prev) => ({ ...prev, activeTopic: "" }))
-    setTimeout(() => {
-      setState((prev) => ({ ...prev, activeTopic: currentTopic }))
-    }, 0)
-  }, [state.activeTopic])
+    setState((prev) => ({ ...prev, error: null, fetchKey: prev.fetchKey + 1 }))
+  }, [])
 
   /**
-   * Refresh the current feed
+   * Refresh the current feed by incrementing fetchKey
    */
   const refresh = React.useCallback(() => {
     setState((prev) => ({
       ...prev,
       page: 1,
       hasMore: false,
-      articles: [],
-      isLoading: true,
       error: null,
+      fetchKey: prev.fetchKey + 1,
     }))
-    // Re-trigger by toggling activeTopic
-    const currentTopic = state.activeTopic
-    setState((prev) => ({ ...prev, activeTopic: "" }))
-    setTimeout(() => {
-      setState((prev) => ({ ...prev, activeTopic: currentTopic }))
-    }, 0)
-  }, [state.activeTopic])
+  }, [])
 
   return {
     ...state,

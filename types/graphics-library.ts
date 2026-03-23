@@ -1,7 +1,8 @@
 /**
  * Graphics Library Type Definitions
- * Types for the graphics/image library panel used in the canvas carousel editor.
+ * @description Types for the graphics/image library panel used in the canvas carousel editor.
  * Covers photo search (Unsplash), curated icons, and decorative shapes.
+ * @module types/graphics-library
  */
 
 /**

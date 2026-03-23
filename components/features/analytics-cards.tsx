@@ -6,8 +6,8 @@
  * @module components/features/analytics-cards
  */
 
-import { useEffect, useState } from 'react'
-import { motion, useSpring, useTransform } from 'framer-motion'
+import { useState } from 'react'
+import { motion } from 'framer-motion'
 import {
   IconEye,
   IconSearch,
@@ -39,6 +39,7 @@ import {
   staggerItemVariants,
   cardHoverProps,
 } from '@/lib/animations'
+import { AnimatedNumber } from '@/components/shared/animated-number'
 
 /**
  * Metric data structure for analytics cards
@@ -72,40 +73,6 @@ const DEFAULT_METRICS: Omit<Required<AnalyticsCardsProps>, 'variant'> = {
   searchAppearances: { value: 0, change: 0 },
   connections: { value: 0, change: 0 },
   membersReached: { value: 0, change: 0 },
-}
-
-/**
- * Animated number counter component
- * Shows value immediately when 0, animates only for non-zero values
- */
-function AnimatedNumber({
-  value,
-  decimals = 0,
-  suffix = '',
-  prefix = '',
-}: {
-  value: number
-  decimals?: number
-  suffix?: string
-  prefix?: string
-}) {
-  const spring = useSpring(0, { stiffness: 50, damping: 20 })
-  const display = useTransform(spring, (current) => {
-    if (decimals > 0) {
-      return `${prefix}${current.toFixed(decimals)}${suffix}`
-    }
-    return `${prefix}${Math.round(current).toLocaleString()}${suffix}`
-  })
-
-  useEffect(() => {
-    if (value === 0) {
-      spring.jump(0)
-    } else {
-      spring.set(value)
-    }
-  }, [spring, value])
-
-  return <motion.span>{display}</motion.span>
 }
 
 /**

@@ -398,6 +398,8 @@ function ComposeContent() {
   const handlePost = React.useCallback(async (content: string, mediaFiles?: MediaFile[]) => {
     // Mark as saved to prevent auto-save on unmount after posting
     draftSavedRef.current = true
+    // Clear contentRef to prevent unmount effect from saving stale content
+    contentRef.current = ""
 
     // Build request body
     const body: Record<string, unknown> = {
@@ -442,10 +444,19 @@ function ComposeContent() {
    * Handle scheduling a post
    * Saves to scheduled_posts table (insert for new, update for edit)
    */
-  const handleSchedule = React.useCallback(async (content: string, scheduledFor: Date, _timezone: string) => {
+  const handleSchedule = React.useCallback(async (content: string, scheduledFor: Date, timezone: string) => {
     if (!user) {
       throw new Error('Please log in to schedule posts')
     }
+
+    // The scheduledFor Date was constructed in browser local time using the
+    // hour/minute the user picked. We need to reinterpret those values as
+    // being in the *selected* timezone so the stored UTC value is correct.
+    const browserOffset = scheduledFor.getTimezoneOffset() // minutes (inverted sign)
+    const targetDate = new Date(scheduledFor.toLocaleString('en-US', { timeZone: timezone }))
+    const targetOffset = targetDate.getTimezoneOffset()
+    const offsetDiff = (browserOffset - targetOffset) * 60 * 1000
+    const correctedDate = new Date(scheduledFor.getTime() + offsetDiff)
 
     // Mark as saved to prevent auto-save on unmount after scheduling
     draftSavedRef.current = true
@@ -456,7 +467,7 @@ function ComposeContent() {
         .from('scheduled_posts')
         .update({
           content,
-          scheduled_for: scheduledFor.toISOString(),
+          scheduled_for: correctedDate.toISOString(),
           status: 'pending',
         })
         .eq('id', editingPost.id)
@@ -482,7 +493,7 @@ function ComposeContent() {
       .insert({
         user_id: user.id,
         content,
-        scheduled_for: scheduledFor.toISOString(),
+        scheduled_for: correctedDate.toISOString(),
         status: 'pending',
         visibility: 'PUBLIC',
       })

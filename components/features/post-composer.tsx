@@ -1,3 +1,10 @@
+/**
+ * Post Composer Component
+ * @description Rich text editor for composing LinkedIn posts with formatting toolbar,
+ * AI assistance, emoji picker, media upload, LinkedIn preview, and scheduling support.
+ * @module components/features/post-composer
+ */
+
 "use client"
 
 import * as React from "react"
@@ -326,8 +333,36 @@ export function PostComposer({
   const [isSavingDraft, setIsSavingDraft] = React.useState(false)
   const [draftSaved, setDraftSaved] = React.useState(false)
 
-  // Auto-save status indicator
-  const { isSaving, lastSaved } = useAutoSave(content, 1500)
+  // Auto-save: debounce content changes and persist to /api/drafts/auto-save
+  const autoSaveFn = React.useCallback(async (): Promise<boolean> => {
+    const trimmed = content.trim()
+    if (!trimmed) return false
+    try {
+      const wordCount = trimmed.split(/\s+/).filter(Boolean).length
+      const res = await fetch('/api/drafts/auto-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: trimmed,
+          postType: 'general',
+          wordCount,
+          draftId: draft.savedDraftId || undefined,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.id) {
+          updateDraft({ savedDraftId: data.id })
+        }
+        return true
+      }
+      return false
+    } catch {
+      return false
+    }
+  }, [content, draft.savedDraftId, updateDraft])
+
+  const { isSaving, lastSaved, saveError } = useAutoSave(content, autoSaveFn, 2000)
 
   // Click-outside detection for edit mode
   React.useEffect(() => {
@@ -1029,13 +1064,15 @@ export function PostComposer({
                 </div>
                 <div className="flex items-center gap-3">
                   {/* Auto-save indicator */}
-                  {(isSaving || lastSaved) && (
+                  {(isSaving || lastSaved || saveError) && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       {isSaving ? (
                         <>
                           <IconLoader2 className="size-3 animate-spin" />
                           <span>Saving...</span>
                         </>
+                      ) : saveError ? (
+                        <span className="text-destructive">Save failed</span>
                       ) : lastSaved ? (
                         <>
                           <IconCheck className="size-3 text-green-500" />
@@ -1068,12 +1105,11 @@ export function PostComposer({
                         handleContentChange('')
                         setIsEditing(false)
                         setMediaFiles([])
-                        setComposeMode('advanced')
                       }}
                       className="text-xs text-muted-foreground gap-1"
                     >
                       <IconX className="size-3" />
-                      New Chat
+                      Start Over
                     </Button>
                   )}
                   <ComposeModeToggle mode={composeMode} onModeChange={setComposeMode} />
@@ -1787,7 +1823,7 @@ export function PostComposer({
                     }
                     const hashtagString = newTags.map(t => `#${t}`).join(' ')
                     const separator = content.trim() ? '\n\n' : ''
-                    setContent(prev => prev.trimEnd() + separator + hashtagString)
+                    handleContentChange(content.trimEnd() + separator + hashtagString)
                     toast.success(`Added ${newTags.length} hashtag${newTags.length > 1 ? 's' : ''}`)
                   }}
                 >

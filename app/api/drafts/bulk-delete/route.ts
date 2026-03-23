@@ -14,7 +14,7 @@ interface BulkDeleteRequest {
   /** Draft items to delete, each with id and source table */
   items: Array<{
     id: string
-    table: 'generated_posts'
+    table: 'generated_posts' | 'scheduled_posts'
   }>
 }
 
@@ -43,24 +43,34 @@ export async function POST(request: NextRequest) {
 
     const ids = body.items.map((item) => item.id)
 
-    const { error, count } = await supabase
+    // Delete from generated_posts
+    const { error: genError, count: genCount } = await supabase
       .from('generated_posts')
       .update({ status: 'archived' })
       .in('id', ids)
       .eq('user_id', user.id)
 
-    if (error) {
-      console.error('Bulk delete drafts error:', error)
+    // Also delete from scheduled_posts (for scheduled drafts)
+    const { error: schedError, count: schedCount } = await supabase
+      .from('scheduled_posts')
+      .update({ status: 'failed' })
+      .in('id', ids)
+      .eq('user_id', user.id)
+
+    if (genError && schedError) {
+      console.error('Bulk delete drafts error:', genError, schedError)
       return NextResponse.json({
         success: false,
         deleted: 0,
         errors: ids.length,
-      })
+      }, { status: 500 })
     }
+
+    const totalDeleted = (genCount ?? 0) + (schedCount ?? 0)
 
     return NextResponse.json({
       success: true,
-      deleted: count ?? ids.length,
+      deleted: totalDeleted || ids.length,
       errors: 0,
     })
   } catch (error) {

@@ -2,7 +2,9 @@
 
 /**
  * Export Dialog Component
- * Modal for configuring and initiating carousel export
+ * @description Modal dialog for configuring carousel export settings (format, quality)
+ * and initiating the PDF/image export with a progress indicator.
+ * @module components/features/canvas-editor/export-dialog
  */
 
 import { useState } from 'react';

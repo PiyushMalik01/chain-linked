@@ -1,8 +1,9 @@
 /**
  * White Minimal Time Management Tips Template
- * Clean beige/cream design with black typography and subtle accents
- * Features: Numbered tips, decorative arc, navigation elements
- * Enhanced with clock/time-themed decorative shapes and elegant accents
+ * @description Clean beige/cream design with black typography and subtle accents.
+ * Features numbered tips, decorative arc, navigation elements, and clock/time-themed
+ * decorative shapes with elegant accents.
+ * @module lib/canvas-templates/white-minimal-time-management-template
  */
 
 import type { CanvasTemplate, CanvasSlide } from '@/types/canvas-editor';

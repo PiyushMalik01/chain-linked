@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useAuthContext } from "@/lib/auth/auth-provider"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 
 // ============================================================================
 // Types
@@ -169,10 +170,17 @@ export default function OnboardingPage() {
     setSaving(true)
     try {
       const supabase = createClient()
-      await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({ onboarding_type: selected })
         .eq('id', user.id)
+
+      if (error) {
+        console.error('Failed to save onboarding type:', error)
+        toast.error('Failed to save your selection. Please try again.')
+        setSaving(false)
+        return
+      }
 
       if (selected === 'owner') {
         router.push('/onboarding/step1')
@@ -180,6 +188,7 @@ export default function OnboardingPage() {
         router.push('/onboarding/join')
       }
     } catch {
+      toast.error('Something went wrong. Please try again.')
       setSaving(false)
     }
   }

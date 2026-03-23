@@ -1,3 +1,10 @@
+/**
+ * Nav Main Component
+ * @description Primary sidebar navigation group with a prominent "Quick Create"
+ * action button and a list of main navigation links with active-state highlighting.
+ * @module components/nav-main
+ */
+
 "use client"
 
 import Link from "next/link"
@@ -12,6 +19,14 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
+/**
+ * NavMain - Primary sidebar navigation group
+ * @param props - Component props
+ * @param props.items - Array of navigation items with title, url, and optional icon
+ * @returns Sidebar group with Quick Create button and navigation links
+ * @example
+ * <NavMain items={[{ title: "Dashboard", url: "/dashboard", icon: IconHome }]} />
+ */
 export function NavMain({
   items,
 }: {

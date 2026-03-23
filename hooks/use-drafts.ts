@@ -27,7 +27,7 @@ export interface SavedDraft {
   /** Where the draft originated from */
   source: DraftSource
   /** The underlying table this draft is stored in */
-  table: 'generated_posts'
+  table: 'generated_posts' | 'scheduled_posts'
   /** Post type (thought-leadership, storytelling, etc.) */
   postType: string | null
   /** Category tag */
@@ -165,14 +165,14 @@ export function useDrafts(): UseDraftsReturn {
         .from('scheduled_posts')
         .select('id, content, scheduled_for, status, created_at, updated_at')
         .eq('user_id', user.id)
-        .in('status', ['pending', 'scheduled'])
+        .in('status', ['pending'])
         .order('scheduled_for', { ascending: true })
 
       const scheduledDrafts: SavedDraft[] = (scheduledData || []).map((row) => ({
         id: row.id,
         content: row.content,
         source: 'scheduled' as DraftSource,
-        table: 'generated_posts' as const,
+        table: 'scheduled_posts' as const,
         postType: 'scheduled',
         category: null,
         wordCount: countWords(row.content),
@@ -199,6 +199,8 @@ export function useDrafts(): UseDraftsReturn {
    */
   const deleteDraft = useCallback(async (id: string, table: SavedDraft['table']): Promise<boolean> => {
     const originalDrafts = drafts
+    // Determine the source of the draft being deleted
+    const draftToDelete = drafts.find(d => d.id === id)
 
     try {
       setError(null)
@@ -206,12 +208,22 @@ export function useDrafts(): UseDraftsReturn {
       // Optimistic removal
       setDrafts(prev => prev.filter(d => d.id !== id))
 
-      const { error: deleteError } = await supabase
-        .from('generated_posts')
-        .update({ status: 'archived' })
-        .eq('id', id)
+      if (draftToDelete?.source === 'scheduled') {
+        // Scheduled drafts live in the scheduled_posts table
+        const { error: deleteError } = await supabase
+          .from('scheduled_posts')
+          .update({ status: 'failed' })
+          .eq('id', id)
 
-      if (deleteError) throw new Error(deleteError.message)
+        if (deleteError) throw new Error(deleteError.message)
+      } else {
+        const { error: deleteError } = await supabase
+          .from('generated_posts')
+          .update({ status: 'archived' })
+          .eq('id', id)
+
+        if (deleteError) throw new Error(deleteError.message)
+      }
 
       toast.success('Draft deleted')
       return true

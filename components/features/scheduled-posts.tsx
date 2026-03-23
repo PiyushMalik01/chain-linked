@@ -1,3 +1,10 @@
+/**
+ * Scheduled Posts Component
+ * @description Displays a timeline of upcoming scheduled LinkedIn posts with
+ * edit, delete, and reschedule actions grouped by date.
+ * @module components/features/scheduled-posts
+ */
+
 "use client"
 
 import * as React from "react"

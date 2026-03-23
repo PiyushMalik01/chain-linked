@@ -1,8 +1,9 @@
 /**
  * Financial Tips Template
- * Black and green modern design for entrepreneur content
- * Inspired by the modern LinkedIn carousel aesthetic
- * Enhanced with chart-like decorative shapes and money-themed geometric patterns
+ * @description Black and green modern design for entrepreneur content.
+ * Inspired by the modern LinkedIn carousel aesthetic with chart-like decorative shapes
+ * and money-themed geometric patterns.
+ * @module lib/canvas-templates/financial-tips-template
  */
 
 import type { CanvasTemplate, CanvasSlide } from '@/types/canvas-editor';

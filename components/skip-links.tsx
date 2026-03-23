@@ -1,3 +1,10 @@
+/**
+ * Skip Links Component
+ * @description Accessibility skip-navigation links that appear on keyboard focus,
+ * allowing screen reader and keyboard users to jump directly to main content areas.
+ * @module components/skip-links
+ */
+
 "use client"
 
 import * as React from "react"

@@ -282,10 +282,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
    * wiping out the user's avatar, headline, and other LinkedIn data.
    * @param newProfile - New profile data (may be null on fetch failure)
    */
-  const safeSetProfile = useCallback((newProfile: UserProfileWithLinkedIn | null) => {
+  const safeSetProfile = useCallback((newProfile: UserProfileWithLinkedIn | null, intentionalClear?: boolean) => {
     setProfile(prev => {
       // If new profile is null but we already have one, keep the existing data
-      if (!newProfile && prev) {
+      // unless this is an intentional clear (e.g. profile deletion)
+      if (!newProfile && prev && !intentionalClear) {
         // Blocked null profile downgrade — keeping existing profile
         return prev
       }
@@ -369,12 +370,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const profilePromise = fetchProfile(userId)
         const result = await Promise.race([
           profilePromise,
-          new Promise<null>((_, reject) => {
-            const onAbort = () => reject(new Error('Profile fetch aborted'))
+          new Promise<null>((resolve) => {
+            const onAbort = () => resolve(null)
             abortController.signal.addEventListener('abort', onAbort)
             setTimeout(() => {
               abortController.signal.removeEventListener('abort', onAbort)
-              reject(new Error('Profile fetch timeout'))
+              resolve(null)
             }, 10000)
           }),
         ])

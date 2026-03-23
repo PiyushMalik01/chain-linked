@@ -157,7 +157,7 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       setError(null)
 
       // Today's date in YYYY-MM-DD for capture queries
-      const todayStr = new Date().toISOString().split('T')[0]
+      const todayStr = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local timezone
       const todayStart = `${todayStr}T00:00:00.000Z`
 
       // Run ALL independent queries in parallel
@@ -173,7 +173,8 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
           .from('linkedin_analytics')
           .select('*')
           .eq('user_id', targetUserId)
-          .order('captured_at', { ascending: false }),
+          .order('captured_at', { ascending: false })
+          .limit(365),
         supabase
           .from('linkedin_profiles')
           .select('followers_count, connections_count')

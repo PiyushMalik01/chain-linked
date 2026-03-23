@@ -1,11 +1,22 @@
+/**
+ * Page Skeletons
+ * @description Collection of skeleton loading placeholders that mirror the layout
+ * of each dashboard page (dashboard, analytics, posts, compose, etc.) for a
+ * seamless loading experience.
+ * @module components/skeletons/page-skeletons
+ */
+
 "use client"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 /**
- * Dashboard Page Skeleton
- * Matches: Greeting + Quick Compose + 4 Stat Cards + Calendar/Upcoming sidebar
+ * DashboardSkeleton - Loading placeholder for the dashboard page
+ * @description Matches: Greeting + Quick Compose + 4 Stat Cards + Calendar/Upcoming sidebar
+ * @returns Skeleton layout matching the dashboard page structure
+ * @example
+ * <DashboardSkeleton />
  */
 export function DashboardSkeleton() {
   return (
@@ -107,8 +118,9 @@ export function DashboardSkeleton() {
 }
 
 /**
- * Compose Page Skeleton
- * Matches: Single-column with draft status + PostComposer + Remix section
+ * ComposeSkeleton - Loading placeholder for the compose page
+ * @description Matches: Single-column with draft status + PostComposer + Remix section
+ * @returns Skeleton layout matching the compose page structure
  */
 export function ComposeSkeleton() {
   return (
@@ -182,8 +194,9 @@ export function ComposeSkeleton() {
 }
 
 /**
- * Schedule Page Skeleton
- * Matches: 4 stat cards + full-width calendar + scheduled posts list
+ * ScheduleSkeleton - Loading placeholder for the schedule page
+ * @description Matches: 4 stat cards + full-width calendar + scheduled posts list
+ * @returns Skeleton layout matching the schedule page structure
  */
 export function ScheduleSkeleton() {
   return (
@@ -264,8 +277,9 @@ export function ScheduleSkeleton() {
 }
 
 /**
- * Templates Page Skeleton
- * Matches: Header + search bar + category pill filters + template grid + AI section
+ * TemplatesSkeleton - Loading placeholder for the templates page
+ * @description Matches: Header + search bar + category pill filters + template grid + AI section
+ * @returns Skeleton layout matching the templates page structure
  */
 export function TemplatesSkeleton() {
   return (
@@ -353,8 +367,9 @@ export function TemplatesSkeleton() {
 }
 
 /**
- * Inspiration Page Skeleton
- * Matches: Capsule tab bar + InspirationFeed grid + FollowedInfluencers sidebar
+ * InspirationSkeleton - Loading placeholder for the inspiration page
+ * @description Matches: Capsule tab bar + InspirationFeed grid + FollowedInfluencers sidebar
+ * @returns Skeleton layout matching the inspiration page structure
  */
 export function InspirationSkeleton() {
   return (
@@ -429,8 +444,9 @@ export function InspirationSkeleton() {
 }
 
 /**
- * Carousels Page Skeleton
- * Displays: Template selector, slide preview, and editor
+ * CarouselsSkeleton - Loading placeholder for the carousels page
+ * @description Displays: Template selector, slide preview, and editor
+ * @returns Skeleton layout matching the carousels page structure
  */
 export function CarouselsSkeleton() {
   return (
@@ -514,8 +530,9 @@ export function CarouselsSkeleton() {
 }
 
 /**
- * Analytics Page Skeleton
- * Matches: Filter bar + Summary bar + Trend chart + Data table + Recent posts grid
+ * AnalyticsSkeleton - Loading placeholder for the analytics page
+ * @description Matches: Filter bar + Summary bar + Trend chart + Data table + Recent posts grid
+ * @returns Skeleton layout matching the analytics page structure
  */
 export function AnalyticsSkeleton() {
   return (
@@ -611,8 +628,9 @@ export function AnalyticsSkeleton() {
 }
 
 /**
- * Team Page Skeleton
- * Matches: TeamHeader + capsule tab bar + Leaderboard + Post grid (3 cols)
+ * TeamSkeleton - Loading placeholder for the team page
+ * @description Matches: TeamHeader + capsule tab bar + Leaderboard + Post grid (3 cols)
+ * @returns Skeleton layout matching the team page structure
  */
 export function TeamSkeleton() {
   return (
@@ -705,8 +723,9 @@ export function TeamSkeleton() {
 }
 
 /**
- * Swipe Page Skeleton
- * Matches: Filter bar + card stack + 4 action buttons + keyboard hint + stats card
+ * SwipeSkeleton - Loading placeholder for the swipe page
+ * @description Matches: Filter bar + card stack + 4 action buttons + keyboard hint + stats card
+ * @returns Skeleton layout matching the swipe page structure
  */
 export function SwipeSkeleton() {
   return (
@@ -793,8 +812,9 @@ export function SwipeSkeleton() {
 }
 
 /**
- * Settings Page Skeleton
- * Matches: Left sidebar navigation + right content panel (2-column)
+ * SettingsSkeleton - Loading placeholder for the settings page
+ * @description Matches: Left sidebar navigation + right content panel (2-column)
+ * @returns Skeleton layout matching the settings page structure
  */
 export function SettingsSkeleton() {
   return (

@@ -1,6 +1,8 @@
 /**
  * Canvas Editor State Management Hook
- * Manages slides, elements, selection, history, and template application
+ * @description Manages slides, elements, selection, history, and template application
+ * for the Canva-style carousel editor
+ * @module hooks/use-canvas-editor
  */
 
 import { useReducer, useCallback, useRef, useEffect } from 'react';

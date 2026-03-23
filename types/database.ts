@@ -1,3 +1,10 @@
+/**
+ * Supabase Database Types
+ * @description Auto-generated TypeScript types for the Supabase PostgreSQL schema.
+ * Regenerate with: npx supabase gen types typescript --project-id baurjucvzdboavbcuxjh
+ * @module types/database
+ */
+
 export type Json =
   | string
   | number

@@ -1,6 +1,8 @@
 /**
  * Canvas Editor Components
- * Public exports for the Canva-style carousel editor
+ * @description Public barrel exports for the Canva-style carousel editor,
+ * including the main editor, stage, element renderers, panels, and dialogs.
+ * @module components/features/canvas-editor
  */
 
 export { CanvasEditor } from './canvas-editor';

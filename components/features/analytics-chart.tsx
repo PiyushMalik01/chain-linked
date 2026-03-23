@@ -179,7 +179,10 @@ function filterDataByTimeRange(
   timeRange: TimeRange
 ): AnalyticsDataPoint[] {
   const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90
-  return data.slice(-days)
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - days)
+  const cutoffStr = cutoff.toLocaleDateString('en-CA') // YYYY-MM-DD in local timezone
+  return data.filter(d => d.date >= cutoffStr)
 }
 
 function formatDate(dateString: string): string {

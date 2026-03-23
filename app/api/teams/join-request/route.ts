@@ -1,3 +1,5 @@
+// TODO: Add rate limiting (e.g., Upstash Redis or next-rate-limit)
+
 /**
  * Team Join Request API Route
  * @description Create, get, and cancel join requests for teams
@@ -127,6 +129,7 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id)
+        .eq('status', 'rejected') // Only update if still rejected (idempotent)
         .select()
         .single()
 
@@ -220,6 +223,15 @@ export async function DELETE(request: Request) {
 // ============================================================================
 
 /**
+ * Escape HTML special characters to prevent injection in email templates
+ * @param s - Raw user-provided string
+ * @returns HTML-safe escaped string
+ */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+/**
  * Notify team owners/admins via email about a new join request
  * @param supabase - Supabase client instance
  * @param teamId - Team that received the request
@@ -259,6 +271,8 @@ async function notifyTeamOwners(
       .single()
 
     const requesterName = requesterProfile?.full_name || requesterProfile?.email || requester.email || 'Someone'
+    const safeRequesterName = escapeHtml(requesterName)
+    const safeTeamName = escapeHtml(teamName)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai'
 
     // Send email to each admin/owner
@@ -272,7 +286,7 @@ async function notifyTeamOwners(
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
             <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">New Join Request</h2>
             <p style="color: #555; font-size: 14px; line-height: 1.6;">
-              <strong>${requesterName}</strong> has requested to join <strong>${teamName}</strong>.
+              <strong>${safeRequesterName}</strong> has requested to join <strong>${safeTeamName}</strong>.
             </p>
             <p style="color: #555; font-size: 14px; line-height: 1.6;">
               You can review and approve or decline this request from the Team Activity page.

@@ -48,23 +48,46 @@ export const VOYAGER_ENDPOINTS = {
 } as const
 
 /**
- * Default request headers for Voyager API
+ * Static default request headers for Voyager API (excludes dynamic x-li-track)
  */
-export const VOYAGER_DEFAULT_HEADERS = {
+export const VOYAGER_BASE_HEADERS: Record<string, string> = {
   'accept': 'application/vnd.linkedin.normalized+json+2.1',
   'accept-language': 'en-US,en;q=0.9',
   'x-li-lang': 'en_US',
   'x-restli-protocol-version': '2.0.0',
-  'x-li-track': JSON.stringify({
-    clientVersion: '1.13.8008',
-    mpVersion: '1.13.8008',
+}
+
+/**
+ * Build the x-li-track header value with a fresh timezone at call time
+ * @param userTimezone - Optional IANA timezone string from the user's browser
+ * @returns JSON-encoded x-li-track value
+ */
+function buildLiTrack(userTimezone?: string): string {
+  const tz = userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  const offset = new Date().getTimezoneOffset()
+  return JSON.stringify({
+    clientVersion: process.env.LINKEDIN_CLIENT_VERSION || '1.13.8008',
+    mpVersion: process.env.LINKEDIN_CLIENT_VERSION || '1.13.8008',
     osName: 'web',
-    timezoneOffset: new Date().getTimezoneOffset(),
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezoneOffset: offset,
+    timezone: tz,
     deviceFormFactor: 'DESKTOP',
     mpName: 'voyager-web',
-  }),
-} as const
+  })
+}
+
+/**
+ * Get Voyager default headers with a dynamically computed x-li-track
+ * @param userTimezone - Optional IANA timezone string from the user's browser
+ * @returns Complete set of default Voyager request headers
+ */
+export function getVoyagerHeaders(userTimezone?: string): Record<string, string> {
+  return {
+    ...VOYAGER_BASE_HEADERS,
+    'x-li-track': buildLiTrack(userTimezone),
+  }
+}
+
 
 /**
  * User agent string to use for requests (Chrome on Windows)

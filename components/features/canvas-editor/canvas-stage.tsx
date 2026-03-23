@@ -2,7 +2,9 @@
 
 /**
  * Canvas Stage Component
- * Konva stage wrapper with responsive sizing and grid overlay
+ * @description Konva Stage wrapper that renders all slide elements (text, shapes, images)
+ * with responsive sizing, optional grid overlay, zoom controls, and image drop support.
+ * @module components/features/canvas-editor/canvas-stage
  */
 
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';

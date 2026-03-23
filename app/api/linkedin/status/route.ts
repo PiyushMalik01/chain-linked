@@ -17,14 +17,10 @@ const RECONNECT_WARNING_DAYS = 7
  * @returns {LinkedInConnectionStatus} Connection status including expiry and profile information
  */
 export async function GET() {
-  console.log('[LinkedIn Status] GET request received')
-
   const supabase = await createClient()
 
   // Verify user authentication
   const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-  console.log('[LinkedIn Status] User:', user?.id, 'Auth error:', authError?.message)
 
   if (authError || !user) {
     return NextResponse.json(
@@ -48,8 +44,6 @@ export async function GET() {
       .select('linkedin_urn, expires_at, updated_at')
       .eq('user_id', user.id)
       .single()
-
-    console.log('[LinkedIn Status] Token data:', tokenData ? 'found' : 'not found', 'Error:', tokenError?.message)
 
     if (tokenError || !tokenData) {
       // Also check the profiles table as a fallback
@@ -84,8 +78,6 @@ export async function GET() {
       if (linkedinProfile && (linkedinProfile.profile_urn || linkedinProfile.first_name)) {
         const parts = [linkedinProfile.first_name, linkedinProfile.last_name].filter(Boolean)
         const profileName = parts.length > 0 ? parts.join(' ') : null
-
-        console.log('[LinkedIn Status] Found extension-synced profile:', profileName)
 
         return NextResponse.json({
           connected: true,
@@ -139,7 +131,6 @@ export async function GET() {
       needsReconnect: expired || nearExpiry,
     }
 
-    console.log('[LinkedIn Status] Returning:', status)
     return NextResponse.json(status)
   } catch {
     // Table doesn't exist or other error

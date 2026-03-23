@@ -263,6 +263,14 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Cannot remove the team owner' }, { status: 403 })
   }
 
+  // Admins cannot remove other admins - only owners can
+  if (requesterMembership.role === 'admin' && targetMembership.role === 'admin') {
+    return NextResponse.json(
+      { error: 'Only team owners can remove admins' },
+      { status: 403 }
+    )
+  }
+
   // Remove member
   const { error: deleteError } = await supabase
     .from('team_members')

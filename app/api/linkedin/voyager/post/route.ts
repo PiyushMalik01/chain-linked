@@ -15,7 +15,7 @@ import { isPostingEnabled, POSTING_DISABLED_MESSAGE, DISABLED_DRAFT_STATUS } fro
  */
 const postRequestSchema = z.object({
   content: z.string().min(1, 'Content is required').refine(
-    (val) => [...val].length <= 3000,
+    (val) => val.length <= 3000,
     { message: 'Content too long' }
   ),
   visibility: z.enum(['PUBLIC', 'CONNECTIONS', 'LOGGED_IN']).optional().default('PUBLIC'),

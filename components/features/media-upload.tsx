@@ -1,3 +1,10 @@
+/**
+ * Media Upload Component
+ * @description Drag-and-drop media upload zone supporting images, videos, and documents
+ * with file previews, upload progress indicators, and validation.
+ * @module components/features/media-upload
+ */
+
 "use client"
 
 import * as React from "react"

@@ -1,7 +1,8 @@
 /**
  * Unsplash API Client
- * Server-side utility for searching free stock photos via the Unsplash API.
+ * @description Server-side utility for searching free stock photos via the Unsplash API.
  * Used by the graphics library API route to proxy requests.
+ * @module lib/graphics-library/unsplash
  */
 
 import type { UnsplashSearchResponse } from '@/types/graphics-library';

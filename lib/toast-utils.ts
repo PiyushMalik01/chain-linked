@@ -1,9 +1,10 @@
-import { toast } from "sonner"
-
 /**
- * Toast utility functions for consistent messaging across the app.
- * Uses Sonner toast library with predefined styles and behaviors.
+ * Toast Utility Functions
+ * @description Consistent toast messaging helpers wrapping the Sonner library
+ * @module lib/toast-utils
  */
+
+import { toast } from "sonner"
 
 /**
  * Show a success toast message.

@@ -169,8 +169,8 @@ export function useLinkedInPost(): UseLinkedInPostReturn {
    */
   const disconnectLinkedIn = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch('/api/linkedin/status', {
-        method: 'DELETE',
+      const response = await fetch('/api/linkedin/disconnect', {
+        method: 'POST',
       })
 
       if (!response.ok) {

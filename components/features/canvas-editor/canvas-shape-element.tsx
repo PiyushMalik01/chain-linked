@@ -2,7 +2,9 @@
 
 /**
  * Canvas Shape Element Component
- * Renders shape elements (rectangles, circles, lines) with transformation
+ * @description Renders shape elements (rectangles, circles, lines) on the Konva canvas
+ * with selection highlighting and drag/resize transformation handles.
+ * @module components/features/canvas-editor/canvas-shape-element
  */
 
 import { useRef, useEffect, useCallback } from 'react';

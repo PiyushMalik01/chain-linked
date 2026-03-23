@@ -1,6 +1,7 @@
 /**
  * Canvas Templates Registry
- * Central export for all carousel templates
+ * @description Central export for all carousel templates and template utilities
+ * @module lib/canvas-templates
  */
 
 import { professionalTemplate } from './professional-template';

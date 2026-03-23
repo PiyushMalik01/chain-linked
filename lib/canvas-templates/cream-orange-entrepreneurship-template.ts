@@ -1,7 +1,8 @@
 /**
  * Cream and Orange Bold Entrepreneurship Template
- * Modern cream background with orange accents and bold black typography
- * Features: Checklist style, circular content blocks, brushstroke page numbers
+ * @description Modern cream background with orange accents and bold black typography.
+ * Features checklist style, circular content blocks, and brushstroke page numbers.
+ * @module lib/canvas-templates/cream-orange-entrepreneurship-template
  */
 
 import type { CanvasTemplate, CanvasSlide } from '@/types/canvas-editor';

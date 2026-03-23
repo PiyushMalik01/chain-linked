@@ -66,10 +66,10 @@ export async function GET(request: Request) {
   cookieStore.delete(STATE_COOKIE_NAME)
   cookieStore.delete(REDIRECT_COOKIE_NAME)
 
-  if (!code) {
-    console.error('LinkedIn OAuth missing code')
+  if (!code || typeof code !== 'string' || code.length > 2000) {
+    console.error('LinkedIn OAuth missing or invalid code')
     return NextResponse.redirect(
-      `${origin}${redirectTo}?linkedin_error=${encodeURIComponent('Missing authorization code')}`
+      `${origin}${redirectTo}?linkedin_error=${encodeURIComponent('Missing or invalid authorization code')}`
     )
   }
 

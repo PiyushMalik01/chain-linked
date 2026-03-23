@@ -1,3 +1,10 @@
+/**
+ * Global Providers Component
+ * @description Wraps the entire application with required context providers
+ * including theme, authentication, analytics, API keys, and draft state management.
+ * @module components/providers
+ */
+
 "use client"
 
 import { ThemeProvider } from "next-themes"

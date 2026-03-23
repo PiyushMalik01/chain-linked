@@ -1,3 +1,10 @@
+/**
+ * Schedule Calendar Component
+ * @description Interactive monthly calendar view for selecting post scheduling dates
+ * and times, with visual indicators for already-scheduled slots.
+ * @module components/features/schedule-calendar
+ */
+
 "use client"
 
 import * as React from "react"

@@ -1,3 +1,10 @@
+/**
+ * Interactive Area Chart Component
+ * @description Time-series area chart with desktop/mobile data series,
+ * configurable date range selector, and responsive mobile toggle.
+ * @module components/chart-area-interactive
+ */
+
 "use client"
 
 import * as React from "react"
@@ -140,6 +147,12 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
+/**
+ * ChartAreaInteractive - Interactive time-series area chart
+ * @returns Card with area chart, date range selector, and responsive mobile toggle
+ * @example
+ * <ChartAreaInteractive />
+ */
 export function ChartAreaInteractive() {
   const isMobile = useIsMobile()
   const [timeRange, setTimeRange] = React.useState("90d")

@@ -1,7 +1,8 @@
 /**
  * Icon Collection for the Graphics Library
- * A curated set of professional SVG icons optimized for LinkedIn carousel slides.
+ * @description A curated set of professional SVG icons optimized for LinkedIn carousel slides.
  * Each icon is a 24x24 stroke-based SVG encoded as a data URL.
+ * @module lib/graphics-library/icon-collection
  */
 
 import type { IconAsset } from '@/types/graphics-library';

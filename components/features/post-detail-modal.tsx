@@ -1,3 +1,10 @@
+/**
+ * Post Detail Modal Component
+ * @description Full-screen dialog displaying an inspiration post with author info,
+ * engagement metrics, category badges, and actions to remix, save, or share.
+ * @module components/features/post-detail-modal
+ */
+
 "use client"
 
 import * as React from "react"

@@ -1,7 +1,8 @@
 /**
  * Graphics Library Hook
- * Provides state management and search functionality for the graphics library panel.
+ * @description Provides state management and search functionality for the graphics library panel.
  * Handles photo search via API, and client-side filtering for icons and shapes.
+ * @module hooks/use-graphics-library
  */
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';

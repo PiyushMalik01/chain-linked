@@ -1,3 +1,11 @@
+/**
+ * Data Table Component
+ * @description Feature-rich data table built on TanStack React Table with
+ * drag-and-drop row reordering, column visibility toggles, sorting, filtering,
+ * pagination, and expandable row details.
+ * @module components/data-table
+ */
+
 "use client"
 
 import * as React from "react"
@@ -336,6 +344,14 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
   )
 }
 
+/**
+ * DataTable - Feature-rich sortable, filterable data table
+ * @param props - Component props
+ * @param props.data - Array of data rows to display
+ * @returns Table with sorting, filtering, pagination, and drag-and-drop reordering
+ * @example
+ * <DataTable data={rows} />
+ */
 export function DataTable({
   data: initialData,
 }: {

@@ -237,6 +237,8 @@ function ResetPasswordForm() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 dark:to-primary/10 p-4">
+      {/* Prevent referrer leakage of reset token in URL */}
+      <meta name="referrer" content="no-referrer" />
       <Card className="w-full max-w-lg border-border/50 bg-card/95 backdrop-blur-sm shadow-xl">
         <CardHeader className="text-center space-y-4 px-8 pb-2">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 shadow-sm">

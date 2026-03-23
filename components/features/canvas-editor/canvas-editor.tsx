@@ -2,9 +2,11 @@
 
 /**
  * Canvas Editor Component
- * Main orchestrating component for the Canva-style carousel editor
- * Uses a Canva/Figma-inspired layout with left panel, floating toolbar,
- * and top actions instead of the old full-width toolbar
+ * @description Main orchestrating component for the Canva-style carousel editor.
+ * Uses a Canva/Figma-inspired layout with a left panel, floating toolbar,
+ * and top actions. Manages slide state, element selection, AI generation,
+ * template loading, and PDF/image export workflows.
+ * @module components/features/canvas-editor/canvas-editor
  */
 
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';

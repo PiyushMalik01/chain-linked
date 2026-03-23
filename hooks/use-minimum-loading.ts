@@ -1,5 +1,11 @@
 "use client"
 
+/**
+ * Minimum Loading Hook
+ * @description Ensures a minimum loading duration for polished UX transitions
+ * @module hooks/use-minimum-loading
+ */
+
 import { useState, useEffect, useRef } from "react"
 
 /**

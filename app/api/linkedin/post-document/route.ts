@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     )
   }
 
-  if ([...content].length > 3000) {
+  if (content.length > 3000) {
     return NextResponse.json(
       { error: 'Content exceeds maximum length of 3000 characters' },
       { status: 400 }
@@ -101,7 +101,9 @@ export async function POST(request: Request) {
     )
   }
 
-  // Validate size (25MB max)
+  // Validate decoded binary size.
+  // LinkedIn's official limit is 100MB, but we cap at 25MB to keep uploads
+  // fast and prevent timeouts on the serverless function (maxDuration = 60s).
   const MAX_SIZE = 25 * 1024 * 1024
   if (pdfBuffer.length > MAX_SIZE) {
     return NextResponse.json(

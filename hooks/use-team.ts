@@ -6,8 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Team, TeamMemberRole } from '@/types/database'
 
 /**
@@ -104,7 +103,9 @@ export function useTeam(): UseTeamReturn {
   const [error, setError] = useState<string | null>(null)
   const [currentUserRole, setCurrentUserRole] = useState<TeamMemberRole | null>(null)
 
-  const supabase = createClient()
+  // Ref to avoid stale closure in fetchTeams when checking currentTeam
+  const currentTeamRef = useRef(currentTeam)
+  currentTeamRef.current = currentTeam
 
   /**
    * Fetch user's teams from API
@@ -124,7 +125,7 @@ export function useTeam(): UseTeamReturn {
       setTeams(data.teams || [])
 
       // Auto-select first team if no current team
-      if (!currentTeam && data.teams?.length > 0) {
+      if (!currentTeamRef.current && data.teams?.length > 0) {
         setCurrentTeam(data.teams[0])
       }
     } catch (err) {
@@ -133,7 +134,7 @@ export function useTeam(): UseTeamReturn {
     } finally {
       setIsLoadingTeams(false)
     }
-  }, [currentTeam])
+  }, [])
 
   /**
    * Fetch members for a specific team

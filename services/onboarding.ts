@@ -803,12 +803,21 @@ export async function completeOnboardingInDatabase(): Promise<boolean> {
       return false
     }
 
+    // Fetch onboarding type to only set company_onboarding_completed for owners
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("onboarding_type")
+      .eq("id", user.id)
+      .single()
+
+    const isOwner = profile?.onboarding_type === "owner"
+
     const { data: updated, error } = await supabase
       .from("profiles")
       .update({
         onboarding_completed: true,
         onboarding_current_step: 4,
-        company_onboarding_completed: true,
+        ...(isOwner ? { company_onboarding_completed: true } : {}),
       })
       .eq("id", user.id)
       .select("onboarding_completed")

@@ -68,10 +68,11 @@ export async function POST(request: NextRequest) {
       }
 
       if (error.message.includes('not found') || error.message.includes('Invalid')) {
-        return NextResponse.json(
-          { error: 'No account found with this email address.' },
-          { status: 404 }
-        )
+        // Always return success to prevent user enumeration
+        return NextResponse.json({
+          success: true,
+          message: 'If an account exists with this email, a verification link has been sent.',
+        })
       }
 
       return NextResponse.json(

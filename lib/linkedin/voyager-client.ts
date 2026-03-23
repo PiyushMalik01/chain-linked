@@ -7,7 +7,7 @@
 import { createClient } from '@/lib/supabase/server'
 import {
   VOYAGER_BASE_URL,
-  VOYAGER_DEFAULT_HEADERS,
+  getVoyagerHeaders,
   DEFAULT_USER_AGENT,
   REQUEST_TIMEOUT_MS,
   DEFAULT_RETRY_CONFIG,
@@ -28,8 +28,26 @@ import type {
 } from './voyager-types'
 
 /**
+ * Module-level lazy-initialized Supabase client for lightweight DB writes
+ * (e.g., updateLastUsed). Avoids creating a new client on every request.
+ */
+let _supabaseClient: Awaited<ReturnType<typeof createClient>> | null = null
+async function getSupabaseClient() {
+  if (!_supabaseClient) {
+    _supabaseClient = await createClient()
+  }
+  return _supabaseClient
+}
+
+/**
  * In-memory rate limit tracking
  * Key: userId:endpoint
+ *
+ * TODO: This Map resets on every serverless cold start, so rate limits are
+ * effectively per-instance and short-lived. For durable rate limiting,
+ * migrate to Redis/Upstash or use the `last_used_at` column on the
+ * `linkedin_credentials` table (already updated by `updateLastUsed()`)
+ * as a simple cross-invocation throttle.
  */
 const rateLimitStore = new Map<string, RateLimitState>()
 
@@ -294,7 +312,7 @@ export class VoyagerClient {
     const csrfToken = this.credentials.csrf_token || this.credentials.jsessionid.replace(/"/g, '')
 
     return {
-      ...VOYAGER_DEFAULT_HEADERS,
+      ...getVoyagerHeaders(),
       'csrf-token': csrfToken,
       'cookie': this.buildCookieString(),
       'user-agent': this.credentials.user_agent || DEFAULT_USER_AGENT,
@@ -580,11 +598,12 @@ export class VoyagerClient {
   }
 
   /**
-   * Update last used timestamp in database
+   * Update last used timestamp in database.
+   * Uses a module-level cached Supabase client to avoid creating a new one each call.
    */
   private async updateLastUsed(): Promise<void> {
     try {
-      const supabase = await createClient()
+      const supabase = await getSupabaseClient()
       await supabase
         .from('linkedin_credentials')
         .update({ last_used_at: new Date().toISOString() })

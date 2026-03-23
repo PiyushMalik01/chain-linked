@@ -7,7 +7,7 @@
  * @module components/features/analytics-data-table
  */
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -171,13 +171,26 @@ function sortableHeader(label: string) {
 }
 
 /**
+ * Escape a value for safe CSV output
+ * @param value - The value to escape
+ * @returns CSV-safe string, quoted if it contains commas, quotes, or newlines
+ */
+function csvEscape(value: unknown): string {
+  const str = String(value ?? '')
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+/**
  * Export multi-column data to CSV
  * @param data - Multi-row data array
  */
 function exportMultiCSV(data: MultiRowData[]) {
   const headers = "Date,Impressions,Reactions,Comments,Reposts,Engagements,Engagement Rate"
   const rows = data.map((r) =>
-    `${r.rawDate},${r.impressions},${r.reactions},${r.comments},${r.reposts},${r.engagements},${r.engagement_rate}`
+    [r.rawDate, r.impressions, r.reactions, r.comments, r.reposts, r.engagements, r.engagement_rate].map(csvEscape).join(",")
   )
   downloadCSV([headers, ...rows].join("\n"), "analytics_all_metrics")
 }
@@ -191,8 +204,8 @@ function exportSingleCSV(data: SingleRowData[], metric: string) {
   const label = METRIC_LABELS[metric] || metric
   const isRate = metric === "engagements_rate"
   const rows = [
-    `Date,${label}`,
-    ...data.map((row) => `${row.rawDate},${isRate ? row.value.toFixed(2) : row.value}`),
+    `Date,${csvEscape(label)}`,
+    ...data.map((row) => `${csvEscape(row.rawDate)},${csvEscape(isRate ? row.value.toFixed(2) : row.value)}`),
   ]
   downloadCSV(rows.join("\n"), `analytics_${metric}`)
 }
@@ -330,6 +343,12 @@ export function AnalyticsDataTable({
   multiData,
 }: AnalyticsDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([])
+
+  // Reset sorting when metric changes to avoid stale sort state across table types
+  useEffect(() => {
+    setSorting([])
+  }, [metric])
+
   const metricLabel = METRIC_LABELS[metric] || metric
   const isRate = metric === "engagements_rate"
   const isAllMode = metric === "all" && multiData

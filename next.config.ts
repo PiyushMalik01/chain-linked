@@ -1,5 +1,14 @@
+/**
+ * Next.js Configuration
+ * @description Configures remote image domains (LinkedIn CDN, Logo.dev),
+ * and security headers (X-Frame-Options, X-Content-Type-Options,
+ * Referrer-Policy, X-XSS-Protection) applied to all routes.
+ * @module next.config
+ */
+
 import type { NextConfig } from "next";
 
+/** @type {NextConfig} */
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [

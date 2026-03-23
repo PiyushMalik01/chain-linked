@@ -11,9 +11,9 @@ import { createClient } from '@supabase/supabase-js'
 
 /** CORS headers for Chrome extension requests */
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 /**
@@ -74,47 +74,57 @@ export async function POST(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Check if user already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    )
-
+    // Try to create the user first; if they already exist, handle gracefully
     let userId: string
 
-    if (existingUser) {
-      userId = existingUser.id
+    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: {
+        full_name: name,
+        avatar_url: picture,
+        google_id: googleId,
+        provider: 'google',
+      },
+    })
 
-      // Update user metadata with latest Google info
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
-        user_metadata: {
-          ...existingUser.user_metadata,
-          full_name: existingUser.user_metadata?.full_name || name,
-          avatar_url: existingUser.user_metadata?.avatar_url || picture,
-          google_id: googleId,
-        },
-      })
-    } else {
-      // Create a new user with auto-confirmation
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        email_confirm: true,
-        user_metadata: {
-          full_name: name,
-          avatar_url: picture,
-          google_id: googleId,
-          provider: 'google',
-        },
-      })
+    if (createError) {
+      // User already exists — use generateLink to resolve user by email (O(1), no listUsers scan)
+      if (createError.message?.toLowerCase().includes('already') || createError.status === 422) {
+        const { data: linkCheck } = await supabaseAdmin.auth.admin.generateLink({
+          type: 'magiclink',
+          email,
+        })
 
-      if (createError || !newUser.user) {
+        if (!linkCheck?.user) {
+          console.error('[google-token] Could not find existing user for email:', email)
+          return jsonResponse({ error: 'Failed to find existing user account' }, 500)
+        }
+
+        userId = linkCheck.user.id
+
+        // Update user metadata with latest Google info
+        await supabaseAdmin.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            ...linkCheck.user.user_metadata,
+            full_name: linkCheck.user.user_metadata?.full_name || name,
+            avatar_url: linkCheck.user.user_metadata?.avatar_url || picture,
+            google_id: googleId,
+          },
+        })
+      } else {
         console.error('[google-token] User creation error:', createError)
+        return jsonResponse({ error: 'Failed to create user account' }, 500)
+      }
+    } else {
+      if (!newUser.user) {
+        console.error('[google-token] User creation returned no user')
         return jsonResponse({ error: 'Failed to create user account' }, 500)
       }
 
       userId = newUser.user.id
 
-      // Create profile record
+      // Create profile record for new user
       await supabaseAdmin.from('profiles').upsert({
         id: userId,
         email,

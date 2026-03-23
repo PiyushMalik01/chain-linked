@@ -1,3 +1,10 @@
+/**
+ * Nav Documents Component
+ * @description Sidebar navigation group for document-related items with
+ * individual context menus for sharing and deleting documents.
+ * @module components/nav-documents
+ */
+
 "use client"
 
 import {
@@ -25,6 +32,14 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
+/**
+ * NavDocuments - Sidebar document navigation group
+ * @param props - Component props
+ * @param props.items - Array of document items with name, url, and icon
+ * @returns Sidebar group with document links and context menus
+ * @example
+ * <NavDocuments items={[{ name: "Report", url: "/docs/report", icon: IconFile }]} />
+ */
 export function NavDocuments({
   items,
 }: {

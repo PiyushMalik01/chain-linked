@@ -1,7 +1,8 @@
 /**
  * Creative Template
- * Bold colorful style with vibrant gradients and dynamic typography
- * Enhanced with layered decorative shapes for visual impact
+ * @description Bold colorful style with vibrant gradients and dynamic typography.
+ * Enhanced with layered decorative shapes for visual impact.
+ * @module lib/canvas-templates/creative-template
  */
 
 import type { CanvasTemplate, CanvasSlide } from '@/types/canvas-editor';

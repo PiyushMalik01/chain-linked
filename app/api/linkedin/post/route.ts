@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     )
   }
 
-  if ([...content].length > 3000) {
+  if (content.length > 3000) {
     return NextResponse.json(
       { error: 'Content exceeds maximum length of 3000 characters' },
       { status: 400 }

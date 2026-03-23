@@ -76,6 +76,8 @@ interface DiscoverNewsState {
   isSeeding: boolean
   /** Whether seeding has already been attempted this session */
   seedAttempted: boolean
+  /** Counter to force re-fetch without toggling activeTopic */
+  fetchKey: number
 }
 
 /**
@@ -213,6 +215,7 @@ export function useDiscoverNews() {
     isLoadingTopics: true,
     isSeeding: false,
     seedAttempted: (() => {
+      if (typeof window === 'undefined') return false
       try {
         const last = localStorage.getItem(SEED_ATTEMPTED_KEY)
         if (last) {
@@ -221,6 +224,7 @@ export function useDiscoverNews() {
       } catch {}
       return false
     })(),
+    fetchKey: 0,
   })
 
   /**
@@ -383,7 +387,7 @@ export function useDiscoverNews() {
     return () => {
       cancelled = true
     }
-  }, [state.activeTopic, state.sort, state.searchQuery])
+  }, [state.activeTopic, state.sort, state.searchQuery, state.fetchKey])
 
   /**
    * Auto-seed: when articles load as empty (not from a search), call the
@@ -769,35 +773,24 @@ export function useDiscoverNews() {
   }, [state.topics, state.activeTopic, state.sort])
 
   /**
-   * Retry loading articles
+   * Retry loading articles by incrementing fetchKey
    */
   const retry = React.useCallback(() => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }))
-    const currentTopic = state.activeTopic
-    setState((prev) => ({ ...prev, activeTopic: "" }))
-    setTimeout(() => {
-      setState((prev) => ({ ...prev, activeTopic: currentTopic }))
-    }, 0)
-  }, [state.activeTopic])
+    setState((prev) => ({ ...prev, error: null, fetchKey: prev.fetchKey + 1 }))
+  }, [])
 
   /**
-   * Refresh the current feed
+   * Refresh the current feed by incrementing fetchKey
    */
   const refresh = React.useCallback(() => {
     setState((prev) => ({
       ...prev,
       page: 1,
       hasMore: false,
-      articles: [],
-      isLoading: true,
       error: null,
+      fetchKey: prev.fetchKey + 1,
     }))
-    const currentTopic = state.activeTopic
-    setState((prev) => ({ ...prev, activeTopic: "" }))
-    setTimeout(() => {
-      setState((prev) => ({ ...prev, activeTopic: currentTopic }))
-    }, 0)
-  }, [state.activeTopic])
+  }, [])
 
   return {
     ...state,

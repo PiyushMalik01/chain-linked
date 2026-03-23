@@ -65,6 +65,13 @@ export function generateState(): string {
 
 /**
  * Generate LinkedIn OAuth authorization URL
+ *
+ * NOTE: This function calls `getLinkedInConfig()` without an `origin`, so it
+ * relies on the `LINKEDIN_REDIRECT_URI` environment variable being set correctly
+ * for each deployment environment (local dev, preview deploys, production, etc.).
+ * Make sure the env var matches the redirect URI registered in your LinkedIn
+ * Developer Portal for the corresponding environment.
+ *
  * @param state - CSRF protection state parameter
  * @returns Authorization URL to redirect user to
  * @example

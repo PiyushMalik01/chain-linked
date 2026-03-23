@@ -1,3 +1,5 @@
+// TODO: Add rate limiting (e.g., Upstash Redis or next-rate-limit)
+
 /**
  * Team Search API Route
  * @description Search for discoverable teams by name
@@ -6,6 +8,15 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+
+/**
+ * Escape PostgREST special pattern characters to prevent filter injection
+ * @param str - Raw user input string
+ * @returns Escaped string safe for use in .ilike() patterns
+ */
+function escapePostgrestPattern(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&')
+}
 
 /**
  * GET /api/teams/search?q=searchterm
@@ -28,14 +39,17 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Escape special PostgREST pattern characters before building ILIKE filters
+    const safeQ = escapePostgrestPattern(q)
     // Strip spaces for fuzzy matching (e.g. "Hire Ops" -> "HireOps" matches "HigherOps")
-    const normalizedQ = q.replace(/\s+/g, '')
+    const normalizedQ = escapePostgrestPattern(q.replace(/\s+/g, ''))
 
     // Search teams by name: exact ILIKE + trigram similarity for fuzzy matches
     const { data: teamsByName, error: nameError } = await supabase
       .from('teams')
       .select('id, name, logo_url, company_id, discoverable')
-      .or(`name.ilike.%${q}%,name.ilike.%${normalizedQ}%`)
+      .eq('discoverable', true)
+      .or(`name.ilike.%${safeQ}%,name.ilike.%${normalizedQ}%`)
       .limit(10)
 
     if (nameError) {
@@ -47,7 +61,7 @@ export async function GET(request: Request) {
     const { data: matchingCompanies } = await supabase
       .from('companies')
       .select('id, name')
-      .or(`name.ilike.%${q}%,name.ilike.%${normalizedQ}%`)
+      .or(`name.ilike.%${safeQ}%,name.ilike.%${normalizedQ}%`)
       .limit(10)
 
     let teamsByCompany: typeof teamsByName = []
@@ -56,6 +70,7 @@ export async function GET(request: Request) {
       const { data: companyTeams } = await supabase
         .from('teams')
         .select('id, name, logo_url, company_id, discoverable')
+        .eq('discoverable', true)
         .in('company_id', companyIds)
         .limit(10)
       teamsByCompany = companyTeams || []
@@ -72,10 +87,10 @@ export async function GET(request: Request) {
       teamsByTrigram = (trigramResults as typeof teamsByName) || []
     }
 
-    // Merge and deduplicate results
+    // Merge, deduplicate, and filter to discoverable teams only
     const teamMap = new Map<string, (typeof teamsByName)[number]>()
     for (const team of [...(teamsByName || []), ...teamsByCompany, ...teamsByTrigram]) {
-      if (!teamMap.has(team.id)) {
+      if (!teamMap.has(team.id) && team.discoverable) {
         teamMap.set(team.id, team)
       }
     }

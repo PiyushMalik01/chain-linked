@@ -121,7 +121,8 @@ export async function fetchAnalyticsSummary(
 
   const summary: VoyagerAnalyticsSummary = {
     impressions: cardData?.impressions?.value || 0,
-    uniqueViews: cardData?.impressions?.value || 0,
+    // Voyager API doesn't provide unique views separately from impressions
+    uniqueViews: 0,
     engagements: cardData?.engagements?.value || 0,
     engagementRate: 0,
     followerGains: cardData?.followerGains?.value || 0,

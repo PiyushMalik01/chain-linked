@@ -7,6 +7,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { revokeToken } from '@/lib/linkedin'
+import { safeDecrypt } from '@/lib/crypto'
 
 /**
  * POST - Disconnect LinkedIn account
@@ -36,7 +37,7 @@ export async function POST() {
     // Revoke token with LinkedIn (best effort)
     if (tokenData?.access_token) {
       try {
-        await revokeToken(tokenData.access_token)
+        await revokeToken(safeDecrypt(tokenData.access_token))
       } catch (error) {
         // Log but don't fail - token might already be invalid
         console.error('Failed to revoke LinkedIn token:', error)

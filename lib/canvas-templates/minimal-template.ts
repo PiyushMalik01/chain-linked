@@ -1,7 +1,8 @@
 /**
  * Minimal Template
- * Clean, elegant design with lots of whitespace and refined typography
- * Enhanced with subtle geometric accents that maintain the minimalist aesthetic
+ * @description Clean, elegant design with lots of whitespace and refined typography.
+ * Enhanced with subtle geometric accents that maintain the minimalist aesthetic.
+ * @module lib/canvas-templates/minimal-template
  */
 
 import type { CanvasTemplate, CanvasSlide } from '@/types/canvas-editor';

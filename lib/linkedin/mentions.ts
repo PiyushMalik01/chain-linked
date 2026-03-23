@@ -72,7 +72,14 @@ export function mentionsToPlainText(text: string): string {
 
 /**
  * Build UGC API attributes array from mention tokens.
- * Calculates correct character positions after token → name replacement.
+ * Calculates correct character positions after token -> name replacement.
+ *
+ * NOTE: LinkedIn's UGC API expects `start` and `length` as UTF-16 code unit
+ * offsets, which is exactly what JavaScript's `.length` and `RegExp.index`
+ * provide. This means the current implementation is correct even for text
+ * containing characters outside the BMP (e.g. emoji), because JS strings
+ * are natively UTF-16 and surrogate pairs are counted as 2 units by `.length`.
+ *
  * @param text - Raw text with mention tokens
  * @returns Object with plain text and attributes array
  */
@@ -137,10 +144,13 @@ export function buildMentionToken(name: string, urn: string): string {
 /**
  * Count characters excluding mention token overhead.
  * For LinkedIn character limit, mentions count as just the display name.
+ * Uses UTF-16 code unit length (.length) instead of code-point length
+ * because LinkedIn's API counts surrogate pairs (e.g. Unicode bold/italic
+ * characters like 𝗛) as 2 characters, not 1.
  * @param text - Raw text with mention tokens
  * @returns Character count with mentions counted as display names only
  */
 export function countCharactersWithMentions(text: string): number {
   const plainText = mentionsToPlainText(text)
-  return [...plainText].length
+  return plainText.length
 }

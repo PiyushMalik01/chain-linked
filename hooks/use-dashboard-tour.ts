@@ -107,7 +107,7 @@ export function useDashboardTour(): DashboardTourState {
   /**
    * Resolve and set the target rect for a given step index
    */
-  const resolveStep = useCallback(async (stepIndex: number) => {
+  const resolveStep = useCallback(async (stepIndex: number, skipRetries?: boolean) => {
     const step = TOUR_STEPS[stepIndex]
     if (!step) return
 
@@ -119,14 +119,17 @@ export function useDashboardTour(): DashboardTourState {
       await new Promise(resolve => setTimeout(resolve, 300))
     }
 
-    const rect = await resolveTargetRect(step.targetSelector)
+    // When skipping to next step due to missing target, don't retry
+    const rect = skipRetries
+      ? (el ? (() => { const r = el.getBoundingClientRect(); return { top: r.top, left: r.left, width: r.width, height: r.height } })() : null)
+      : await resolveTargetRect(step.targetSelector)
     if (rect) {
       setTargetRect(rect)
     } else {
-      // Element not found — skip this step
+      // Element not found — skip this step without retries
       if (stepIndex < TOUR_STEPS.length - 1) {
         setCurrentStepIndex(stepIndex + 1)
-        resolveStep(stepIndex + 1)
+        resolveStep(stepIndex + 1, true)
       } else {
         completeTour()
       }

@@ -11,6 +11,17 @@ import { WelcomeToTeamEmail } from '@/components/emails/welcome-to-team'
 import { copyTeamContextToMember } from '@/lib/team/copy-context'
 
 /**
+ * Mask an email address for privacy (e.g. "j***@example.com")
+ * @param email - Full email address
+ * @returns Masked email with only first character of local part visible
+ */
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  if (!local || !domain) return '***'
+  return `${local[0]}***@${domain}`
+}
+
+/**
  * POST accept invitation
  * @description Accept a team invitation by token
  * @param request - HTTP request with token
@@ -48,7 +59,7 @@ export async function POST(request: Request) {
     if (invitation.email.toLowerCase() !== user.email?.toLowerCase()) {
       return NextResponse.json({
         error: 'This invitation was sent to a different email address',
-        expected_email: invitation.email,
+        expected_email: maskEmail(invitation.email),
       }, { status: 403 })
     }
 
@@ -109,19 +120,26 @@ export async function POST(request: Request) {
 
     if (currentMemberships && currentMemberships.length > 0) {
       for (const membership of currentMemberships) {
-        // If user is the owner of a team, delete that team (it becomes orphaned)
         if (membership.role === 'owner') {
-          // Delete all members of that team first
-          await supabase
+          // Check if the owned team has other members
+          const { count } = await supabase
             .from('team_members')
-            .delete()
+            .select('*', { count: 'exact', head: true })
             .eq('team_id', membership.team_id)
+            .neq('user_id', user.id)
 
-          // Delete the team itself
-          await supabase
-            .from('teams')
-            .delete()
-            .eq('id', membership.team_id)
+          if (count && count > 0) {
+            return NextResponse.json(
+              { error: 'You own a team with other members. Please transfer ownership before joining another team.' },
+              { status: 409 }
+            )
+          }
+
+          // Safe to delete - no other members
+          await supabase.from('team_members').delete().eq('team_id', membership.team_id)
+          await supabase.from('team_join_requests').delete().eq('team_id', membership.team_id)
+          await supabase.from('team_invitations').delete().eq('team_id', membership.team_id)
+          await supabase.from('teams').delete().eq('id', membership.team_id)
         } else {
           // Just remove the membership
           await supabase
@@ -132,7 +150,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Add user to the new team
+    // Mark invitation accepted first (so it can be retried if member insert fails)
+    const { error: inviteUpdateError } = await supabase
+      .from('team_invitations')
+      .update({
+        status: 'accepted',
+        accepted_at: new Date().toISOString(),
+      })
+      .eq('id', invitation.id)
+
+    if (inviteUpdateError) {
+      console.error('Update invitation status error:', inviteUpdateError)
+      return NextResponse.json({ error: 'Failed to process invitation' }, { status: 500 })
+    }
+
+    // Then add user to the new team
     const { error: memberError } = await supabase
       .from('team_members')
       .insert({
@@ -143,20 +175,16 @@ export async function POST(request: Request) {
 
     if (memberError) {
       console.error('Add team member error:', memberError)
+      // Rollback invitation status so it can be retried
+      await supabase
+        .from('team_invitations')
+        .update({ status: 'pending' })
+        .eq('id', invitation.id)
       return NextResponse.json({ error: 'Failed to join team' }, { status: 500 })
     }
 
     // Copy company context and brand kit from team owner to new member
     await copyTeamContextToMember(supabase, invitation.team_id, user.id)
-
-    // Update invitation status
-    await supabase
-      .from('team_invitations')
-      .update({
-        status: 'accepted',
-        accepted_at: new Date().toISOString(),
-      })
-      .eq('id', invitation.id)
 
     // Get team and company info for welcome email
     const { data: team } = await supabase
@@ -186,19 +214,21 @@ export async function POST(request: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai'
     const dashboardUrl = `${appUrl}/dashboard`
 
-    await sendEmail({
-      to: user.email!,
-      subject: `Welcome to ${team?.name}!`,
-      react: WelcomeToTeamEmail({
-        memberName: userProfile?.full_name || '',
-        memberEmail: user.email || '',
-        teamName: team?.name || 'the team',
-        companyName: company?.name,
-        companyLogoUrl: company?.logo_url || team?.logo_url || undefined,
-        role: invitation.role as 'admin' | 'member',
-        dashboardUrl,
-      }),
-    })
+    if (user.email) {
+      await sendEmail({
+        to: user.email,
+        subject: `Welcome to ${team?.name}!`,
+        react: WelcomeToTeamEmail({
+          memberName: userProfile?.full_name || '',
+          memberEmail: user.email || '',
+          teamName: team?.name || 'the team',
+          companyName: company?.name,
+          companyLogoUrl: company?.logo_url || team?.logo_url || undefined,
+          role: invitation.role as 'admin' | 'member',
+          dashboardUrl,
+        }),
+      })
+    }
 
     return NextResponse.json({
       success: true,
@@ -271,7 +301,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       invitation: {
         id: invitation.id,
-        email: invitation.email,
+        email: maskEmail(invitation.email),
         role: invitation.role,
         status,
         expires_at: invitation.expires_at,
@@ -287,7 +317,6 @@ export async function GET(request: Request) {
       } : null,
       inviter: inviter ? {
         name: inviter.full_name,
-        email: inviter.email,
         avatar_url: inviter.avatar_url,
       } : null,
     })

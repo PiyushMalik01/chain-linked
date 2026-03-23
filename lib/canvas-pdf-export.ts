@@ -1,6 +1,7 @@
 /**
  * Canvas PDF Export Utility
- * Handles exporting carousel slides to PDF format
+ * @description Handles exporting carousel slides to PDF format using pdf-lib and Konva stage snapshots
+ * @module lib/canvas-pdf-export
  */
 
 import { PDFDocument, rgb } from 'pdf-lib';

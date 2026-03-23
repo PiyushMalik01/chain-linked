@@ -1,7 +1,8 @@
 /**
  * Shape Collection for the Graphics Library
- * Pre-built decorative shapes for LinkedIn carousel slides.
+ * @description Pre-built decorative shapes for LinkedIn carousel slides.
  * Each shape includes a configuration for canvas insertion and an SVG preview.
+ * @module lib/graphics-library/shape-collection
  */
 
 import type { ShapeAsset } from '@/types/graphics-library';

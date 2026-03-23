@@ -1,3 +1,10 @@
+/**
+ * Schedule Modal Component
+ * @description Dialog for picking a date and time to schedule a LinkedIn post,
+ * with AI-suggested optimal posting times and timezone display.
+ * @module components/features/schedule-modal
+ */
+
 "use client"
 
 import * as React from "react"
@@ -45,6 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 /**
  * Post preview data for the schedule modal.
@@ -346,6 +354,22 @@ export function ScheduleModal({
     const hour24 = to24Hour(hour, period)
     let scheduledDate = setHours(selectedDate, hour24)
     scheduledDate = setMinutes(scheduledDate, minute)
+
+    // Apply timezone correction so the past-time check compares against the
+    // selected timezone rather than the browser's local time.
+    const browserOffset = scheduledDate.getTimezoneOffset()
+    const targetDate = new Date(
+      scheduledDate.toLocaleString('en-US', { timeZone: timezone })
+    )
+    const targetOffset = targetDate.getTimezoneOffset()
+    const offsetDiff = (browserOffset - targetOffset) * 60 * 1000
+    const correctedDate = new Date(scheduledDate.getTime() + offsetDiff)
+
+    if (correctedDate <= new Date()) {
+      toast.error('Please select a time in the future')
+      return
+    }
+
     onSchedule(scheduledDate, timezone)
   }
 

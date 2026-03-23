@@ -13,8 +13,11 @@ const PROFILE_METRICS = ['followers', 'profile_views', 'search_appearances', 'co
 type ProfileMetric = (typeof PROFILE_METRICS)[number]
 
 /** Valid granularity values for profile timeseries RPCs */
-const VALID_GRANULARITIES = ['daily', 'weekly', 'monthly'] as const
+const VALID_GRANULARITIES = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'] as const
 type Granularity = (typeof VALID_GRANULARITIES)[number]
+
+/** Granularities that have corresponding RPC functions */
+const SUPPORTED_RPC_GRANULARITIES = ['daily', 'weekly', 'monthly'] as const
 
 /** Row shape returned by profile timeseries RPC functions */
 interface TimeseriesRow {
@@ -34,12 +37,26 @@ interface SummaryRow {
 }
 
 /**
- * Maps a profile metric to its _total column name
- * @param metric - The profile metric
- * @returns The total column name for the metric
+ * Known column mappings from metric name to the accumulative table column.
+ * If a metric doesn't have a dedicated `_total` column in the
+ * `profile_analytics_accumulative` table, it is mapped to a fallback or
+ * excluded from accumulative lookups.
  */
-function totalColumn(metric: ProfileMetric): string {
-  return `${metric}_total`
+const ACCUMULATIVE_COLUMN_MAP: Record<ProfileMetric, string | null> = {
+  followers: 'followers_total',
+  profile_views: 'profile_views_total',
+  search_appearances: 'search_appearances_total',
+  connections: 'connections_total',
+}
+
+/**
+ * Maps a profile metric to its _total column name in the accumulative table.
+ * Returns null if the metric has no corresponding column.
+ * @param metric - The profile metric
+ * @returns The total column name for the metric, or null
+ */
+function totalColumn(metric: ProfileMetric): string | null {
+  return ACCUMULATIVE_COLUMN_MAP[metric] ?? null
 }
 
 /**
@@ -168,8 +185,13 @@ export async function GET(request: Request) {
 
     // Fall back to RPC if cache miss or stale
 
+    // Fall back to monthly for quarterly/yearly since those RPCs don't exist
+    const effectiveGranularity = (SUPPORTED_RPC_GRANULARITIES as readonly string[]).includes(granularity)
+      ? granularity
+      : 'monthly'
+
     // Call profile timeseries RPC based on granularity
-    const rpcName = `get_profile_analytics_timeseries_${granularity}`
+    const rpcName = `get_profile_analytics_timeseries_${effectiveGranularity}`
     const { data: timeseriesData, error: tsError } = await supabase.rpc(rpcName as never, {
       p_user_id: user.id,
       p_metric: metric,
@@ -207,17 +229,22 @@ export async function GET(request: Request) {
     const row = summaryRows[0]
 
     // Get accumulative total from most recent record
-    const { data: accumData } = await supabase
-      .from('profile_analytics_accumulative')
-      .select(totalColumn(metric))
-      .eq('user_id', user.id)
-      .order('analysis_date', { ascending: false })
-      .limit(1)
-      .single()
+    const accumColumn = totalColumn(metric)
+    let accumulativeTotal = 0
 
-    const accumulativeTotal = accumData
-      ? (accumData[totalColumn(metric) as keyof typeof accumData] as number) ?? 0
-      : 0
+    if (accumColumn) {
+      const { data: accumData } = await supabase
+        .from('profile_analytics_accumulative')
+        .select(accumColumn)
+        .eq('user_id', user.id)
+        .order('analysis_date', { ascending: false })
+        .limit(1)
+        .single()
+
+      accumulativeTotal = accumData
+        ? (accumData[accumColumn as keyof typeof accumData] as number) ?? 0
+        : 0
+    }
 
     // Comparison timeseries (only when explicitly requested)
     let comparison: { date: string; value: number }[] | null = null
@@ -246,7 +273,12 @@ export async function GET(request: Request) {
         }
       : { total: 0, average: 0, change: 0, accumulativeTotal, compCount: 0 }
 
-    return NextResponse.json({ current, comparison, summary })
+    const response: Record<string, unknown> = { current, comparison, summary }
+    if (granularity !== effectiveGranularity) {
+      response.granularityFallback = effectiveGranularity
+      response.note = `Granularity '${granularity}' is not supported for profile metrics; fell back to '${effectiveGranularity}'.`
+    }
+    return NextResponse.json(response)
   } catch (err) {
     console.error('Profile analytics error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

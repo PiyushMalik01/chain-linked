@@ -90,7 +90,13 @@ export default function Step1() {
         onSavingChange={setSaving}
       />
 
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        <Button
+          variant="outline"
+          onClick={() => router.push('/onboarding')}
+        >
+          Back
+        </Button>
         <Button
           disabled={!linkedinConnected || saving}
           onClick={handleNext}

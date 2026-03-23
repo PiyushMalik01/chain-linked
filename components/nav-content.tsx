@@ -1,3 +1,10 @@
+/**
+ * Nav Content Component
+ * @description Collapsible sidebar navigation group that renders a list of
+ * content-related links with active-state highlighting based on the current route.
+ * @module components/nav-content
+ */
+
 "use client"
 
 import * as React from "react"

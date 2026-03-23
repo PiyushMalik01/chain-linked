@@ -1,36 +1,569 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<p align="center">
+  <img src="public/logo.png" alt="ChainLinked Logo" width="200" />
+</p>
+
+<h1 align="center">ChainLinked</h1>
+
+<p align="center">
+  <strong>The LinkedIn content management platform built for teams.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-16.1.1-black?logo=next.js" alt="Next.js 16" />
+  <img src="https://img.shields.io/badge/React-19.2.3-61DAFB?logo=react" alt="React 19" />
+  <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase" alt="Supabase" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss" alt="Tailwind CSS v4" />
+  <img src="https://img.shields.io/badge/Inngest-Background_Jobs-6366F1" alt="Inngest" />
+</p>
+
+---
+
+## Overview
+
+ChainLinked is a full-stack SaaS platform that helps teams create, schedule, analyze, and optimize their LinkedIn content from a single workspace. It combines AI-powered writing assistance, deep research pipelines, a visual carousel creator, and real-time analytics into a unified dashboard designed for marketing teams, founders, and content creators.
+
+The platform goes beyond simple scheduling. ChainLinked ingests trending content and news articles daily, lets users remix viral posts into their own voice, tracks influencer activity, and surfaces personalized post suggestions through a Tinder-style swipe interface. Every team member's performance is tracked with granular analytics that roll up from daily deltas into weekly, monthly, quarterly, and yearly aggregates.
+
+ChainLinked also includes a companion Chrome extension that captures LinkedIn data directly from the browser -- profile analytics, post performance metrics, audience demographics, and connection data. The extension syncs this information to Supabase in real time, powering the analytics dashboards and feeding the AI generation pipeline with context about each user's audience.
+
+---
+
+## Key Features
+
+### Post Composer
+- Rich text editor powered by Lexical with live LinkedIn preview
+- AI-powered content generation via OpenRouter (GPT-4o, GPT-4o-mini)
+- @mention support with LinkedIn member search and resolution
+- Unicode font styling (bold, italic, serif, script, monospace, and more)
+- Configurable default hashtags per user
+- Post goal selector (engagement, thought leadership, traffic, etc.)
+- Inline AI panel for rewriting, expanding, and tone adjustment
+- Document/carousel post support via LinkedIn UGC API
+
+### Post Scheduling
+- Timezone-aware scheduling with calendar view
+- Inngest cron pipeline that checks for pending posts every 2 minutes
+- Automatic LinkedIn OAuth token refresh and encrypted storage
+- Support for visibility controls (public, connections-only)
+- Draft management with auto-save
+
+### Analytics Dashboard
+- Personal and team performance tracking
+- Daily delta computation with weekly/monthly/quarterly/yearly rollups
+- Interactive trend charts built with Recharts
+- Filterable data tables powered by TanStack React Table
+- Summary bar with key metrics at a glance
+- CSV export for offline analysis
+- Analytics backfill for historical data
+
+### Brand Kit
+- Automatic brand extraction from any website URL via Firecrawl
+- Logo and color palette retrieval via Brandfetch and Logo.dev
+- Company context generation (value proposition, target audience, tone of voice)
+- Perplexity-powered company research enrichment
+- AI-extracted products/services, pain points, and competitive positioning
+
+### Team Management
+- Email-based team invitations with Resend transactional emails
+- Join request workflow with approval/rejection
+- Role-based access control
+- Team activity feed and leaderboard
+- Pending invitation management
+
+### Discover and Inspiration
+- Daily automated news ingestion via Perplexity (sonar-pro)
+- Trending topic tracking across 15+ categories
+- Viral post curation with quality filtering
+- Influencer tracking and post scraping via Apify
+- News article detail view with source attribution
+
+### Swipe Interface
+- Tinder-style card UI for accepting or dismissing post suggestions
+- AI-generated suggestions based on company context and writing style
+- Automatic refill when suggestion queue runs low
+- Accepted posts flow directly into the compose editor
+
+### Carousel Creator
+- Visual canvas editor built with Konva and React-Konva
+- Drag-and-drop slide management with DnD Kit
+- Pre-built carousel templates with brand kit integration
+- Background removal via Remove.bg API
+- Unsplash image search integration
+- PDF export via pdf-lib for LinkedIn document posts
+- Font picker with custom typography options
+
+### Template Library
+- CRUD operations for reusable post templates
+- Category-based organization with usage tracking
+- Auto-generated templates based on company context and past performance
+- Template analytics (usage count, performance correlation)
+
+### Chrome Extension
+- LinkedIn data capture (profile stats, post metrics, audience data)
+- Automatic session sync for seamless login
+- Background sync with Supabase
+- Popup UI for quick access
+
+### Onboarding
+- Dual-path flow: company owner (creates team) vs. individual (joins team)
+- Four-step guided setup: profile, company context, brand kit, invite teammates
+- Company analysis workflow triggered automatically on completion
+- Join-by-invite and join-by-request team entry
+
+### AI Research
+- Multi-step deep research pipeline (Tavily search, Perplexity enrichment, OpenAI synthesis)
+- Cross-topic synthesis with source attribution
+- Writing style analysis and application ("My Style" mode)
+- Configurable research depth (basic vs. deep)
+- Content remix: transform any post or article into your voice and format
+
+### Prompt Management
+- Version-controlled prompt system for AI generation
+- Prompt playground for testing and iteration
+- Diff viewer for comparing prompt versions
+- Prompt analytics tracking generation quality
+
+---
+
+## Tech Stack
+
+| Category | Technology |
+|---|---|
+| **Framework** | Next.js 16.1.1 (App Router) |
+| **UI** | React 19.2.3, shadcn/ui (new-york style), Tailwind CSS v4 |
+| **Database** | Supabase (PostgreSQL) with Row Level Security |
+| **Auth** | Supabase Auth (email/password, Google OAuth) |
+| **AI / LLM** | OpenRouter (GPT-4o, GPT-4o-mini) via OpenAI SDK, Vercel AI SDK |
+| **Background Jobs** | Inngest (15 workflow functions, cron schedules) |
+| **Web Scraping** | Firecrawl (website analysis), Apify (LinkedIn scraping) |
+| **Research** | Perplexity API (sonar-pro), Tavily (web search) |
+| **Brand Extraction** | Brandfetch, Logo.dev |
+| **Email** | Resend + React Email (transactional emails) |
+| **Charts** | Recharts 2.15.4 |
+| **State** | React hooks, Context API, localStorage |
+| **Rich Text Editor** | Lexical |
+| **Canvas / Graphics** | Konva + React-Konva |
+| **Drag and Drop** | DnD Kit |
+| **PDF Export** | pdf-lib, JSZip |
+| **Icons** | Tabler Icons + Lucide React |
+| **Forms** | React Hook Form + Zod 4 validation |
+| **Tables** | TanStack React Table |
+| **Animation** | Framer Motion, Lottie |
+| **Product Analytics** | PostHog |
+| **Image Processing** | Remove.bg API, Unsplash API |
+| **LinkedIn** | Official REST API (UGC/Posts) + Voyager (unofficial) |
+| **Markdown** | react-markdown |
+| **Testing** | Playwright (e2e) |
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph TB
+    subgraph Client
+        Browser["Web App (Next.js)"]
+        Ext[Chrome Extension]
+    end
+
+    subgraph "Next.js Backend"
+        API[API Routes]
+        SSR[Server Components]
+    end
+
+    subgraph "Data Layer"
+        Supa[(Supabase PostgreSQL)]
+        Auth[Supabase Auth]
+    end
+
+    subgraph "Background Jobs"
+        Inngest[Inngest Workers]
+    end
+
+    subgraph "External APIs"
+        LI[LinkedIn APIs]
+        OR[OpenRouter - GPT-4o]
+        FC[Firecrawl]
+        BF[Brandfetch / Logo.dev]
+        AP[Apify]
+        PX[Perplexity]
+        TV[Tavily]
+        RS[Resend]
+        PH[PostHog]
+    end
+
+    Browser -->|Requests| API
+    Browser -->|SSR| SSR
+    Ext -->|Data Sync| Supa
+    SSR --> Supa
+    API --> Supa
+    API --> Auth
+    API --> LI
+    API --> OR
+    API -->|Trigger Events| Inngest
+    Inngest --> Supa
+    Inngest --> OR
+    Inngest --> FC
+    Inngest --> BF
+    Inngest --> AP
+    Inngest --> PX
+    Inngest --> TV
+    Inngest --> LI
+    API --> RS
+    Browser --> PH
+```
+
+---
+
+## Project Structure
+
+```
+chainlinked/
+├── app/                        # Next.js App Router
+│   ├── api/                    # 30+ API route groups (ai, analytics, brand-kit,
+│   │                           #   carousel-templates, company, discover, drafts,
+│   │                           #   inngest, linkedin, posts, research, swipe,
+│   │                           #   teams, templates, and more)
+│   ├── dashboard/              # Main application pages
+│   │   ├── analytics/          # Analytics dashboard
+│   │   ├── carousels/          # Carousel creator
+│   │   ├── compose/            # Post composer
+│   │   ├── discover/           # Content discovery and news
+│   │   ├── drafts/             # Draft management
+│   │   ├── inspiration/        # Inspiration feed
+│   │   ├── posts/              # Post history
+│   │   ├── prompts/            # Prompt management and playground
+│   │   ├── schedule/           # Post scheduling calendar
+│   │   ├── settings/           # User and team settings
+│   │   ├── swipe/              # Swipe suggestions interface
+│   │   ├── team/               # Team dashboard and leaderboard
+│   │   └── templates/          # Template library
+│   ├── onboarding/             # Multi-step onboarding flow
+│   ├── login/                  # Authentication pages
+│   ├── signup/
+│   └── privacy/                # Privacy policy
+├── components/
+│   ├── features/               # 80+ feature components
+│   ├── shared/                 # Reusable components
+│   ├── ui/                     # shadcn/ui component library
+│   ├── emails/                 # React Email templates
+│   ├── skeletons/              # Loading skeleton components
+│   └── landing/                # Marketing page components
+├── hooks/                      # 50+ custom React hooks
+├── lib/
+│   ├── ai/                     # AI client, prompts, quality filters, style analysis
+│   ├── apify/                  # LinkedIn scraping integration
+│   ├── brandfetch/             # Brand extraction
+│   ├── canvas-templates/       # Carousel canvas templates
+│   ├── email/                  # Email sending utilities
+│   ├── firecrawl/              # Website scraping
+│   ├── graphics-library/       # Graphics asset management
+│   ├── image/                  # Image processing utilities
+│   ├── inngest/                # Inngest client + 15 workflow functions
+│   ├── linkedin/               # LinkedIn API client (official + Voyager)
+│   ├── perplexity/             # Perplexity API client
+│   ├── prompts/                # Prompt management utilities
+│   ├── research/               # Tavily search client
+│   ├── store/                  # Client-side state stores
+│   ├── supabase/               # Supabase client (server, browser, middleware)
+│   ├── team/                   # Team management utilities
+│   └── unicode-fonts.ts        # Unicode font transformations
+├── types/                      # TypeScript type definitions
+├── services/                   # Service layer (onboarding)
+├── scripts/                    # Data import and seed scripts
+├── supabase/
+│   └── migrations/             # 33 SQL migration files
+├── extension/                  # Chrome extension (separate build)
+│   ├── background/             # Service worker
+│   ├── content/                # Content scripts
+│   ├── popup/                  # Extension popup UI
+│   └── manifest.json
+├── e2e/                        # Playwright end-to-end tests
+└── public/                     # Static assets (logos)
+```
+
+---
+
+## Inngest Workflows
+
+ChainLinked uses 15 Inngest workflow functions for background processing:
+
+| Function | Trigger | Description |
+|---|---|---|
+| `analyzeCompanyWorkflow` | `company/analyze` event | Scrapes website via Firecrawl, researches via Perplexity, extracts structured company context via OpenAI |
+| `deepResearchWorkflow` | `discover/research` event | Multi-step research: Tavily search, Perplexity enrichment, cross-topic synthesis, post generation |
+| `generateSuggestionsWorkflow` | `swipe/generate-suggestions` event | Generates personalized LinkedIn post suggestions from company context |
+| `suggestionsReadyHandler` | `swipe/suggestions-ready` event | Handles post-generation cleanup and notification |
+| `dailyContentIngest` | Cron (daily at 6 AM UTC) | Ingests fresh news articles via Perplexity for all users with selected topics |
+| `onDemandContentIngest` | `discover/ingest` event | On-demand article ingestion for specific topics |
+| `publishScheduledPosts` | Cron (every 2 minutes) | Queries pending scheduled posts, posts to LinkedIn, updates status |
+| `swipeAutoRefill` | Cron | Checks suggestion queues and triggers refills for users running low |
+| `analyticsPipeline` | Cron (midnight UTC) | Computes daily deltas, rolls up into weekly/monthly/quarterly/yearly aggregates |
+| `analyticsSummaryCompute` | Event-driven | Computes summary statistics for analytics dashboard |
+| `analyticsBackfill` | Event-driven | Backfills historical analytics data |
+| `templateAutoGenerate` | Cron | Auto-generates post templates based on company context |
+| `influencerPostScrape` | `influencer/follow` event | Scrapes recent posts from followed influencers via Apify |
+| `viralPostIngest` | Cron | Ingests viral posts from curated LinkedIn profiles with quality filtering |
+| `ingestArticles` | Event-driven | Article ingestion with deduplication and freshness management |
+
+### Company Analysis Pipeline
+
+```mermaid
+graph LR
+    A[company/analyze event] --> B[Firecrawl: Scrape Website]
+    B --> C[Perplexity: Research Company]
+    C --> D[OpenAI: Extract Structured Data]
+    D --> E[Save to Supabase]
+    E --> F[company/analyze.completed]
+
+    D --> D1[Value Proposition]
+    D --> D2[Products & Services]
+    D --> D3[Target Audience]
+    D --> D4[Tone of Voice]
+    D --> D5[Brand Colors]
+```
+
+### Scheduled Post Publishing
+
+```mermaid
+graph LR
+    A[Cron: Every 2 min] --> B[Query Pending Posts]
+    B --> C{Posts Due?}
+    C -->|Yes| D[Decrypt OAuth Token]
+    D --> E[Refresh Token if Expired]
+    E --> F[POST to LinkedIn API]
+    F --> G{Success?}
+    G -->|Yes| H[Mark as Posted]
+    G -->|No| I[Mark as Failed]
+    C -->|No| J[Sleep]
+```
+
+### Deep Research Pipeline
+
+```mermaid
+graph TB
+    A[discover/research event] --> B[Per-Topic Parallel Search]
+    B --> C[Tavily: Web Search]
+    B --> D[Perplexity: Enrich Results]
+    C --> E[Cross-Topic Synthesis]
+    D --> E
+    E --> F{Generate Posts?}
+    F -->|Yes| G[OpenAI: Generate LinkedIn Posts]
+    G --> H[Apply Writing Style]
+    H --> I[Quality Filter]
+    I --> J[Save to Supabase]
+    F -->|No| J
+```
+
+### Analytics Pipeline
+
+```mermaid
+graph TB
+    A[Cron: Midnight UTC] --> B[Profile Daily Deltas]
+    B --> C[Profile Accumulative Update]
+    C --> D[Post Daily Deltas]
+    D --> E[Post Accumulative Update]
+    E --> F[Weekly Rollup]
+    F --> G[Monthly Rollup]
+    G --> H[Quarterly Rollup]
+    H --> I[Yearly Rollup]
+    I --> J[Phase Transitions]
+```
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- **Node.js** 20+
+- **npm** 10+
+- A **Supabase** project (PostgreSQL database and auth)
+- A **LinkedIn** developer app with OAuth 2.0 configured
+- An **OpenRouter** API key for AI features
+- An **Inngest** account (or use the local dev server)
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/your-org/chainlinked.git
+cd chainlinked
+
+# Install dependencies
+npm install
+
+# Copy environment variables
+cp .env.example .env.local
+# Edit .env.local and fill in all required values (see Environment Variables below)
+
+# Run Supabase migrations
+npx supabase db push
+
+# Start the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# In a separate terminal, start the Inngest dev server
+npm run dev:inngest
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app will be available at [http://localhost:3000](http://localhost:3000).
+The Inngest dashboard will be at [http://127.0.0.1:8288](http://127.0.0.1:8288).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+To run both concurrently:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev:all
+```
 
-## Learn More
+### Build
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run build
+npm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Environment Variables
 
-## Deploy on Vercel
+Copy `.env.example` to `.env.local` and configure the following groups:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Supabase
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous (public) key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only) |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Application
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | App URL for OAuth redirects, email links, extension detection |
+
+### LinkedIn OAuth
+| Variable | Description |
+|---|---|
+| `LINKEDIN_CLIENT_ID` | LinkedIn app client ID |
+| `LINKEDIN_CLIENT_SECRET` | LinkedIn app client secret |
+| `LINKEDIN_REDIRECT_URI` | OAuth callback URL |
+| `LINKEDIN_POSTING_ENABLED` | Safety gate -- set to `true` to enable live posting |
+
+### AI and LLM
+| Variable | Description |
+|---|---|
+| `OPENROUTER_API_KEY` | OpenRouter API key (routes to GPT-4o, GPT-4o-mini) |
+
+### Research
+| Variable | Description |
+|---|---|
+| `TAVILY_API_KEY` | Tavily API key for web search |
+| `PERPLEXITY_API_KEY` | Perplexity API key for research enrichment |
+
+### Scraping
+| Variable | Description |
+|---|---|
+| `APIFY_API_TOKEN` | Apify token for LinkedIn profile and post scraping |
+
+### Email
+| Variable | Description |
+|---|---|
+| `RESEND_API_KEY` | Resend API key for transactional emails |
+| `EMAIL_FROM_ADDRESS` | Sender email address |
+| `EMAIL_FROM_NAME` | Sender display name |
+
+### Security
+| Variable | Description |
+|---|---|
+| `API_KEY_ENCRYPTION_SECRET` | Encryption key for OAuth tokens (minimum 32 characters) |
+| `CRON_SECRET` | Secret for Vercel cron job authentication |
+
+### Inngest
+| Variable | Description |
+|---|---|
+| `INNGEST_EVENT_KEY` | Inngest event key (not required in development) |
+| `INNGEST_SIGNING_KEY` | Inngest signing key for webhook verification |
+
+### Product Analytics
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project key |
+| `NEXT_PUBLIC_POSTHOG_HOST` | PostHog instance URL |
+
+### Image and Brand
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_LOGO_DEV_TOKEN` | Logo.dev token for company logo lookup |
+| `UNSPLASH_ACCESS_KEY` | Unsplash API key for image search in carousel creator |
+| `REMOVE_BG_API_KEY` | Remove.bg API key for background removal |
+
+### Chrome Extension
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_CHROME_STORE_URL` | Chrome Web Store listing URL |
+| `NEXT_PUBLIC_EXTENSION_ID` | Extension ID for communication |
+
+### Admin
+| Variable | Description |
+|---|---|
+| `ADMIN_EMAILS` | Comma-separated list of admin email addresses |
+
+---
+
+## Database
+
+ChainLinked uses **Supabase PostgreSQL** with **Row Level Security (RLS)** enabled on all tables. The schema is managed through 33 SQL migration files in `supabase/migrations/`.
+
+Key table groups:
+
+- **Users and Auth** -- `users`, `linkedin_profiles`, `linkedin_tokens`, `user_api_keys`
+- **Teams** -- team membership, invitations, join requests, role-based access
+- **Content** -- `scheduled_posts`, `drafts`, `my_posts`, `post_analytics`
+- **Analytics** -- `linkedin_analytics`, `analytics_history`, `audience_data`, `audience_history`
+- **Discovery** -- `discover_posts`, `feed_posts`, `wishlist_collections`
+- **AI and Research** -- `company_context`, `research_tables`, `swipe_suggestions`, `prompt_system`
+- **Templates** -- `carousel_templates`, post templates
+- **Extension** -- `captured_apis`, `capture_stats`, `extension_settings`, `sync_metadata`, `connections`, `comments`, `followers`
+
+All database access uses typed Supabase clients (server-side for Server Components, browser-side for client mutations) with generated TypeScript types in `types/database.ts`.
+
+---
+
+## Deployment
+
+ChainLinked is designed for deployment on **Vercel**.
+
+### Vercel Configuration
+
+- **Framework Preset**: Next.js
+- **Build Command**: `next build`
+- **Install Command**: `npm install`
+- **Node.js Version**: 20.x
+- Set all environment variables from `.env.example` in the Vercel dashboard
+- Configure the Inngest Vercel integration for automatic webhook registration
+- Set up Vercel Cron for the `CRON_SECRET`-protected endpoints
+
+### Inngest Production Setup
+
+Register the Inngest serve endpoint at `/api/inngest` in your Inngest dashboard. All 15 workflow functions will be automatically discovered and registered.
+
+### Chrome Extension
+
+The Chrome extension lives in the `extension/` directory with its own build tooling (Vite + esbuild). Build it separately:
+
+```bash
+cd extension
+npm install
+npm run build
+```
+
+The built extension can be loaded as an unpacked extension in Chrome or published to the Chrome Web Store.
+
+---
+
+## License
+
+Proprietary. All rights reserved.
+
+This software is the confidential property of ChainLinked. Unauthorized copying, distribution, or modification of this software is strictly prohibited.

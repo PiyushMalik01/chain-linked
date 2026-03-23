@@ -104,14 +104,21 @@ export function isProfileMetric(metric: string): boolean {
  * @returns URLSearchParams
  */
 function buildParams(filters: AnalyticsV2Filters, metricOverride?: string): URLSearchParams {
+  const metric = metricOverride || filters.metric
+  const isProfile = isProfileMetric(metric)
+
   const params = new URLSearchParams({
-    metric: metricOverride || filters.metric,
+    metric,
     period: filters.period,
-    contentType: filters.contentType,
     compare: String(filters.compare),
     granularity: filters.granularity,
-    source: filters.source || 'all',
   })
+
+  // Source and contentType are only relevant for post metrics, not profile metrics
+  if (!isProfile) {
+    if (filters.contentType) params.append('contentType', filters.contentType)
+    if (filters.source) params.append('source', filters.source)
+  }
 
   if (filters.period === 'custom' && filters.startDate && filters.endDate) {
     params.set('startDate', filters.startDate)

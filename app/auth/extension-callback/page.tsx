@@ -47,11 +47,15 @@ export default function ExtensionCallbackPage() {
     }
 
     async function transferSession() {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { user } } = await supabase.auth.getUser()
 
-      if (session) {
-        postSessionToExtension(session)
-        return
+      if (user) {
+        // getUser validated the token; now retrieve the session for the tokens
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          postSessionToExtension(session)
+          return
+        }
       }
 
       // Session may not be hydrated yet after OAuth redirect.

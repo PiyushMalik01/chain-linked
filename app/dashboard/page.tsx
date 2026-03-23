@@ -9,7 +9,7 @@
  */
 
 import * as React from "react"
-import { motion, useSpring, useTransform, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { format, formatDistanceToNow } from "date-fns"
@@ -60,42 +60,7 @@ import {
   staggerContainerVariants,
   staggerItemVariants,
 } from "@/lib/animations"
-
-// ============================================================================
-// Animated Number
-// ============================================================================
-
-/**
- * Animated number counter with spring physics
- * @param props.value - Target number to animate to
- * @param props.decimals - Decimal places to display
- * @param props.suffix - String appended after the number
- */
-function AnimatedNumber({
-  value,
-  decimals = 0,
-  suffix = "",
-}: {
-  value: number
-  decimals?: number
-  suffix?: string
-}) {
-  const spring = useSpring(0, { stiffness: 50, damping: 20 })
-  const display = useTransform(spring, (current) => {
-    if (decimals > 0) return `${current.toFixed(decimals)}${suffix}`
-    return `${Math.round(current).toLocaleString()}${suffix}`
-  })
-
-  useEffect(() => {
-    if (value === 0) {
-      spring.jump(0)
-    } else {
-      spring.set(value)
-    }
-  }, [spring, value])
-
-  return <motion.span>{display}</motion.span>
-}
+import { AnimatedNumber } from "@/components/shared/animated-number"
 
 // ============================================================================
 // Metric Card

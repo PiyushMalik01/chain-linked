@@ -1,3 +1,10 @@
+/**
+ * Post Performance Component
+ * @description Slide-over panel showing detailed performance analytics for a single
+ * LinkedIn post, including time-series charts, engagement metrics, and top comments.
+ * @module components/features/post-performance
+ */
+
 "use client"
 
 import * as React from "react"

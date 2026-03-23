@@ -204,11 +204,18 @@ export function AITemplateRow({
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onUse(template)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onUse(template)
+        }
+      }}
       className={cn(
-        "w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg border",
+        "w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer",
         "bg-gradient-to-r",
         colors.gradient,
         "hover:shadow-sm transition-all",
@@ -286,6 +293,6 @@ export function AITemplateRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </button>
+    </div>
   )
 }

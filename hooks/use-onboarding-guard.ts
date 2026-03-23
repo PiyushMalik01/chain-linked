@@ -147,7 +147,11 @@ export function useOnboardingGuard(): UseOnboardingGuardReturn {
         }
 
         // Mark that company onboarding has started to prevent redirect loops
-        markCompanyOnboardingStarted()
+        // Only for owner/step paths, not for the member join path
+        const isStepPath = pathname.startsWith('/onboarding/step')
+        if (isStepPath) {
+          markCompanyOnboardingStarted()
+        }
 
         // If full onboarding is completed, redirect to dashboard
         if (hasCompletedOnboarding) {

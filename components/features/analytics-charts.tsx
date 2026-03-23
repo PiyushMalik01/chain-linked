@@ -19,8 +19,6 @@ import {
   Cell,
   ComposedChart,
   Line,
-  RadialBar,
-  RadialBarChart,
   XAxis,
   YAxis,
 } from "recharts"
@@ -229,18 +227,21 @@ function computeFrequencyData(posts: RawPost[]): FrequencyPoint[] {
  * Compute average metrics by content type
  */
 function computeContentTypeData(posts: RawPost[]): ContentTypePoint[] {
-  const typeMap = new Map<string, { impressions: number; engagement: number; count: number }>()
+  const typeMap = new Map<string, { impressions: number; engagement: number; engagementCount: number; count: number }>()
 
   for (const p of posts) {
     const type = p.media_type || "text"
     if (!typeMap.has(type)) {
-      typeMap.set(type, { impressions: 0, engagement: 0, count: 0 })
+      typeMap.set(type, { impressions: 0, engagement: 0, engagementCount: 0, count: 0 })
     }
     const entry = typeMap.get(type)!
     const imp = p.impressions ?? 0
     const eng = (p.reactions ?? 0) + (p.comments ?? 0) + (p.reposts ?? 0) + (p.saves ?? 0) + (p.sends ?? 0)
     entry.impressions += imp
-    entry.engagement += imp > 0 ? (eng / imp) * 100 : 0
+    if (imp > 0) {
+      entry.engagement += (eng / imp) * 100
+      entry.engagementCount++
+    }
     entry.count++
   }
 
@@ -248,7 +249,9 @@ function computeContentTypeData(posts: RawPost[]): ContentTypePoint[] {
     .map(([type, val]) => ({
       type: type.charAt(0).toUpperCase() + type.slice(1),
       avgImpressions: Math.round(val.impressions / val.count),
-      avgEngagementRate: Math.round((val.engagement / val.count) * 10) / 10,
+      avgEngagementRate: val.engagementCount > 0
+        ? Math.round((val.engagement / val.engagementCount) * 10) / 10
+        : 0,
       count: val.count,
     }))
     .sort((a, b) => b.avgImpressions - a.avgImpressions)

@@ -1,3 +1,10 @@
+/**
+ * Swipe Interface Component
+ * @description Tinder-style card swipe interface for quickly reviewing post suggestions,
+ * allowing users to like, skip, remix, or save posts with gesture or button controls.
+ * @module components/features/swipe-interface
+ */
+
 "use client"
 
 import * as React from "react"

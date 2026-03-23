@@ -1,3 +1,10 @@
+/**
+ * Team Leaderboard Component
+ * @description Ranked leaderboard showing team members sorted by engagement score
+ * with trophy icons, avatars, metric badges, and trend indicators.
+ * @module components/features/team-leaderboard
+ */
+
 "use client"
 
 import * as React from "react"

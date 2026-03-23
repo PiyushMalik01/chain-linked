@@ -1,3 +1,10 @@
+/**
+ * Team Activity Feed Component
+ * @description Displays a filterable, sortable feed of team members' recent LinkedIn
+ * posts with engagement metrics, author info, and remix actions.
+ * @module components/features/team-activity-feed
+ */
+
 "use client"
 
 import * as React from "react"

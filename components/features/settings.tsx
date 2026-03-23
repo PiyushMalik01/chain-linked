@@ -1,3 +1,10 @@
+/**
+ * Settings Component
+ * @description Comprehensive user settings panel with tabs for profile, account,
+ * LinkedIn connection, team management, notifications, and appearance preferences.
+ * @module components/features/settings
+ */
+
 "use client"
 
 import Image from "next/image"

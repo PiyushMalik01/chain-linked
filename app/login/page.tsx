@@ -72,7 +72,7 @@ function LoginForm() {
     if (successParam) {
       toast.success(successParam)
     }
-  }, [errorParam, successParam, email, router])
+  }, [errorParam, successParam, router])
 
   /**
    * Handle resending verification email via API

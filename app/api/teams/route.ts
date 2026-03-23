@@ -164,7 +164,10 @@ export async function POST(request: Request) {
     if (memberError) {
       console.error('Member creation error:', memberError)
       // Rollback team creation
-      await supabase.from('teams').delete().eq('id', team.id)
+      const { error: rollbackError } = await supabase.from('teams').delete().eq('id', team.id)
+      if (rollbackError) {
+        console.error('Rollback failed - orphaned team:', team.id, rollbackError)
+      }
       return NextResponse.json({ error: 'Failed to add owner to team' }, { status: 500 })
     }
 
@@ -277,16 +280,37 @@ export async function DELETE(request: Request) {
   }
 
   // Delete team members first
-  await supabase
+  const { error: membersError } = await supabase
     .from('team_members')
     .delete()
     .eq('team_id', teamId)
 
+  if (membersError) {
+    console.error('Team members deletion error:', membersError)
+    return NextResponse.json({ error: 'Failed to remove team members' }, { status: 500 })
+  }
+
   // Delete invitations
-  await supabase
+  const { error: invitationsError } = await supabase
     .from('team_invitations')
     .delete()
     .eq('team_id', teamId)
+
+  if (invitationsError) {
+    console.error('Team invitations deletion error:', invitationsError)
+    return NextResponse.json({ error: 'Failed to remove team invitations' }, { status: 500 })
+  }
+
+  // Delete join requests
+  const { error: joinRequestsError } = await supabase
+    .from('team_join_requests')
+    .delete()
+    .eq('team_id', teamId)
+
+  if (joinRequestsError) {
+    console.error('Team join requests deletion error:', joinRequestsError)
+    return NextResponse.json({ error: 'Failed to remove team join requests' }, { status: 500 })
+  }
 
   // Delete team
   const { error: deleteError } = await supabase

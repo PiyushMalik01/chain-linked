@@ -1,3 +1,10 @@
+/**
+ * Privacy Policy Page
+ * @description Public-facing privacy policy page with sectioned layout,
+ * icon-coded categories, and branded header/footer.
+ * @module app/privacy/page
+ */
+
 import type { Metadata } from "next"
 import Link from "next/link"
 import Image from "next/image"
@@ -24,6 +31,7 @@ import {
 import { Navbar } from "@/components/landing/navbar"
 import { Footer } from "@/components/landing/footer"
 
+/** Page-level metadata for SEO and browser tab title */
 export const metadata: Metadata = {
   title: "Privacy Policy – ChainLinked",
   description:

@@ -241,6 +241,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       sourcePostId: undefined,
       sourceAuthor: undefined,
       aiSuggestion,
+      remixMeta: undefined,
+      savedDraftId: undefined, // New content = new draft
       lastModified: Date.now(),
     })
   }, [])
@@ -256,6 +258,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         sourceAuthor: authorName,
         aiSuggestion,
         remixMeta,
+        savedDraftId: undefined, // New content = new draft
         lastModified: Date.now(),
       })
     },
