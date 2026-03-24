@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { createClient } from '@/lib/supabase/server'
 import { createOpenAIClient, chatCompletion, OpenAIError, getErrorMessage, DEFAULT_MODEL } from '@/lib/ai/openai-client'
 import { getSystemPromptForType } from '@/lib/ai/prompt-templates'
@@ -29,6 +30,27 @@ interface GeneratePostRequest {
   apiKey?: string
   /** Post type ID for type-specific prompt templates (e.g., 'story', 'listicle') */
   postType?: string
+}
+
+/**
+ * Calculates estimated cost based on model pricing
+ * @param model - The model identifier string
+ * @param promptTokens - Number of input tokens
+ * @param completionTokens - Number of output tokens
+ * @returns Estimated cost in USD
+ */
+function calculateEstimatedCost(
+  model: string,
+  promptTokens: number,
+  completionTokens: number
+): number {
+  // Pricing per 1K tokens (USD)
+  const pricing: Record<string, { input: number; output: number }> = {
+    'openai/gpt-4.1': { input: 0.002, output: 0.008 },
+    'openai/gpt-4o': { input: 0.0025, output: 0.01 },
+  }
+  const rates = pricing[model] || pricing['openai/gpt-4.1']
+  return (promptTokens / 1000) * rates.input + (completionTokens / 1000) * rates.output
 }
 
 /**
@@ -379,6 +401,13 @@ If additional instructions exist above, they override all other guidelines.`
 
     const responseTimeMs = Date.now() - startTime
 
+    // Calculate estimated cost based on model pricing
+    const estimatedCost = calculateEstimatedCost(
+      response.model,
+      response.promptTokens,
+      response.completionTokens
+    )
+
     // Log usage for analytics (non-blocking)
     if (user && promptType) {
       try {
@@ -393,6 +422,7 @@ If additional instructions exist above, they override all other guidelines.`
           model: response.model,
           responseTimeMs,
           success: true,
+          estimatedCost,
           metadata: {
             postType,
             tone,
@@ -410,7 +440,14 @@ If additional instructions exist above, they override all other guidelines.`
     // Track AI generation completed
     try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'generate', topic, tone, length, postType: postType ?? null, model: response.model, tokens: response.totalTokens, response_time_ms: responseTimeMs }) } catch {}
 
-    // Return generated content
+    // Build prompt snapshot for analytics
+    const promptSnapshot = {
+      system_prompt: systemPrompt,
+      user_messages: [userMessage],
+      assistant_response: response.content,
+    }
+
+    // Return generated content with AI metadata for downstream persistence
     return NextResponse.json({
       content: response.content,
       metadata: {
@@ -425,9 +462,23 @@ If additional instructions exist above, they override all other guidelines.`
           hasRecentPosts: !!userContext.recentTopics?.length,
         },
       },
+      /** AI tracking fields for generated_posts persistence */
+      aiMetadata: {
+        prompt_tokens: response.promptTokens,
+        completion_tokens: response.completionTokens,
+        total_tokens: response.totalTokens,
+        model: response.model,
+        estimated_cost: estimatedCost,
+        prompt_snapshot: promptSnapshot,
+      },
     })
   } catch (error) {
     console.error('Post generation error:', error)
+
+    Sentry.captureException(error, {
+      tags: { feature: 'generate', model: DEFAULT_MODEL },
+      extra: { tone: 'unknown', length: 'unknown' },
+    })
 
     // Track AI generation failure
     try { trackAIEvent('anonymous', 'ai_generation_failed', { feature: 'generate', error: error instanceof Error ? error.message : 'Unknown error' }) } catch {}

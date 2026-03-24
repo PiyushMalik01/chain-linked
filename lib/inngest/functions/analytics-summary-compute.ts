@@ -1,11 +1,17 @@
 /**
  * Analytics Summary Compute (Inngest Cron)
- * @description Pre-computes analytics summaries for all active users every 4 hours.
+ * @description Pre-computes analytics summaries for all active users every 5 minutes.
  * Replaces on-the-fly RPC calls with cached results for reliable, fast reads.
  *
  * For each user, computes summary stats (total, avg, pct_change) and timeseries
  * for every metric × period combination. Results are upserted into
  * `analytics_summary_cache` for the API routes to read.
+ *
+ * Key distinction:
+ *   - `current_total` / `accumulative_total` = absolute lifetime total from accumulative tables
+ *   - `period_gained` (stored as `current_total` was before) = sum of daily deltas in the period
+ *   - `pct_change` = compares period gains, not absolute totals
+ *   - `timeseries` = daily gained values for charting
  *
  * Metrics computed:
  *   Post:    impressions, reactions, comments, reposts, saves, sends, engagements, engagements_rate
@@ -17,7 +23,7 @@
  */
 
 import { inngest } from '../client'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 /** Log prefix */
 const LOG = '[AnalyticsSummaryCompute]'
@@ -48,40 +54,16 @@ const PERIODS = ['7d', '30d', '90d', '1y'] as const
 const MIN_COMP_DAYS = 3
 
 /**
- * Creates a Supabase admin client that bypasses RLS
- * @returns Supabase client with service role privileges
- */
-function getSupabaseAdmin(): ReturnType<typeof createClient> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  return createClient(url, serviceKey)
-}
-
-/**
- * Compute start date for a period relative to today
- * @param period - Period string (7d, 30d, 90d, 1y)
- * @param ref - Reference end date
- * @returns Start date
- */
-function periodStartDate(period: string, ref: Date): Date {
-  const start = new Date(ref)
-  switch (period) {
-    case '7d': start.setDate(start.getDate() - 7); break
-    case '30d': start.setDate(start.getDate() - 30); break
-    case '90d': start.setDate(start.getDate() - 90); break
-    case '1y': start.setFullYear(start.getFullYear() - 1); break
-    default: start.setDate(start.getDate() - 30)
-  }
-  return start
-}
-
-/** Format Date → YYYY-MM-DD */
-function toDateStr(d: Date): string {
-  return d.toISOString().split('T')[0]
-}
-
-/**
  * Summary result for a single metric + period
+ * @property current_total - Absolute lifetime total from accumulative tables
+ * @property current_avg - Average daily gain in the current period
+ * @property current_count - Number of data points in the current period
+ * @property comp_total - Sum of daily gains in the comparison period
+ * @property comp_avg - Average daily gain in the comparison period
+ * @property comp_count - Number of data points in the comparison period
+ * @property pct_change - Percentage change in daily gains between current and comparison periods
+ * @property accumulative_total - Same as current_total (absolute lifetime total)
+ * @property timeseries - Daily gained values for chart rendering
  */
 interface ComputedSummary {
   user_id: string
@@ -95,24 +77,161 @@ interface ComputedSummary {
   comp_avg: number
   comp_count: number
   pct_change: number
-  accumulative_total: number | null
+  accumulative_total: number
   timeseries: { date: string; value: number }[]
   computed_at: string
 }
 
 /**
- * Compute post-level summaries for a user
+ * Creates a Supabase admin client that bypasses RLS
+ * @returns Supabase client with service role privileges
+ */
+function getSupabaseAdmin(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  return createClient(url, serviceKey)
+}
+
+/**
+ * Compute start date for a period relative to a reference date
+ * @param period - Period string (7d, 30d, 90d, 1y)
+ * @param ref - Reference end date
+ * @returns Start date for the period
+ */
+function periodStartDate(period: string, ref: Date): Date {
+  const start = new Date(ref)
+  switch (period) {
+    case '7d': start.setDate(start.getDate() - 7); break
+    case '30d': start.setDate(start.getDate() - 30); break
+    case '90d': start.setDate(start.getDate() - 90); break
+    case '1y': start.setFullYear(start.getFullYear() - 1); break
+    default: start.setDate(start.getDate() - 30)
+  }
+  return start
+}
+
+/**
+ * Format a Date object to YYYY-MM-DD string
+ * @param d - Date to format
+ * @returns Date string in YYYY-MM-DD format
+ */
+function toDateStr(d: Date): string {
+  return d.toISOString().split('T')[0]
+}
+
+/**
+ * Round a number to 2 decimal places
+ * @param n - Number to round
+ * @returns Rounded number
+ */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/**
+ * Fetch the latest accumulative totals for all posts belonging to a user.
+ * Returns a map of metric name to summed absolute total across all posts.
  * @param supabase - Admin Supabase client
  * @param userId - User ID
- * @param now - Reference date
- * @returns Array of computed summaries
+ * @returns Map of metric name to absolute lifetime total
+ */
+async function fetchPostAccumulativeTotals(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Record<string, number>> {
+  const { data: rows, error } = await supabase
+    .from('post_analytics_accumulative')
+    .select(
+      'post_id, impressions_total, reactions_total, comments_total, reposts_total, saves_total, sends_total, engagements_total, engagements_rate'
+    )
+    .eq('user_id', userId) as { data: Record<string, unknown>[] | null; error: unknown }
+
+  if (error) {
+    console.error(`${LOG} Error fetching post accumulative totals for ${userId}:`, error)
+  }
+
+  const totals: Record<string, number> = {
+    impressions: 0,
+    reactions: 0,
+    comments: 0,
+    reposts: 0,
+    saves: 0,
+    sends: 0,
+    engagements: 0,
+  }
+
+  for (const row of rows ?? []) {
+    totals.impressions += Number(row.impressions_total) || 0
+    totals.reactions += Number(row.reactions_total) || 0
+    totals.comments += Number(row.comments_total) || 0
+    totals.reposts += Number(row.reposts_total) || 0
+    totals.saves += Number(row.saves_total) || 0
+    totals.sends += Number(row.sends_total) || 0
+    totals.engagements += Number(row.engagements_total) || 0
+  }
+
+  // Engagement rate = (reactions + comments + reposts) / impressions * 100
+  const engagementNumerator = totals.reactions + totals.comments + totals.reposts
+  totals.engagements_rate = totals.impressions > 0
+    ? (engagementNumerator / totals.impressions) * 100
+    : 0
+
+  return totals
+}
+
+/**
+ * Fetch the latest accumulative totals for a user's profile.
+ * @param supabase - Admin Supabase client
+ * @param userId - User ID
+ * @returns Map of metric name to absolute lifetime total, or null if no data
+ */
+async function fetchProfileAccumulativeTotals(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Record<string, number> | null> {
+  const { data: row, error } = await supabase
+    .from('profile_analytics_accumulative')
+    .select('followers_total, profile_views_total, search_appearances_total')
+    .eq('user_id', userId)
+    .order('analysis_date', { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: Record<string, unknown> | null; error: unknown }
+
+  if (error) {
+    console.error(`${LOG} Error fetching profile accumulative totals for ${userId}:`, error)
+  }
+
+  if (!row) return null
+
+  return {
+    followers: Number(row.followers_total) || 0,
+    profile_views: Number(row.profile_views_total) || 0,
+    search_appearances: Number(row.search_appearances_total) || 0,
+  }
+}
+
+/**
+ * Compute post-level summaries for a user across all periods and metrics.
+ *
+ * - `current_total` = absolute lifetime total from post_analytics_accumulative
+ * - `period_gained` (stored in cache fields) = sum of daily deltas from post_analytics_daily
+ * - `pct_change` = comparison of period gains between current and previous period
+ * - `timeseries` = daily gained values grouped by date
+ *
+ * @param supabase - Admin Supabase client
+ * @param userId - User ID
+ * @param now - Reference date for period calculations
+ * @returns Array of computed summaries for all post metrics and periods
  */
 async function computePostSummaries(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   now: Date
 ): Promise<ComputedSummary[]> {
   const results: ComputedSummary[] = []
+
+  // Fetch absolute totals once (shared across all periods)
+  const accumTotals = await fetchPostAccumulativeTotals(supabase, userId)
 
   for (const period of PERIODS) {
     const endDate = now
@@ -127,45 +246,110 @@ async function computePostSummaries(
     const compStartStr = toDateStr(compStartDate)
     const compEndStr = toDateStr(compEndDate)
 
+    // Fetch daily rows for current and comparison periods in parallel
+    const [{ data: curRows }, { data: compRows }] = await Promise.all([
+      supabase
+        .from('post_analytics_daily')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('analysis_date', startStr)
+        .lte('analysis_date', endStr) as unknown as Promise<{ data: Record<string, unknown>[] | null }>,
+      supabase
+        .from('post_analytics_daily')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('analysis_date', compStartStr)
+        .lte('analysis_date', compEndStr) as unknown as Promise<{ data: Record<string, unknown>[] | null }>,
+    ])
+
     for (const metric of POST_METRICS) {
-      const col = metric === 'engagements_rate' ? 'engagements_rate' : `${metric}_gained`
-
       try {
-        // Current period aggregates
-        const { data: curRows } = await supabase
-          .from('post_analytics_daily')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('analysis_date', startStr)
-          .lte('analysis_date', endStr) as { data: Record<string, unknown>[] | null }
+        const col = metric === 'engagements_rate' ? 'engagements_rate' : `${metric}_gained`
 
-        const curValues = (curRows ?? []).map((r) => Number(r[col]) || 0)
-        const curDates = new Set((curRows ?? []).map((r) => r.analysis_date as string))
-        const currentTotal = curValues.reduce((a, b) => a + b, 0)
-        const currentAvg = curValues.length > 0 ? currentTotal / curValues.length : 0
-        const currentCount = curDates.size
+        // Absolute lifetime total from accumulative table
+        const accumulativeTotal = round2(accumTotals[metric] ?? 0)
 
-        // Comparison period aggregates
-        const { data: compRows } = await supabase
-          .from('post_analytics_daily')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('analysis_date', compStartStr)
-          .lte('analysis_date', compEndStr) as { data: Record<string, unknown>[] | null }
+        if (metric === 'engagements_rate') {
+          // Engagement rate is a percentage, not a summable metric
+          // current_total = current engagement rate from accumulative totals
+          // For timeseries, show daily engagement rate values
+          // For pct_change, compare average engagement rate across periods
 
-        const compValues = (compRows ?? []).map((r) => Number(r[col]) || 0)
-        const compDates = new Set((compRows ?? []).map((r) => r.analysis_date as string))
-        const compTotal = compValues.reduce((a, b) => a + b, 0)
-        const compAvg = compValues.length > 0 ? compTotal / compValues.length : 0
-        const compCount = compDates.size
+          const curRateValues = (curRows ?? []).map((r) => Number(r[col]) || 0).filter((v) => v > 0)
+          const curDates = new Set((curRows ?? []).map((r) => r.analysis_date as string))
+          const curAvgRate = curRateValues.length > 0
+            ? curRateValues.reduce((a, b) => a + b, 0) / curRateValues.length
+            : 0
 
-        // Percentage change (daily average based, suppressed if < MIN_COMP_DAYS)
-        let pctChange = 0
-        if (compCount >= MIN_COMP_DAYS && compAvg > 0) {
-          pctChange = Math.round(((currentAvg - compAvg) / compAvg) * 10000) / 100
+          const compRateValues = (compRows ?? []).map((r) => Number(r[col]) || 0).filter((v) => v > 0)
+          const compDates = new Set((compRows ?? []).map((r) => r.analysis_date as string))
+          const compAvgRate = compRateValues.length > 0
+            ? compRateValues.reduce((a, b) => a + b, 0) / compRateValues.length
+            : 0
+
+          let pctChange = 0
+          if (compDates.size >= MIN_COMP_DAYS && compAvgRate > 0) {
+            pctChange = round2(((curAvgRate - compAvgRate) / compAvgRate) * 100)
+          }
+
+          // Timeseries: average engagement rate per date
+          const dateMap = new Map<string, { sum: number; count: number }>()
+          for (const r of curRows ?? []) {
+            const d = r.analysis_date as string
+            const v = Number(r[col]) || 0
+            if (v > 0) {
+              const entry = dateMap.get(d) ?? { sum: 0, count: 0 }
+              entry.sum += v
+              entry.count += 1
+              dateMap.set(d, entry)
+            }
+          }
+          const timeseries = Array.from(dateMap.entries())
+            .map(([date, { sum, count }]) => ({ date, value: round2(sum / count) }))
+            .sort((a, b) => a.date.localeCompare(b.date))
+
+          results.push({
+            user_id: userId,
+            metric,
+            period,
+            metric_type: 'post',
+            current_total: accumulativeTotal,
+            current_avg: round2(curAvgRate),
+            current_count: curDates.size,
+            comp_total: round2(compAvgRate),
+            comp_avg: round2(compAvgRate),
+            comp_count: compDates.size,
+            pct_change: pctChange,
+            accumulative_total: accumulativeTotal,
+            timeseries,
+            computed_at: new Date().toISOString(),
+          })
+          continue
         }
 
-        // Timeseries: aggregate by date
+        // --- Standard summable post metrics ---
+
+        // Current period: sum of daily gains
+        const curValues = (curRows ?? []).map((r) => Number(r[col]) || 0)
+        const curDates = new Set((curRows ?? []).map((r) => r.analysis_date as string))
+        const periodGained = curValues.reduce((a, b) => a + b, 0)
+        const currentAvg = curValues.length > 0 ? periodGained / curValues.length : 0
+        const currentCount = curDates.size
+
+        // Comparison period: sum of daily gains
+        const compValues = (compRows ?? []).map((r) => Number(r[col]) || 0)
+        const compDates = new Set((compRows ?? []).map((r) => r.analysis_date as string))
+        const compGained = compValues.reduce((a, b) => a + b, 0)
+        const compAvg = compValues.length > 0 ? compGained / compValues.length : 0
+        const compCount = compDates.size
+
+        // Percentage change based on period gains (not absolute totals)
+        let pctChange = 0
+        if (compCount >= MIN_COMP_DAYS && compGained > 0) {
+          pctChange = round2(((periodGained - compGained) / compGained) * 100)
+        }
+
+        // Timeseries: daily gained values grouped by date
         const dateMap = new Map<string, number>()
         for (const r of curRows ?? []) {
           const d = r.analysis_date as string
@@ -173,7 +357,7 @@ async function computePostSummaries(
           dateMap.set(d, (dateMap.get(d) || 0) + v)
         }
         const timeseries = Array.from(dateMap.entries())
-          .map(([date, value]) => ({ date, value: Math.round(value * 100) / 100 }))
+          .map(([date, value]) => ({ date, value: round2(value) }))
           .sort((a, b) => a.date.localeCompare(b.date))
 
         results.push({
@@ -181,14 +365,14 @@ async function computePostSummaries(
           metric,
           period,
           metric_type: 'post',
-          current_total: Math.round(currentTotal * 100) / 100,
-          current_avg: Math.round(currentAvg * 100) / 100,
+          current_total: accumulativeTotal,
+          current_avg: round2(currentAvg),
           current_count: currentCount,
-          comp_total: Math.round(compTotal * 100) / 100,
-          comp_avg: Math.round(compAvg * 100) / 100,
+          comp_total: round2(compGained),
+          comp_avg: round2(compAvg),
           comp_count: compCount,
           pct_change: pctChange,
-          accumulative_total: null,
+          accumulative_total: accumulativeTotal,
           timeseries,
           computed_at: new Date().toISOString(),
         })
@@ -202,18 +386,27 @@ async function computePostSummaries(
 }
 
 /**
- * Compute profile-level summaries for a user
+ * Compute profile-level summaries for a user across all periods and metrics.
+ *
+ * - `current_total` = absolute lifetime total from profile_analytics_accumulative
+ * - `period_gained` = sum of daily deltas from profile_analytics_daily
+ * - `pct_change` = comparison of period gains
+ * - `timeseries` = daily gained values for chart rendering
+ *
  * @param supabase - Admin Supabase client
  * @param userId - User ID
- * @param now - Reference date
- * @returns Array of computed summaries
+ * @param now - Reference date for period calculations
+ * @returns Array of computed summaries for all profile metrics and periods
  */
 async function computeProfileSummaries(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   now: Date
 ): Promise<ComputedSummary[]> {
   const results: ComputedSummary[] = []
+
+  // Fetch absolute totals once (shared across all periods)
+  const accumTotals = await fetchProfileAccumulativeTotals(supabase, userId)
 
   for (const period of PERIODS) {
     const endDate = now
@@ -227,73 +420,65 @@ async function computeProfileSummaries(
     const compStartStr = toDateStr(compStartDate)
     const compEndStr = toDateStr(compEndDate)
 
+    // Fetch daily rows for current and comparison periods in parallel
+    const [{ data: curRows }, { data: compRows }] = await Promise.all([
+      supabase
+        .from('profile_analytics_daily')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('analysis_date', startStr)
+        .lte('analysis_date', endStr) as unknown as Promise<{ data: Record<string, unknown>[] | null }>,
+      supabase
+        .from('profile_analytics_daily')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('analysis_date', compStartStr)
+        .lte('analysis_date', compEndStr) as unknown as Promise<{ data: Record<string, unknown>[] | null }>,
+    ])
+
     for (const metric of PROFILE_METRICS) {
       const col = `${metric}_gained`
 
       try {
-        // Current period
-        const { data: curRows } = await supabase
-          .from('profile_analytics_daily')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('analysis_date', startStr)
-          .lte('analysis_date', endStr) as { data: Record<string, unknown>[] | null }
+        // Absolute lifetime total from accumulative table
+        const accumulativeTotal = accumTotals ? round2(accumTotals[metric] ?? 0) : 0
 
+        // Current period: sum of daily gains
         const curValues = (curRows ?? []).map((r) => Number(r[col]) || 0)
-        const currentTotal = curValues.reduce((a, b) => a + b, 0)
-        const currentAvg = curValues.length > 0 ? currentTotal / curValues.length : 0
+        const periodGained = curValues.reduce((a, b) => a + b, 0)
+        const currentAvg = curValues.length > 0 ? periodGained / curValues.length : 0
         const currentCount = curValues.length
 
-        // Comparison period
-        const { data: compRows } = await supabase
-          .from('profile_analytics_daily')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('analysis_date', compStartStr)
-          .lte('analysis_date', compEndStr) as { data: Record<string, unknown>[] | null }
-
+        // Comparison period: sum of daily gains
         const compValues = (compRows ?? []).map((r) => Number(r[col]) || 0)
-        const compTotal = compValues.reduce((a, b) => a + b, 0)
-        const compAvg = compValues.length > 0 ? compTotal / compValues.length : 0
+        const compGained = compValues.reduce((a, b) => a + b, 0)
+        const compAvg = compValues.length > 0 ? compGained / compValues.length : 0
         const compCount = compValues.length
 
+        // Percentage change based on period gains
         let pctChange = 0
-        if (compCount >= MIN_COMP_DAYS && compAvg > 0) {
-          pctChange = Math.round(((currentAvg - compAvg) / compAvg) * 10000) / 100
+        if (compCount >= MIN_COMP_DAYS && compGained > 0) {
+          pctChange = round2(((periodGained - compGained) / compGained) * 100)
         }
 
-        // Timeseries
+        // Timeseries: daily gained values
         const timeseries = (curRows ?? [])
           .map((r) => ({
             date: r.analysis_date as string,
-            value: Math.round((Number(r[col]) || 0) * 100) / 100,
+            value: round2(Number(r[col]) || 0),
           }))
           .sort((a, b) => a.date.localeCompare(b.date))
-
-        // Accumulative total: latest value
-        const totalCol = `${metric}_total`
-        const { data: accumRow } = await supabase
-          .from('profile_analytics_accumulative')
-          .select('*')
-          .eq('user_id', userId)
-          .order('analysis_date', { ascending: false })
-          .limit(1)
-          .maybeSingle() as { data: Record<string, unknown> | null }
-
-        const accumulativeTotal = accumRow
-          ? Number(accumRow[totalCol]) || 0
-          : null
 
         results.push({
           user_id: userId,
           metric,
           period,
           metric_type: 'profile',
-          current_total: Math.round(currentTotal * 100) / 100,
-          current_avg: Math.round(currentAvg * 100) / 100,
+          current_total: accumulativeTotal,
+          current_avg: round2(currentAvg),
           current_count: currentCount,
-          comp_total: Math.round(compTotal * 100) / 100,
-          comp_avg: Math.round(compAvg * 100) / 100,
+          comp_total: round2(compGained),
+          comp_avg: round2(compAvg),
           comp_count: compCount,
           pct_change: pctChange,
           accumulative_total: accumulativeTotal,
@@ -311,8 +496,12 @@ async function computeProfileSummaries(
 
 /**
  * Analytics Summary Compute Cron
- * Runs every 4 hours to pre-compute analytics summaries for all active users.
+ * Runs every 5 minutes to pre-compute analytics summaries for all active users.
  * Results are upserted into analytics_summary_cache.
+ *
+ * Uses accumulative tables for absolute totals and daily tables for period gains,
+ * ensuring current_total reflects the real lifetime metric values (e.g., 9,486
+ * impressions) rather than just the daily deltas gained in the period.
  */
 export const analyticsSummaryCompute = inngest.createFunction(
   {
@@ -321,7 +510,7 @@ export const analyticsSummaryCompute = inngest.createFunction(
     retries: 2,
     concurrency: [{ limit: 1 }],
   },
-  { cron: '0 */4 * * *' },
+  { cron: '*/5 * * * *' },
   async ({ step }) => {
     const supabase = getSupabaseAdmin()
     const now = new Date()
@@ -330,21 +519,36 @@ export const analyticsSummaryCompute = inngest.createFunction(
 
     // Step 1: Get all active users (users with analytics data)
     const userIds = await step.run('fetch-active-users', async () => {
-      // Get users that have post analytics data
-      const { data: postUsers } = await supabase
-        .from('post_analytics_daily')
-        .select('user_id')
-        .limit(1000) as { data: { user_id: string }[] | null }
-
-      // Get users that have profile analytics data
-      const { data: profileUsers } = await supabase
-        .from('profile_analytics_daily')
-        .select('user_id')
-        .limit(1000) as { data: { user_id: string }[] | null }
+      // Get users from both daily and accumulative tables for completeness
+      const [
+        { data: postDailyUsers },
+        { data: postAccumUsers },
+        { data: profileDailyUsers },
+        { data: profileAccumUsers },
+      ] = await Promise.all([
+        supabase
+          .from('post_analytics_daily')
+          .select('user_id')
+          .limit(1000) as unknown as Promise<{ data: { user_id: string }[] | null }>,
+        supabase
+          .from('post_analytics_accumulative')
+          .select('user_id')
+          .limit(1000) as unknown as Promise<{ data: { user_id: string }[] | null }>,
+        supabase
+          .from('profile_analytics_daily')
+          .select('user_id')
+          .limit(1000) as unknown as Promise<{ data: { user_id: string }[] | null }>,
+        supabase
+          .from('profile_analytics_accumulative')
+          .select('user_id')
+          .limit(1000) as unknown as Promise<{ data: { user_id: string }[] | null }>,
+      ])
 
       const ids = new Set<string>()
-      for (const row of postUsers ?? []) ids.add(row.user_id)
-      for (const row of profileUsers ?? []) ids.add(row.user_id)
+      for (const row of postDailyUsers ?? []) ids.add(row.user_id)
+      for (const row of postAccumUsers ?? []) ids.add(row.user_id)
+      for (const row of profileDailyUsers ?? []) ids.add(row.user_id)
+      for (const row of profileAccumUsers ?? []) ids.add(row.user_id)
 
       const uniqueIds = Array.from(ids)
       console.log(`${LOG} Found ${uniqueIds.length} active user(s)`)

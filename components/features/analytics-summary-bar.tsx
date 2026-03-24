@@ -92,15 +92,13 @@ export function AnalyticsSummaryBar({ summary, metric, isLoading }: AnalyticsSum
 
   const TrendIcon = isNeutral ? IconMinus : isPositive ? IconTrendingUp : IconTrendingDown
 
-  // For profile metrics, show accumulative total as the main figure
-  const totalValue = isProfile && summary.accumulativeTotal != null
+  // Show accumulative total as the main figure when available (absolute lifetime total)
+  const totalValue = summary.accumulativeTotal != null && !isRate
     ? summary.accumulativeTotal
     : summary.total
-  const totalLabel = isProfile
-    ? `Total ${label}`
-    : isRate
-      ? "Avg Rate"
-      : `Total ${label}`
+  const totalLabel = isRate
+    ? "Avg Rate"
+    : `Total ${label}`
 
   // "All" mode: don't show a combined total — it's meaningless to sum different metrics.
   // Instead show a high-level overview.
@@ -148,21 +146,14 @@ export function AnalyticsSummaryBar({ summary, metric, isLoading }: AnalyticsSum
             {/* Average */}
             <div>
               <p className="text-xs font-medium text-muted-foreground">
-                {isProfile ? "Gained (Period)" : "Daily Average"}
+                {isRate ? "Avg Rate (Period)" : "Daily Average"}
               </p>
               <p className="text-2xl font-bold tabular-nums">
-                {isProfile ? (
-                  <AnimatedNumber
-                    value={summary.total}
-                    decimals={0}
-                  />
-                ) : (
-                  <AnimatedNumber
-                    value={summary.average}
-                    decimals={summary.average < 10 ? 1 : 0}
-                    suffix={isRate ? "%" : ""}
-                  />
-                )}
+                <AnimatedNumber
+                  value={summary.average}
+                  decimals={isRate ? 2 : (summary.average < 10 ? 1 : 0)}
+                  suffix={isRate ? "%" : ""}
+                />
               </p>
             </div>
 

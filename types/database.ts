@@ -1011,58 +1011,79 @@ export type Database = {
       }
       generated_posts: {
         Row: {
+          completion_tokens: number | null
           content: string
+          conversation_id: string | null
           created_at: string
           cta: string | null
           discover_post_id: string | null
+          estimated_cost: number | null
           estimated_read_time: number | null
           hook: string | null
           id: string
+          model: string | null
           post_type: string
+          prompt_snapshot: Json | null
+          prompt_tokens: number | null
           research_session_id: string | null
           source: string | null
           source_snippet: string | null
           source_title: string | null
           source_url: string | null
           status: string
+          total_tokens: number | null
           updated_at: string
           user_id: string
           word_count: number | null
         }
         Insert: {
+          completion_tokens?: number | null
           content: string
+          conversation_id?: string | null
           created_at?: string
           cta?: string | null
           discover_post_id?: string | null
+          estimated_cost?: number | null
           estimated_read_time?: number | null
           hook?: string | null
           id?: string
+          model?: string | null
           post_type: string
+          prompt_snapshot?: Json | null
+          prompt_tokens?: number | null
           research_session_id?: string | null
           source?: string | null
           source_snippet?: string | null
           source_title?: string | null
           source_url?: string | null
           status?: string
+          total_tokens?: number | null
           updated_at?: string
           user_id: string
           word_count?: number | null
         }
         Update: {
+          completion_tokens?: number | null
           content?: string
+          conversation_id?: string | null
           created_at?: string
           cta?: string | null
           discover_post_id?: string | null
+          estimated_cost?: number | null
           estimated_read_time?: number | null
           hook?: string | null
           id?: string
+          model?: string | null
           post_type?: string
+          prompt_snapshot?: Json | null
+          prompt_tokens?: number | null
           research_session_id?: string | null
           source?: string | null
           source_snippet?: string | null
           source_title?: string | null
           source_url?: string | null
           status?: string
+          total_tokens?: number | null
           updated_at?: string
           user_id?: string
           word_count?: number | null

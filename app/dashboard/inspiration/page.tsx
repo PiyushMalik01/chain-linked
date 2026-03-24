@@ -458,6 +458,7 @@ function ViralPostsTab() {
         length: settings.length,
         customInstructions: settings.customInstructions,
         originalContent: postToRemix.content,
+        aiMetadata: settings.aiMetadata,
       })
       inspirationToast.remixed()
       router.push("/dashboard/compose")
@@ -856,6 +857,7 @@ function DiscoverTopicsTab() {
           length: settings.length,
           customInstructions: settings.customInstructions,
           originalContent: `${articleToRemix.headline}\n\n${articleToRemix.summary}`,
+          aiMetadata: settings.aiMetadata,
         })
         router.push("/dashboard/compose")
       }
@@ -1313,6 +1315,7 @@ function SwipeTab() {
       length: settings.length,
       customInstructions: settings.customInstructions,
       originalContent: currentCard.content,
+      aiMetadata: settings.aiMetadata,
     })
     setShowRemixDialog(false)
     swipeToast.editAndPost()

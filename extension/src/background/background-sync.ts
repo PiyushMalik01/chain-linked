@@ -51,8 +51,8 @@ const LOG_PREFIX = '[BackgroundSync]';
 /** Maximum number of sync history entries to retain */
 const MAX_HISTORY_ENTRIES = 20;
 
-/** Minimum interval in milliseconds between two sync cycles (30 minutes) */
-const MIN_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+/** Minimum interval in milliseconds between two sync cycles (10 minutes) */
+const MIN_SYNC_INTERVAL_MS = 10 * 60 * 1000;
 
 /** Maximum back-off multiplier to prevent excessively long waits */
 const MAX_BACKOFF_MULTIPLIER = 6;

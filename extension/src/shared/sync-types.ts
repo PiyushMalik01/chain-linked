@@ -51,8 +51,8 @@ export interface SyncEndpointsConfig {
  * @example
  * const config: BackgroundSyncConfig = {
  *   enabled: true,
- *   baseIntervalMinutes: 240,
- *   jitterMinutes: 60,
+ *   baseIntervalMinutes: 15,
+ *   jitterMinutes: 2,
  *   maxApiCallsPerSync: 6,
  *   activeHoursOnly: true,
  *   maxConsecutiveFailures: 3,
@@ -69,7 +69,7 @@ export interface SyncEndpointsConfig {
 export interface BackgroundSyncConfig {
   /** Whether background sync is enabled (default: false) */
   enabled: boolean;
-  /** Base interval between sync cycles in minutes (default: 240, i.e. 4 hours) */
+  /** Base interval between sync cycles in minutes (default: 15) */
   baseIntervalMinutes: number;
   /** Random jitter added to the interval to avoid detection patterns (default: 60) */
   jitterMinutes: number;
@@ -181,8 +181,8 @@ export interface SyncResult {
  */
 export const DEFAULT_SYNC_CONFIG: BackgroundSyncConfig = {
   enabled: false,
-  baseIntervalMinutes: 240,
-  jitterMinutes: 60,
+  baseIntervalMinutes: 15,
+  jitterMinutes: 2,
   maxApiCallsPerSync: 6,
   activeHoursOnly: false,
   maxConsecutiveFailures: 3,

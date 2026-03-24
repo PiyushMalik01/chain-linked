@@ -428,14 +428,16 @@ export function PostComposer({
     }
   }, [isEditing])
 
-  // Sync content with draft context (when loaded from template or remix)
-  // We intentionally exclude 'content' from deps to prevent infinite loops
+  // Sync content with draft context (when loaded from template, remix, or saved draft).
+  // We include draft._loadId so that loading a new draft always triggers a sync,
+  // even if the content string is identical to the current local state.
+  // We intentionally exclude 'content' from deps to prevent infinite loops.
   React.useEffect(() => {
-    if (draft.content && draft.content !== content) {
+    if (draft.content !== undefined && draft.content !== content) {
       setContent(draft.content)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.content])
+  }, [draft.content, draft._loadId])
 
   // Track media files in a ref for cleanup on unmount
   const mediaFilesRef = React.useRef<MediaFile[]>(mediaFiles)

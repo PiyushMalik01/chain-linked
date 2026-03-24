@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import { createClient } from "@/lib/supabase/server"
 import {
   chatCompletion,
@@ -211,6 +212,10 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Prompt playground error:", error)
+
+    Sentry.captureException(error, {
+      tags: { feature: 'playground' },
+    })
 
     if (error instanceof OpenAIError) {
       const statusMap: Record<string, number> = {

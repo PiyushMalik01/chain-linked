@@ -430,11 +430,12 @@ export function prepareForSupabase(
   }
 
   // If data is an array-like object with numeric keys ({"0": {...}, "1": {...}}),
-  // unwrap the first element. This can happen with multi-record tables like feed_posts.
+  // this is a corrupted queue entry where an array was stored as an object.
+  // Skip it entirely — these records should have been split at queue time.
   const dataKeys = Object.keys(data);
   if (dataKeys.length > 0 && dataKeys.every(k => /^\d+$/.test(k)) && typeof data[dataKeys[0]] === 'object' && data[dataKeys[0]] !== null) {
-    console.log(`[SYNC][PREPARE] Unwrapping array-like object with ${dataKeys.length} items for ${table}`);
-    return prepareForSupabase(data[dataKeys[0]] as Record<string, unknown>, table, userId);
+    console.warn(`[SYNC][PREPARE] Skipping array-like object with ${dataKeys.length} items for ${table} — should have been split at queue time`);
+    return { __skip: true } as unknown as Record<string, unknown>;
   }
 
   // Log input data for debugging
@@ -971,10 +972,17 @@ export async function processPendingChanges(): Promise<{
       try {
         console.log(`[CL:SYNC] --- PROCESSING: table=${table} changes=${changes.length}`);
 
-        // Prepare all data for this table
+        // Prepare all data for this table, filtering out skipped/corrupted records
         const records = changes.map((c) =>
           prepareForSupabase(c.data, table, currentUserId)
-        );
+        ).filter(r => !(r as Record<string, unknown>).__skip);
+
+        if (records.length === 0) {
+          console.warn(`[CL:SYNC] --- SKIPPED: table=${table} — all ${changes.length} records were corrupted/array-like`);
+          // Mark these as processed so they don't retry forever
+          processedChanges.push(...changes);
+          continue;
+        }
 
         // Log the columns that will be sent to Supabase
         const firstRecordKeys = records[0] ? Object.keys(records[0]).sort().join(', ') : 'empty';
@@ -1026,6 +1034,15 @@ export async function processPendingChanges(): Promise<{
 
           for (const record of records) {
             const recordWithUser = { ...record, user_id: currentUserId } as Record<string, unknown>;
+
+            // Validate that all composite key columns have values (skip corrupted records)
+            const keyColumns = compositeKey.split(',').map(k => k.trim());
+            const missingKeys = keyColumns.filter(k => !recordWithUser[k] && recordWithUser[k] !== 0);
+            if (missingKeys.length > 0) {
+              console.warn(`[SyncBridge] Skipping record for ${table} — missing composite key columns: ${missingKeys.join(', ')}`);
+              continue;
+            }
+
             // Ensure date is set for date-composite tables
             if (!recordWithUser.date && compositeKey.includes('date')) {
               recordWithUser.date = new Date().toISOString().split('T')[0];

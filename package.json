@@ -48,6 +48,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@react-email/components": "^1.0.6",
     "@react-email/render": "^2.0.4",
+    "@sentry/nextjs": "^10.45.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.1",
     "@tabler/icons-react": "^3.36.1",

@@ -59,6 +59,15 @@ export interface RemixResult {
       styleMatched: boolean
     }
   }
+  /** AI tracking fields for generated_posts persistence */
+  aiMetadata?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    model: string
+    estimated_cost: number
+    prompt_snapshot: Record<string, unknown>
+  }
 }
 
 /**

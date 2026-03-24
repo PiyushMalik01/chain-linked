@@ -6,10 +6,14 @@
  * @module next.config
  */
 
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 /** @type {NextConfig} */
 const nextConfig: NextConfig = {
+  // PostHog endpoints use trailing slashes (e.g. /e/) — prevent Next.js from stripping them
+  skipTrailingSlashRedirect: true,
+
   images: {
     remotePatterns: [
       {
@@ -22,15 +26,29 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+      {
+        source: "/ingest/decide",
+        destination: "https://us.i.posthog.com/decide",
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
-          {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
           {
             key: "X-Content-Type-Options",
             value: "nosniff",
@@ -43,10 +61,21 @@ const nextConfig: NextConfig = {
             key: "X-XSS-Protection",
             value: "1; mode=block",
           },
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self' https://us.posthog.com https://*.posthog.com",
+          },
         ],
       },
     ];
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: "chainlinked",
+  project: "javascript-nextjs",
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+});

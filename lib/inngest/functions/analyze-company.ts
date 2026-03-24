@@ -4,6 +4,7 @@
  * @module lib/inngest/functions/analyze-company
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { inngest } from '../client'
 import { scrapeWebsiteForAnalysis } from '@/lib/firecrawl'
 import { researchCompany } from '@/lib/perplexity'
@@ -96,6 +97,9 @@ function parseAnalysisResponse(content: string): CompanyAnalysisResult | null {
     }
   } catch (error) {
     console.error('[Inngest] Failed to parse analysis response:', error)
+    Sentry.captureException(error, {
+      tags: { feature: 'inngest', function: 'analyze-company', step: 'parse-response' },
+    })
     return null
   }
 }

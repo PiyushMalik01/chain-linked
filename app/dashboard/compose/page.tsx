@@ -157,6 +157,19 @@ function ComposeContent() {
     generationContextRef.current = ctx
   }, [])
 
+  // Populate generation context from remix metadata (carries AI tracking fields)
+  React.useEffect(() => {
+    if (draft.remixMeta?.aiMetadata && !generationContextRef.current?.aiMetadata) {
+      generationContextRef.current = {
+        topic: draft.remixMeta.originalContent?.slice(0, 100) || '',
+        tone: draft.remixMeta.tone,
+        length: draft.remixMeta.length,
+        context: draft.remixMeta.customInstructions || '',
+        aiMetadata: draft.remixMeta.aiMetadata,
+      }
+    }
+  }, [draft.remixMeta])
+
   /**
    * Auto-save draft on browser close/refresh (beforeunload)
    */
@@ -177,6 +190,7 @@ function ComposeContent() {
         context: ctx?.context || null,
         wordCount,
         draftId: savedDraftIdRef.current || undefined,
+        aiMetadata: ctx?.aiMetadata || null,
       })
 
       navigator.sendBeacon('/api/drafts/auto-save', payload)
@@ -211,6 +225,7 @@ function ComposeContent() {
           context: ctx?.context || null,
           wordCount,
           draftId: savedDraftIdRef.current || undefined,
+          aiMetadata: ctx?.aiMetadata || null,
         })
 
         navigator.sendBeacon('/api/drafts/auto-save', payload)
@@ -309,6 +324,7 @@ function ComposeContent() {
             context: ctx?.context || null,
             wordCount: currentContent.split(/\s+/).filter(Boolean).length,
             draftId: savedDraftIdRef.current || undefined,
+            aiMetadata: ctx?.aiMetadata || null,
           }),
         })
         if (res.ok) {
@@ -587,7 +603,7 @@ function ComposeContent() {
 
           <ErrorBoundary>
             <PostComposer
-              key={editingPost?.id || 'new'}
+              key={editingPost?.id || searchParams.get('draftId') || `new-${draft._loadId || 0}`}
               initialContent={editingPost?.content}
               userProfile={userProfile}
               onPost={handlePost}

@@ -40,6 +40,15 @@ export interface GenerationContext {
   context: string
   /** The post type used for generation */
   postType?: string
+  /** AI metadata for tracking token usage, model, and cost */
+  aiMetadata?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    model: string
+    estimated_cost: number
+    prompt_snapshot: Record<string, unknown>
+  }
 }
 
 /**
@@ -224,7 +233,7 @@ export function AIInlinePanel({
 
       onGenerated(data.content)
 
-      // Expose generation context to parent component
+      // Expose generation context to parent component (includes AI metadata for tracking)
       if (onGenerationContext) {
         onGenerationContext({
           topic: topic.trim(),
@@ -232,6 +241,7 @@ export function AIInlinePanel({
           length,
           context: context.trim(),
           postType: defaultPostType || undefined,
+          aiMetadata: data.aiMetadata || undefined,
         })
       }
     } catch (err) {

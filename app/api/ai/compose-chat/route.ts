@@ -9,10 +9,13 @@
 
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from 'ai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import * as Sentry from '@sentry/nextjs'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { buildComposeConversationPrompt } from '@/lib/ai/compose-system-prompt'
 import { trackAIEvent } from '@/lib/posthog-server'
+import { PromptService } from '@/lib/prompts/prompt-service'
+import { PromptType } from '@/lib/prompts/prompt-types'
 
 /**
  * Safely parses a JSON column value into a string array
@@ -263,6 +266,8 @@ export async function POST(request: Request) {
     // Track AI generation start
     try { trackAIEvent(user.id, 'ai_generation_started', { feature: 'compose-chat', tone, message_count: messages.length }) } catch {}
 
+    const startTime = Date.now()
+
     const result = streamText({
       model: provider('openai/gpt-4.1'),
       system: systemPrompt,
@@ -271,14 +276,48 @@ export async function POST(request: Request) {
       maxOutputTokens: 2000,
       tools,
       stopWhen: stepCountIs(8),
-    })
+      onFinish: async ({ usage, text }) => {
+        const responseTimeMs = Date.now() - startTime
+        const inputTokens = usage?.inputTokens ?? 0
+        const outputTokens = usage?.outputTokens ?? 0
+        const totalTokens = inputTokens + outputTokens
 
-    // Track AI generation completed (stream created, not finished)
-    try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'compose-chat', tone, message_count: messages.length, model: 'openai/gpt-4.1' }) } catch {}
+        // Calculate cost: gpt-4.1 pricing
+        const estimatedCost = (inputTokens * 0.002 + outputTokens * 0.008) / 1000
+
+        try {
+          await PromptService.logUsage({
+            promptType: PromptType.BASE_RULES,
+            promptVersion: 1,
+            userId: user.id,
+            feature: 'compose',
+            inputTokens,
+            outputTokens,
+            totalTokens,
+            model: 'openai/gpt-4.1',
+            responseTimeMs,
+            success: true,
+            estimatedCost,
+            metadata: {
+              tone,
+              message_count: messages.length,
+            },
+          })
+        } catch (logError) {
+          console.error('[ComposeChat] Failed to log usage:', logError)
+        }
+
+        try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'compose-chat', tone, message_count: messages.length, model: 'openai/gpt-4.1', tokens: totalTokens, response_time_ms: responseTimeMs }) } catch {}
+      },
+    })
 
     return result.toUIMessageStreamResponse()
   } catch (error) {
     console.error('Compose chat error:', error)
+
+    Sentry.captureException(error, {
+      tags: { feature: 'compose-chat', model: 'openai/gpt-4.1' },
+    })
 
     // Track AI generation failure
     try { trackAIEvent('anonymous', 'ai_generation_failed', { feature: 'compose-chat', error: error instanceof Error ? error.message : 'Unknown error' }) } catch {}

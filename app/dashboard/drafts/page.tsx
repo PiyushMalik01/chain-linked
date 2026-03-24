@@ -771,7 +771,7 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
  */
 function DraftsContent() {
   const router = useRouter()
-  const { updateDraft, clearDraft } = useDraft()
+  const { loadSavedDraft } = useDraft()
   const { drafts, isLoading, error, deleteDraft, bulkDeleteDrafts, refetch } = useDrafts()
   const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
@@ -949,16 +949,15 @@ function DraftsContent() {
         }
       }
 
-      clearDraft()
-      updateDraft({
-        content: d.content,
-        savedDraftId: d.id,
-        sourcePostId: d.id,
+      loadSavedDraft(d.id, d.content, {
+        topic: d.topic,
+        tone: d.tone,
+        additionalContext: d.additionalContext,
       })
       toast.success("Draft loaded into composer")
-      router.push("/dashboard/compose")
+      router.push(`/dashboard/compose?draftId=${d.id}`)
     },
-    [clearDraft, updateDraft, router]
+    [loadSavedDraft, router]
   )
 
   /** Copy draft content */

@@ -52,6 +52,15 @@ export interface RemixSettings {
   length: string
   /** Custom instructions provided */
   customInstructions: string
+  /** AI metadata for tracking token usage, model, and cost */
+  aiMetadata?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    model: string
+    estimated_cost: number
+    prompt_snapshot: Record<string, unknown>
+  }
 }
 
 /**
@@ -225,8 +234,8 @@ export function RemixDialog({
         throw new Error(data.error || 'Failed to remix post')
       }
 
-      // Auto-redirect: load content into Composer with settings
-      onRemixed(data.content, { tone, length, customInstructions: customInstructions.trim() })
+      // Auto-redirect: load content into Composer with settings (includes AI metadata)
+      onRemixed(data.content, { tone, length, customInstructions: customInstructions.trim(), aiMetadata: data.aiMetadata || undefined })
       onClose()
     } catch (err) {
       console.error('Remix error:', err)

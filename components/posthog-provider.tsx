@@ -32,7 +32,7 @@ interface PostHogProviderProps {
 export function PostHogProvider({ children }: PostHogProviderProps): React.ReactNode {
   const [isReady, setIsReady] = useState(false)
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
-  const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
+  const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || "/ingest"
 
   useEffect(() => {
     if (!apiKey || apiKey.includes("YOUR_PROJECT_API_KEY_HERE")) {
@@ -48,6 +48,14 @@ export function PostHogProvider({ children }: PostHogProviderProps): React.React
       return
     }
 
+    console.log("[PostHog] Initializing with config:", {
+      api_host: apiHost,
+      api_key: apiKey?.substring(0, 10) + "...",
+      enable_heatmaps: true,
+      session_recording: true,
+      autocapture: true,
+    })
+
     posthog.init(apiKey, {
       api_host: apiHost,
       ui_host: "https://us.posthog.com",
@@ -55,7 +63,10 @@ export function PostHogProvider({ children }: PostHogProviderProps): React.React
       // Core capture settings
       autocapture: true,
       capture_pageview: false, // We handle this manually for SPA navigation
-      capture_pageleave: true,
+      capture_pageleave: true, // Required for scrollmap heatmaps
+
+      // Heatmaps - mouse movement and attention tracking
+      enable_heatmaps: true,
 
       // Session Recording Configuration - Full replay capabilities
       disable_session_recording: false,
@@ -150,6 +161,15 @@ export function PostHogProvider({ children }: PostHogProviderProps): React.React
 
     setIsReady(true)
 
+    // Log feature status after init
+    console.log("[PostHog] Initialized successfully:", {
+      sessionRecordingActive: posthog.sessionRecordingStarted?.() ?? "unknown",
+      sessionId: posthog.get_session_id?.() ?? "unknown",
+      distinctId: posthog.get_distinct_id?.(),
+      heatmapsEnabled: true,
+      proxyHost: apiHost,
+    })
+
     // Note: We intentionally don't call posthog.reset() on cleanup
     // as it fragments sessions during React Strict Mode remounts
     // and hot module replacement in development
@@ -191,6 +211,7 @@ function PostHogPageview(): null {
   }, [pathname])
 
   useEffect(() => {
+    console.log("[PostHog] Capturing pageview:", { url, dashboardSection })
     posthog.capture("$pageview", {
       $current_url: url,
       page_title: typeof document !== "undefined" ? document.title : undefined,
@@ -224,9 +245,11 @@ export function PostHogUserSync(): null {
     }
 
     // Identify the authenticated user
+    const userName = profile?.full_name ?? profile?.name ?? user.user_metadata?.name
+    console.log("[PostHog] Identifying user:", { id: user.id, email: user.email, name: userName })
     posthog.identify(user.id, {
       email: user.email,
-      name: profile?.full_name ?? profile?.name ?? user.user_metadata?.name,
+      name: userName,
       subscription_tier: (profile as unknown as Record<string, unknown> | null)?.subscription_tier ?? user.user_metadata?.subscription_tier ?? "free",
     })
   }, [apiKey, user, profile])

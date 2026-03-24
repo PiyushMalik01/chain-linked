@@ -191,28 +191,33 @@ export const analyticsBackfill = inngest.createFunction(
           engagementsRate = (engagements / impressions) * 100
         }
 
-        // Use posted_at with created_at fallback
-        const analysisDate = post.posted_at
+        // Use TODAY as the analysis date — this is when tracking starts.
+        // Using posted_at would place seed rows months/years in the past,
+        // outside any active period window, making the dashboard look empty.
+        const analysisDate = today
+        const postCreatedAt = post.posted_at
           ? new Date(post.posted_at).toISOString().split('T')[0]
           : post.created_at
             ? new Date(post.created_at).toISOString().split('T')[0]
             : today
 
-        // Upsert into post_analytics_daily with _gained = 0 (seed row, not actual daily gain)
+        // Seed the daily row with the ACTUAL totals as "gained" on day 1.
+        // For a new user, their existing impressions ARE their gained value
+        // since we have no prior baseline. Subsequent days will show true deltas.
         const { error: dailyErr } = await db
           .from('post_analytics_daily')
           .upsert({
             user_id: post.user_id,
             post_id: post.id,
             analysis_date: analysisDate,
-            impressions_gained: 0,
-            unique_reach_gained: 0,
-            reactions_gained: 0,
-            comments_gained: 0,
-            reposts_gained: 0,
-            saves_gained: 0,
-            sends_gained: 0,
-            engagements_gained: 0,
+            impressions_gained: impressions,
+            unique_reach_gained: uniqueReach,
+            reactions_gained: reactions,
+            comments_gained: comments,
+            reposts_gained: reposts,
+            saves_gained: saves,
+            sends_gained: sends,
+            engagements_gained: engagements,
             engagements_rate: engagementsRate,
             analytics_tracking_status_id: 1, // DAILY
           }, {
@@ -231,7 +236,7 @@ export const analyticsBackfill = inngest.createFunction(
             user_id: post.user_id,
             post_id: post.id,
             analysis_date: analysisDate,
-            post_created_at: analysisDate,
+            post_created_at: postCreatedAt,
             impressions_total: impressions,
             unique_reach_total: uniqueReach,
             reactions_total: reactions,

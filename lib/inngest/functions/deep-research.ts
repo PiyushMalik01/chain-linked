@@ -78,6 +78,38 @@ interface GeneratedPost {
   sourceUrl: string
   /** Title of the source material */
   sourceTitle: string
+  /** Number of prompt/input tokens used */
+  promptTokens: number
+  /** Number of completion/output tokens used */
+  completionTokens: number
+  /** Total tokens used */
+  totalTokens: number
+  /** Model used for generation */
+  model: string
+  /** Estimated cost in USD */
+  estimatedCost: number
+  /** Snapshot of the prompts and response */
+  promptSnapshot: Record<string, unknown>
+}
+
+/**
+ * Calculates estimated cost based on model pricing
+ * @param model - The model identifier string
+ * @param promptTokens - Number of input tokens
+ * @param completionTokens - Number of output tokens
+ * @returns Estimated cost in USD
+ */
+function calculateEstimatedCost(
+  model: string,
+  promptTokens: number,
+  completionTokens: number
+): number {
+  const pricing: Record<string, { input: number; output: number }> = {
+    'openai/gpt-4.1': { input: 0.002, output: 0.008 },
+    'openai/gpt-4o': { input: 0.0025, output: 0.01 },
+  }
+  const rates = pricing[model] || pricing['openai/gpt-4.1']
+  return (promptTokens / 1000) * rates.input + (completionTokens / 1000) * rates.output
 }
 
 /**
@@ -715,6 +747,16 @@ Transform this research into a LinkedIn post following the specified format.`
               wordCount: content.split(/\s+/).length,
               sourceUrl: result.url,
               sourceTitle: result.title,
+              promptTokens: response.promptTokens,
+              completionTokens: response.completionTokens,
+              totalTokens: response.totalTokens,
+              model: response.model,
+              estimatedCost: calculateEstimatedCost(response.model, response.promptTokens, response.completionTokens),
+              promptSnapshot: {
+                system_prompt: systemPrompt,
+                user_messages: [userMessage],
+                assistant_response: content,
+              },
             } as GeneratedPost
           } catch (error) {
             console.error(`[DeepResearch] Post generation failed for type ${postType}:`, error)
@@ -755,6 +797,12 @@ Transform this research into a LinkedIn post following the specified format.`
             source_url: post.sourceUrl,
             source_title: post.sourceTitle,
             status: 'draft',
+            prompt_tokens: post.promptTokens,
+            completion_tokens: post.completionTokens,
+            total_tokens: post.totalTokens,
+            model: post.model,
+            estimated_cost: post.estimatedCost,
+            prompt_snapshot: post.promptSnapshot,
           }))
 
           const { error } = await supabase.from('generated_posts').insert(postsToInsert)

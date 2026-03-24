@@ -181,6 +181,7 @@ export async function GET(request: Request) {
             average: Number(cached.current_avg),
             change: Number(cached.pct_change),
             compCount: Number(cached.comp_count),
+            accumulativeTotal: Number(cached.accumulative_total) || null,
           }
           return NextResponse.json({
             current: cachedTimeseries,

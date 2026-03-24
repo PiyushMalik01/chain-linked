@@ -44,6 +44,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { useAuthContext } from "@/lib/auth/auth-provider"
+import { createClient } from "@/lib/supabase/client"
 // LinkedInStatusBadge removed from sidebar — status is shown in settings page
 
 // ============================================================================
@@ -61,53 +62,96 @@ interface NavItem {
   url: string
   icon: Icon
   exact?: boolean
+  /** Key matching sidebar_sections table for visibility control */
+  sectionKey: string
+}
+
+interface SidebarSection {
+  key: string
+  enabled: boolean
+  sort_order: number
+}
+
+// Simple in-memory cache for sidebar sections
+let sectionsCache: { data: SidebarSection[]; timestamp: number } | null = null
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+async function fetchSidebarSections(): Promise<SidebarSection[]> {
+  if (sectionsCache && Date.now() - sectionsCache.timestamp < CACHE_TTL) {
+    return sectionsCache.data
+  }
+
+  try {
+    const supabase = createClient()
+    // Cast needed: sidebar_sections table may not be in generated types yet
+    const { data, error } = await (supabase as any)
+      .from("sidebar_sections")
+      .select("key, enabled, sort_order")
+      .order("sort_order") as { data: SidebarSection[] | null; error: any }
+
+    if (error || !data) return []
+
+    sectionsCache = { data, timestamp: Date.now() }
+    return data
+  } catch {
+    return []
+  }
 }
 
 // ============================================================================
 // Navigation Configuration
 // ============================================================================
 
-const overviewNavItems: NavItem[] = [
+const allNavItems: NavItem[] = [
   {
     title: "Dashboard",
     url: "/dashboard",
     icon: IconDashboard,
     exact: true,
+    sectionKey: "dashboard",
   },
   {
     title: "Analytics",
     url: "/dashboard/analytics",
     icon: IconChartBar,
+    sectionKey: "analytics",
   },
   {
     title: "Team Activity",
     url: "/dashboard/team",
     icon: IconUsers,
+    sectionKey: "team_activity",
   },
-]
-
-const contentNavItems: NavItem[] = [
   {
     title: "Saved Drafts",
     url: "/dashboard/drafts",
     icon: IconArticle,
+    sectionKey: "saved_drafts",
   },
   {
     title: "Inspiration",
     url: "/dashboard/inspiration",
     icon: IconBulb,
+    sectionKey: "inspiration",
   },
   {
     title: "Create Carousel",
     url: "/dashboard/carousels",
     icon: IconPresentation,
+    sectionKey: "create_carousel",
   },
   {
     title: "Template Library",
     url: "/dashboard/templates",
     icon: IconTemplate,
+    sectionKey: "template_library",
   },
 ]
+
+/** Keys that belong to the Overview group */
+const overviewKeys = new Set(["dashboard", "analytics", "team_activity"])
+/** Keys that belong to the Content group */
+const contentKeys = new Set(["saved_drafts", "inspiration", "create_carousel", "template_library"])
 
 // ============================================================================
 // Main Component
@@ -137,9 +181,45 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // Prevent hydration mismatch with Radix IDs
   const [mounted, setMounted] = useState(false)
 
+  // Sidebar sections from database — controls visibility and sort order
+  const [sidebarSections, setSidebarSections] = useState<SidebarSection[]>([])
+
   useEffect(() => {
     setMounted(true)
+    // Fetch sidebar sections on mount
+    fetchSidebarSections().then(setSidebarSections)
   }, [])
+
+  /**
+   * Filter and sort nav items based on sidebar_sections config.
+   * If no sections are loaded yet (first render or fetch failure), show all items.
+   */
+  const getVisibleItems = (groupKeys: Set<string>): NavItem[] => {
+    const groupItems = allNavItems.filter((item) => groupKeys.has(item.sectionKey))
+
+    // If sections haven't loaded, show all items in default order
+    if (sidebarSections.length === 0) return groupItems
+
+    // Build a lookup of enabled sections with their sort_order
+    const sectionMap = new Map(
+      sidebarSections.map((s) => [s.key, s])
+    )
+
+    return groupItems
+      .filter((item) => {
+        const section = sectionMap.get(item.sectionKey)
+        // If no matching section in DB, show item by default
+        return section ? section.enabled : true
+      })
+      .sort((a, b) => {
+        const aOrder = sectionMap.get(a.sectionKey)?.sort_order ?? 999
+        const bOrder = sectionMap.get(b.sectionKey)?.sort_order ?? 999
+        return aOrder - bOrder
+      })
+  }
+
+  const overviewNavItems = getVisibleItems(overviewKeys)
+  const contentNavItems = getVisibleItems(contentKeys)
 
   // Auto-open sections based on current path
   useEffect(() => {

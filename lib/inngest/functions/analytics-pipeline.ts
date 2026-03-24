@@ -1,7 +1,8 @@
 /**
- * Daily Analytics Pipeline (Inngest Cron)
+ * Analytics Pipeline (Inngest Cron — every 5 minutes)
  * @description Computes daily deltas from LinkedIn snapshot data and rolls them up
- * into weekly, monthly, quarterly, and yearly aggregates. Runs at midnight UTC.
+ * into weekly, monthly, quarterly, and yearly aggregates. Runs every 5 minutes
+ * for near-real-time analytics updates.
  *
  * Pipeline steps:
  *   1. Profile daily deltas
@@ -221,20 +222,22 @@ interface PostDailyRow {
 export const analyticsPipeline = inngest.createFunction(
   {
     id: 'analytics-pipeline',
-    name: 'Daily Analytics Pipeline',
+    name: 'Analytics Pipeline (5min)',
     retries: 2,
+    concurrency: [{ limit: 1 }],
   },
-  { cron: '0 0 * * *' },
+  { cron: '*/5 * * * *' },
   async ({ step }) => {
     const supabase = getSupabaseAdmin()
 
-    /** Yesterday's date (the date we are computing analytics for) */
+    /** Today's date (the date we are computing analytics for — runs every 5 min) */
     const now = new Date()
+    const analysisDate = now.toISOString().split('T')[0]
+    const dayOfWeek = now.getUTCDay() // 0=Sun ... 6=Sat
+    const dayOfMonth = now.getUTCDate()
+    /** Reference date used for age calculations and rollup boundaries */
     const yesterday = new Date(now)
     yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-    const analysisDate = yesterday.toISOString().split('T')[0]
-    const dayOfWeek = yesterday.getUTCDay() // 0=Sun ... 6=Sat
-    const dayOfMonth = yesterday.getUTCDate()
 
     console.log(`${LOG_PREFIX} Starting pipeline for analysis_date=${analysisDate}`)
 

@@ -46,6 +46,15 @@ export interface RemixMeta {
   customInstructions: string
   /** The original prompt/content that was remixed */
   originalContent: string
+  /** AI metadata for tracking token usage, model, and cost */
+  aiMetadata?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    model: string
+    estimated_cost: number
+    prompt_snapshot: Record<string, unknown>
+  }
 }
 
 /**
@@ -72,6 +81,8 @@ export interface DraftState {
   savedDraftId?: string
   /** Last modified timestamp */
   lastModified: number
+  /** Unique nonce incremented on each loadSavedDraft call to guarantee state change detection */
+  _loadId?: number
 }
 
 /**
@@ -96,6 +107,8 @@ interface DraftContextValue {
   loadTemplate: (templateId: string, content: string, aiSuggestion?: AISuggestion) => void
   /** Load content for remixing, optionally with AI suggestion context and remix settings */
   loadForRemix: (postId: string, content: string, authorName?: string, aiSuggestion?: AISuggestion, remixMeta?: RemixMeta) => void
+  /** Load a saved draft from the drafts list, fully replacing current state */
+  loadSavedDraft: (draftId: string, content: string, options?: { topic?: string | null; tone?: string | null; additionalContext?: string | null }) => void
   /** Clear the entire draft */
   clearDraft: () => void
   /** Check if draft has unsaved content */
@@ -265,6 +278,31 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
+  /** Monotonically increasing counter to guarantee unique _loadId values */
+  const loadIdCounter = React.useRef(0)
+
+  const loadSavedDraft = React.useCallback(
+    (draftId: string, content: string, options?: { topic?: string | null; tone?: string | null; additionalContext?: string | null }) => {
+      loadIdCounter.current += 1
+      setDraft({
+        content,
+        mediaFiles: [],
+        scheduledFor: undefined,
+        templateId: undefined,
+        sourcePostId: draftId,
+        sourceAuthor: undefined,
+        aiSuggestion: options?.topic
+          ? { topic: options.topic, tone: options.tone || '', context: options.additionalContext || '' }
+          : undefined,
+        remixMeta: undefined,
+        savedDraftId: draftId,
+        lastModified: Date.now(),
+        _loadId: loadIdCounter.current,
+      })
+    },
+    []
+  )
+
   const clearDraft = React.useCallback(() => {
     setDraft(initialDraftState)
   }, [])
@@ -282,6 +320,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setScheduledFor,
     loadTemplate,
     loadForRemix,
+    loadSavedDraft,
     clearDraft,
     hasContent,
     isDirty,

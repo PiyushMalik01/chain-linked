@@ -7,6 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { Database } from '@/types/database'
+
+/** Convenience alias for the generated_posts Insert type */
+type GeneratedPostInsert = Database['public']['Tables']['generated_posts']['Insert']
+/** Convenience alias for the generated_posts Update type */
+type GeneratedPostUpdate = Database['public']['Tables']['generated_posts']['Update']
 
 /**
  * Request body schema for auto-saving a draft
@@ -28,6 +34,17 @@ interface AutoSaveDraftRequest {
   wordCount?: number
   /** Existing draft row ID — when provided, updates in place instead of inserting */
   draftId?: string
+  /** AI metadata for tracking token usage, model, and cost */
+  aiMetadata?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    model?: string
+    estimated_cost?: number
+    prompt_snapshot?: Record<string, unknown>
+  } | null
+  /** Compose conversation ID (FK to compose_conversations) */
+  conversationId?: string | null
 }
 
 /**
@@ -66,7 +83,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { content, postType, source, topic, tone, context, wordCount, draftId } = body
+    const { content, postType, source, topic, tone, context, wordCount, draftId, aiMetadata, conversationId } = body
 
     // Validate content
     if (!content || content.trim().length === 0) {
@@ -81,9 +98,7 @@ export async function POST(request: NextRequest) {
 
     // If we have an existing draft ID, update it in place
     if (draftId) {
-      const { data: updated, error: updateError } = await supabase
-        .from('generated_posts')
-        .update({
+      const updatePayload: GeneratedPostUpdate = {
           content: trimmedContent,
           post_type: postType || 'general',
           hook: topic || null,
@@ -91,7 +106,22 @@ export async function POST(request: NextRequest) {
           source_snippet: context || null,
           word_count: computedWordCount,
           updated_at: new Date().toISOString(),
-        })
+        }
+
+      // Include AI metadata fields if provided (only on first save, avoid overwriting)
+      if (aiMetadata) {
+        if (aiMetadata.prompt_tokens != null) updatePayload.prompt_tokens = aiMetadata.prompt_tokens
+        if (aiMetadata.completion_tokens != null) updatePayload.completion_tokens = aiMetadata.completion_tokens
+        if (aiMetadata.total_tokens != null) updatePayload.total_tokens = aiMetadata.total_tokens
+        if (aiMetadata.model) updatePayload.model = aiMetadata.model
+        if (aiMetadata.estimated_cost != null) updatePayload.estimated_cost = aiMetadata.estimated_cost
+        if (aiMetadata.prompt_snapshot) updatePayload.prompt_snapshot = aiMetadata.prompt_snapshot as Database['public']['Tables']['generated_posts']['Update']['prompt_snapshot']
+      }
+      if (conversationId) updatePayload.conversation_id = conversationId
+
+      const { data: updated, error: updateError } = await supabase
+        .from('generated_posts')
+        .update(updatePayload)
         .eq('id', draftId)
         .eq('user_id', user.id)
         .eq('status', 'draft')
@@ -131,19 +161,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert new draft into generated_posts
+    const insertPayload: GeneratedPostInsert = {
+      user_id: user.id,
+      content: trimmedContent,
+      post_type: postType || 'general',
+      source: source || 'compose',
+      hook: topic || null,
+      cta: tone || null,
+      source_snippet: context || null,
+      word_count: computedWordCount,
+      status: 'draft',
+    }
+
+    // Include AI metadata fields if provided
+    if (aiMetadata) {
+      if (aiMetadata.prompt_tokens != null) insertPayload.prompt_tokens = aiMetadata.prompt_tokens
+      if (aiMetadata.completion_tokens != null) insertPayload.completion_tokens = aiMetadata.completion_tokens
+      if (aiMetadata.total_tokens != null) insertPayload.total_tokens = aiMetadata.total_tokens
+      if (aiMetadata.model) insertPayload.model = aiMetadata.model
+      if (aiMetadata.estimated_cost != null) insertPayload.estimated_cost = aiMetadata.estimated_cost
+      if (aiMetadata.prompt_snapshot) insertPayload.prompt_snapshot = aiMetadata.prompt_snapshot as Database['public']['Tables']['generated_posts']['Insert']['prompt_snapshot']
+    }
+    if (conversationId) insertPayload.conversation_id = conversationId
+
     const { data, error } = await supabase
       .from('generated_posts')
-      .insert({
-        user_id: user.id,
-        content: trimmedContent,
-        post_type: postType || 'general',
-        source: source || 'compose',
-        hook: topic || null,
-        cta: tone || null,
-        source_snippet: context || null,
-        word_count: computedWordCount,
-        status: 'draft',
-      })
+      .insert(insertPayload)
       .select('id')
       .single()
 

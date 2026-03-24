@@ -144,25 +144,28 @@ export const firstSyncBackfill = inngest.createFunction(
           engagementsRate = (engagements / impressions) * 100
         }
 
-        const analysisDate = post.posted_at
+        // Use TODAY as analysis date — when tracking starts, not when post was created.
+        const analysisDate = today
+        const postCreatedAt = post.posted_at
           ? new Date(post.posted_at).toISOString().split('T')[0]
           : post.created_at
             ? new Date(post.created_at).toISOString().split('T')[0]
             : today
 
-        // Seed daily row
+        // Seed daily row with actual totals as "gained" on day 1.
+        // For new users, their existing metrics ARE their baseline.
         await db.from('post_analytics_daily').upsert({
           user_id: userId,
           post_id: post.id,
           analysis_date: analysisDate,
-          impressions_gained: 0,
-          unique_reach_gained: 0,
-          reactions_gained: 0,
-          comments_gained: 0,
-          reposts_gained: 0,
-          saves_gained: 0,
-          sends_gained: 0,
-          engagements_gained: 0,
+          impressions_gained: impressions,
+          unique_reach_gained: uniqueReach,
+          reactions_gained: reactions,
+          comments_gained: comments,
+          reposts_gained: reposts,
+          saves_gained: saves,
+          sends_gained: sends,
+          engagements_gained: engagements,
           engagements_rate: engagementsRate,
           analytics_tracking_status_id: 1,
         }, { onConflict: 'user_id,post_id,analysis_date' })
@@ -172,7 +175,7 @@ export const firstSyncBackfill = inngest.createFunction(
           user_id: userId,
           post_id: post.id,
           analysis_date: analysisDate,
-          post_created_at: analysisDate,
+          post_created_at: postCreatedAt,
           impressions_total: impressions,
           unique_reach_total: uniqueReach,
           reactions_total: reactions,
