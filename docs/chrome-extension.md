@@ -92,7 +92,7 @@ The extension follows the Chrome Manifest V3 architecture with four main executi
 | File | Purpose |
 |------|---------|
 | `service-worker.ts` | **Main service worker entry point.** Handles all `chrome.runtime.onMessage` routing, cookie management, LinkedIn API calls, storage operations, post extraction from API responses, mention search, auth session management, history tracking, capture stats, and data export. Loads Supabase modules via `importScripts`. |
-| `background-sync.ts` | **Background sync orchestrator.** Uses `chrome.alarms` for periodic LinkedIn data fetching. Implements circuit breaker, exponential backoff, active-hours-only mode, and configurable sync intervals (default 4 hours with 60-minute jitter). |
+| `background-sync.ts` | **Background sync orchestrator.** Uses `chrome.alarms` for periodic LinkedIn data fetching. Implements circuit breaker, exponential backoff, active-hours-only mode, and configurable sync intervals (default 15 minutes with 2-minute jitter). |
 | `linkedin-api.ts` | **LinkedIn Voyager API client.** Reads `li_at` and `JSESSIONID` cookies via `chrome.cookies`, builds authenticated Voyager request headers, and fetches endpoints for analytics, profile, audience, posts, and profile views. |
 | `supabase-sync-bridge.ts` | **Supabase sync bridge.** Maps chrome.storage keys to Supabase table names, converts camelCase fields to snake_case, queues pending changes for sync, and processes the sync queue with retry logic. |
 | `alarms.ts` | **Chrome alarms management.** Defines alarm names for daily backup, weekly backup, maintenance, alert checking, and background sync. Handles backup scheduling and alert configuration. |
@@ -302,8 +302,8 @@ The service worker is the central hub. It:
 
 The background sync orchestrator runs autonomously using `chrome.alarms`:
 
-- **Default interval**: 4 hours with 60-minute random jitter
-- **Minimum interval**: 30 minutes between cycles
+- **Default interval**: 15 minutes with 2-minute random jitter
+- **Minimum interval**: 10 minutes between cycles
 - **Active hours only**: Can be configured to sync only during typical usage hours
 - **Circuit breaker**: Trips after 3 consecutive failures, preventing runaway API calls
 - **Exponential backoff**: Up to 6x multiplier on the base interval after failures
@@ -521,8 +521,8 @@ Stored in `chrome.storage.local` under `linkedin_capture_settings`:
 
 Stored under `background_sync_config`:
 - `enabled` (boolean) -- Master toggle (default: false)
-- `baseIntervalMinutes` (number) -- Base sync interval (default: 240 = 4 hours)
-- `jitterMinutes` (number) -- Random jitter added to interval (default: 60)
+- `baseIntervalMinutes` (number) -- Base sync interval (default: 15 minutes)
+- `jitterMinutes` (number) -- Random jitter added to interval (default: 2)
 - `maxApiCallsPerSync` (number) -- Max API calls per cycle (default: 4)
 - `activeHoursOnly` (boolean) -- Only sync during active hours (default: true)
 - `maxConsecutiveFailures` (number) -- Circuit breaker threshold (default: 3)

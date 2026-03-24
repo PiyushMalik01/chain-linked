@@ -232,8 +232,8 @@ There are 15 registered functions:
 | `viralPostIngest` | Cron | `0 5 * * *` (daily 05:00 UTC) | Scrapes viral posts from source profiles |
 | `influencerPostScrape` | Cron + Event | `0 6 * * *` (daily 06:00 UTC) | Scrapes followed influencer posts; also triggered by `influencer/follow` |
 | `swipeAutoRefill` | Cron | `*/30 * * * *` (every 30 min) | Refills suggestion queues for all users |
-| `analyticsPipeline` | Cron | `0 0 * * *` (daily midnight UTC) | Aggregates daily profile and post analytics |
-| `analyticsSummaryCompute` | Cron | `0 */4 * * *` (every 4 hours) | Computes analytics summary rollups |
+| `analyticsPipeline` | Cron | `*/5 * * * *` (every 5 min) | Aggregates profile and post analytics |
+| `analyticsSummaryCompute` | Cron | `*/5 * * * *` (every 5 min) | Computes analytics summary rollups |
 | `analyticsBackfill` | Cron | `*/5 * * * *` (every 5 min) | Backfills missing analytics from extension sync data |
 | `templateAutoGenerate` | Cron | `0 */4 * * *` (every 4 hours) | Auto-generates post templates for users |
 | `publishScheduledPosts` | Cron | `*/2 * * * *` (every 2 min) | Publishes posts that are due for scheduling |

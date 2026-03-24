@@ -9,11 +9,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased] - 2026-03-24
 
 ### Added
+- PostHog reverse proxy via Next.js rewrites (`/ingest/*`) to bypass ad blockers
+- PostHog heatmaps enabled (`enable_heatmaps: true`)
+- PostHog diagnostic console logs for debugging capture status
+- `loadSavedDraft()` method in draft context for atomic draft loading
+- `accumulativeTotal` field in analytics v2 API response
+- Sentry error tracking integration (client, server, edge configs)
+- Composite key validation in extension sync bridge before upsert
 - Server-side analytics support via PostHog Node SDK
 
 ### Fixed
+- Analytics pipeline now shows correct absolute totals (e.g., 9,486 impressions) instead of daily deltas (e.g., 9)
+- `analytics-summary-compute` rewritten to use `post_analytics_accumulative` for lifetime totals
+- Backfill seed rows now use today's date and actual metric values instead of `posted_at` date with zeros
+- Extension `feed_posts` "null activity_urn" sync error caused by array-like objects with numeric keys
+- Draft navigation race condition where clicking a different draft showed old compose content
+- PostComposer now remounts on draft switch via `_loadId` nonce and `draftId` URL param
+- `X-Frame-Options:DENY` replaced with CSP `frame-ancestors` to allow PostHog toolbar
 - Authentication flow improvements including team auto-creation on signup, account deletion handling, and data sync reliability
 - Miscellaneous stability updates
+
+### Changed
+- Extension background sync interval: 4 hours → 15 minutes (with 2-min jitter)
+- Analytics pipeline cron: daily midnight → every 5 minutes
+- Summary cache compute cron: every 4 hours → every 5 minutes
+- Min sync guard interval: 30 minutes → 10 minutes
+- Analytics summary bar uses `accumulativeTotal` for all metric types (not just profile)
+- `skipTrailingSlashRedirect` enabled for PostHog endpoint compatibility
+- `NEXT_PUBLIC_POSTHOG_HOST` changed to `/ingest` (proxy path)
 
 ---
 

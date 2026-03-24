@@ -900,8 +900,8 @@ All background jobs are powered by **Inngest** and served via a single API route
 | **dailyContentIngest** | Cron schedule | Ingests fresh content from configured topics for the discover feed |
 | **onDemandContentIngest** | `discover/ingest` event | User-triggered content ingest for specific topics |
 | **swipeAutoRefill** | Cron schedule | Checks all users and auto-triggers suggestion generation when below threshold |
-| **analyticsPipeline** | `analytics/pipeline` event or cron | Computes daily analytics snapshots, rolls up to weekly/monthly/quarterly/yearly |
-| **analyticsSummaryCompute** | Chained from pipeline | Pre-computes dashboard summary cache after pipeline completes |
+| **analyticsPipeline** | `analytics/pipeline` event or cron (every 5 min) | Computes analytics snapshots using accumulative totals, rolls up to weekly/monthly/quarterly/yearly |
+| **analyticsSummaryCompute** | Cron (every 5 min) | Pre-computes dashboard summary cache using `post_analytics_accumulative` for lifetime totals |
 | **analyticsBackfill** | Manual trigger | Backfills historical analytics data for new or corrected metrics |
 | **firstSyncBackfill** | `sync/first-data` event | Triggered on first extension data sync, runs initial analytics backfill |
 | **templateAutoGenerate** | `templates/auto-generate` event or cron | Auto-generates post templates per user/category based on writing style |
