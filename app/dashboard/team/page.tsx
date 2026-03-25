@@ -7,19 +7,16 @@
  * @module app/dashboard/team/page
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  IconLayoutDashboard,
-  IconUsers,
   IconActivity,
   IconX,
   IconEye,
   IconThumbUp,
   IconMessageCircle,
   IconShare,
-  IconSparkles,
   IconChevronRight,
   IconFilter,
 } from "@tabler/icons-react"
@@ -31,9 +28,7 @@ import { type TeamActivityItem } from "@/components/features/team-activity-feed"
 import { RemixPostButton } from "@/components/features/remix-post-button"
 import { TeamLeaderboard } from "@/components/features/team-leaderboard"
 import { TeamHeader } from "@/components/features/team-header"
-import { PendingInvitationsCard, type PendingInvitation } from "@/components/features/pending-invitations-card"
 import { NoTeamState } from "@/components/features/no-team-state"
-import { TeamMemberList } from "@/components/features/team-member-list"
 import { TeamSkeleton } from "@/components/skeletons/page-skeletons"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -42,8 +37,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useTeamPosts } from "@/hooks/use-team-posts"
 import { useTeamLeaderboard } from "@/hooks/use-team-leaderboard"
 import { useTeam } from "@/hooks/use-team"
-import { useTeamInvitations } from "@/hooks/use-team-invitations"
-import { useJoinRequests } from "@/hooks/use-join-requests"
 import { useAuthContext } from "@/lib/auth/auth-provider"
 import { usePageMeta } from "@/lib/dashboard-context"
 import { cn, getInitials, formatMetricNumber } from "@/lib/utils"
@@ -54,113 +47,7 @@ import { createClient } from "@/lib/supabase/client"
 // ============================================================================
 
 /** Tab type for team page */
-type TeamTab = "overview" | "members"
-
-/** Tab configuration */
-interface TabConfig {
-  value: TeamTab
-  label: string
-  icon: React.ElementType
-}
-
-const TABS: TabConfig[] = [
-  { value: "overview", label: "Overview", icon: IconLayoutDashboard },
-  { value: "members", label: "Members", icon: IconUsers },
-]
-
-// ============================================================================
-// Animated Tab Bar
-// ============================================================================
-
-/**
- * Animated capsule tab bar with framer-motion sliding indicator
- * @param props.activeTab - Currently active tab
- * @param props.onTabChange - Callback when tab changes
- */
-function AnimatedTabBar({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: TeamTab
-  onTabChange: (tab: TeamTab) => void
-}) {
-  const [tabBounds, setTabBounds] = useState<Record<string, { left: number; width: number }>>({})
-  const containerRef = useRef<HTMLDivElement>(null)
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
-
-  /** Measure tab positions for the sliding capsule */
-  useEffect(() => {
-    const measureTabs = () => {
-      if (!containerRef.current) return
-      const containerRect = containerRef.current.getBoundingClientRect()
-      const bounds: Record<string, { left: number; width: number }> = {}
-      TABS.forEach((tab) => {
-        const el = tabRefs.current[tab.value]
-        if (el) {
-          const rect = el.getBoundingClientRect()
-          bounds[tab.value] = {
-            left: rect.left - containerRect.left,
-            width: rect.width,
-          }
-        }
-      })
-      setTabBounds(bounds)
-    }
-
-    measureTabs()
-    window.addEventListener("resize", measureTabs)
-    return () => window.removeEventListener("resize", measureTabs)
-  }, [])
-
-  const activeBounds = tabBounds[activeTab]
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border/50"
-    >
-      {/* Animated capsule background */}
-      {activeBounds && (
-        <motion.div
-          className="absolute top-1 bottom-1 rounded-lg bg-background shadow-sm border border-border/60"
-          initial={false}
-          animate={{
-            left: activeBounds.left,
-            width: activeBounds.width,
-          }}
-          transition={{
-            type: "spring",
-            stiffness: 400,
-            damping: 30,
-          }}
-        />
-      )}
-
-      {/* Tab buttons */}
-      {TABS.map((tab) => {
-        const isActive = tab.value === activeTab
-        const Icon = tab.icon
-        return (
-          <button
-            key={tab.value}
-            ref={(el) => { tabRefs.current[tab.value] = el }}
-            type="button"
-            onClick={() => onTabChange(tab.value)}
-            className={cn(
-              "relative z-10 flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-              isActive
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Icon className="size-4" />
-            {tab.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+type TeamTab = "overview"
 
 // ============================================================================
 // Post Grid with Popup
@@ -546,20 +433,15 @@ function PostGrid({
 function TeamContent() {
   const router = useRouter()
   const { user, profile } = useAuthContext()
-  const [activeTab, setActiveTab] = useState<TeamTab>("overview")
+  const activeTab: TeamTab = "overview"
   const [brandKitLogoUrl, setBrandKitLogoUrl] = useState<string | null>(null)
 
   const {
     currentTeam,
-    members,
     currentUserRole,
     isLoadingTeams,
-    isLoadingMembers,
     createTeam,
     refetchTeams,
-    fetchMembers,
-    removeMember,
-    updateMemberRole,
   } = useTeam()
 
   const { posts, rawPosts, isLoading: postsLoading } = useTeamPosts(10, currentTeam?.id)
@@ -597,24 +479,6 @@ function TeamContent() {
     currentUserId,
   } = useTeamLeaderboard(currentTeam?.id)
 
-  const {
-    pendingRequests: joinRequests,
-    isLoading: joinRequestsLoading,
-    approveRequest,
-    rejectRequest,
-  } = useJoinRequests({ teamId: currentTeam?.id })
-
-  const {
-    invitations,
-    isLoading: invitationsLoading,
-    cancelInvitation,
-    resendInvitation,
-    refetch: refetchInvitations,
-  } = useTeamInvitations({
-    teamId: currentTeam?.id || null,
-    pendingOnly: true,
-  })
-
   // Fetch brand kit logo from the active brand kit (saved in onboarding Step 3)
   useEffect(() => {
     if (!user) return
@@ -632,9 +496,6 @@ function TeamContent() {
       })
   }, [user])
 
-  // Check if user can manage team (owner or admin)
-  const canManage = currentUserRole === 'owner' || currentUserRole === 'admin'
-
   // Handle team creation
   const handleCreateTeam = useCallback(async (name: string) => {
     const result = await createTeam({ name })
@@ -645,53 +506,10 @@ function TeamContent() {
     return false
   }, [createTeam, refetchTeams])
 
-  // Handle invitation resend
-  const handleResendInvitation = useCallback(async (invitationId: string) => {
-    const success = await resendInvitation(invitationId)
-    if (success) {
-      await refetchInvitations()
-    }
-    return success
-  }, [resendInvitation, refetchInvitations])
-
-  // Handle invitation cancel
-  const handleCancelInvitation = useCallback(async (invitationId: string) => {
-    const success = await cancelInvitation(invitationId)
-    if (success) {
-      await refetchInvitations()
-    }
-    return success
-  }, [cancelInvitation, refetchInvitations])
-
-  // Handle settings click
+  // Handle settings click - navigate to main settings page, team section
   const handleSettingsClick = useCallback(() => {
-    if (currentTeam?.id) {
-      router.push(`/dashboard/team/settings`)
-    }
-  }, [router, currentTeam?.id])
-
-  // Handle view all members
-  const handleViewAllMembers = useCallback(() => {
-    setActiveTab("members")
-  }, [])
-
-  // Handle invitations sent callback
-  const handleInvitationsSent = useCallback(() => {
-    refetchInvitations()
-  }, [refetchInvitations])
-
-  // Transform invitations to expected format
-  const pendingInvitations: PendingInvitation[] = invitations.map(inv => ({
-    id: inv.id,
-    email: inv.email,
-    role: inv.role,
-    created_at: inv.created_at,
-    expires_at: inv.expires_at,
-    invited_by: {
-      full_name: inv.inviter?.name || null,
-      email: inv.inviter?.email || '',
-    },
-  }))
+    router.push(`/dashboard/settings?section=team`)
+  }, [router])
 
   // Loading state
   if (isLoadingTeams) {
@@ -719,116 +537,60 @@ function TeamContent() {
       <TeamHeader
         team={currentTeam}
         userRole={currentUserRole}
-        pendingInvitationsCount={pendingInvitations.length}
+        pendingInvitationsCount={0}
         companyWebsite={profile?.company_website}
         brandKitLogoUrl={brandKitLogoUrl}
         onSettingsClick={handleSettingsClick}
-        onInvitationsSent={handleInvitationsSent}
+        onInvitationsSent={() => {}}
       />
 
-      {/* Animated Tab Bar - centered */}
-      <div className="flex justify-center px-4 md:px-6 pt-5 pb-0">
-        <AnimatedTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Team Overview Content */}
+      <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
+        {/* Top Influencers */}
+        <TeamLeaderboard
+          members={leaderboardMembers}
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          currentUserId={currentUserId || undefined}
+          isLoading={leaderboardLoading}
+          onMemberClick={(memberId) => {
+            router.push(`/dashboard/team/activity?member=${memberId}`)
+          }}
+        />
+
+        {/* Recent Team Posts Grid */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-semibold">Recent Team Activity</h3>
+            <div className="flex items-center gap-2">
+              <Select value={activityMemberFilter} onValueChange={setActivityMemberFilter}>
+                <SelectTrigger className="w-[160px] h-8 rounded-lg text-xs">
+                  <IconFilter className="size-3.5 mr-1.5 shrink-0" />
+                  <SelectValue placeholder="All Members" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Members</SelectItem>
+                  {postAuthors.map(name => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/dashboard/team/activity" className="gap-1.5">
+                  View All Activity
+                  <IconChevronRight className="size-3.5" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+          <PostGrid
+            posts={filteredPosts}
+            isLoading={postsLoading}
+            currentUserId={user?.id}
+            postUserIds={postUserIds}
+          />
+        </div>
       </div>
-
-      {/* Tab Content with AnimatePresence */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.2 }}
-        >
-          {/* Overview Tab */}
-          {activeTab === "overview" && (
-            <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
-              {/* Top Influencers */}
-              <TeamLeaderboard
-                members={leaderboardMembers}
-                timeRange={timeRange}
-                onTimeRangeChange={setTimeRange}
-                currentUserId={currentUserId || undefined}
-                isLoading={leaderboardLoading}
-                onMemberClick={(memberId) => {
-                  router.push(`/dashboard/team/activity?member=${memberId}`)
-                }}
-              />
-
-              {/* Recent Team Posts Grid */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base font-semibold">Recent Team Activity</h3>
-                  <div className="flex items-center gap-2">
-                    <Select value={activityMemberFilter} onValueChange={setActivityMemberFilter}>
-                      <SelectTrigger className="w-[160px] h-8 rounded-lg text-xs">
-                        <IconFilter className="size-3.5 mr-1.5 shrink-0" />
-                        <SelectValue placeholder="All Members" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Members</SelectItem>
-                        {postAuthors.map(name => (
-                          <SelectItem key={name} value={name}>{name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/dashboard/team/activity" className="gap-1.5">
-                        View All Activity
-                        <IconChevronRight className="size-3.5" />
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-                <PostGrid
-                  posts={filteredPosts}
-                  isLoading={postsLoading}
-                  currentUserId={user?.id}
-                  postUserIds={postUserIds}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Members Tab */}
-          {activeTab === "members" && (
-            <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
-              <TeamMemberList
-                members={members}
-                isLoading={isLoadingMembers}
-                currentUserRole={currentUserRole}
-                onRemoveMember={async (userId) => {
-                  if (currentTeam.id) {
-                    await removeMember(currentTeam.id, userId)
-                    await fetchMembers(currentTeam.id)
-                  }
-                }}
-                onRoleChange={async (userId, role) => {
-                  if (currentTeam.id) {
-                    await updateMemberRole(currentTeam.id, userId, role)
-                    await fetchMembers(currentTeam.id)
-                  }
-                }}
-                joinRequests={canManage ? joinRequests : []}
-                onApproveRequest={approveRequest}
-                onRejectRequest={rejectRequest}
-              />
-
-              {canManage && pendingInvitations.length > 0 && (
-                <PendingInvitationsCard
-                  invitations={pendingInvitations}
-                  isLoading={invitationsLoading}
-                  teamId={currentTeam.id}
-                  canManage={canManage}
-                  onResend={handleResendInvitation}
-                  onCancel={handleCancelInvitation}
-                />
-              )}
-            </div>
-          )}
-
-        </motion.div>
-      </AnimatePresence>
     </motion.div>
   )
 }

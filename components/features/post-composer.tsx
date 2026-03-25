@@ -282,6 +282,18 @@ export function PostComposer({
   const [carouselSlideImages, setCarouselSlideImages] = React.useState<string[]>([])
   const [savedHashtags, setSavedHashtags] = React.useState<string[]>([])
 
+  /** Track the latest AI generation context for auto-save metadata */
+  const generationContextRef = React.useRef<GenerationContext | null>(null)
+
+  /**
+   * Wraps the parent onGenerationContext callback to also store the context locally
+   * so the debounced auto-save can include AI metadata in draft persistence.
+   */
+  const handleGenerationContext = React.useCallback((ctx: GenerationContext) => {
+    generationContextRef.current = ctx
+    onGenerationContext?.(ctx)
+  }, [onGenerationContext])
+
   /** Load user's saved default hashtags from localStorage on mount */
   React.useEffect(() => {
     setSavedHashtags(getSavedHashtags())
@@ -294,6 +306,29 @@ export function PostComposer({
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const editingZoneRef = React.useRef<HTMLDivElement>(null)
   const cursorPositionRef = React.useRef({ start: 0, end: 0 })
+  /** Pending scroll + selection restore after formatting state updates */
+  const pendingScrollRestore = React.useRef<{
+    scrollTop: number
+    selectionStart: number
+    selectionEnd: number
+  } | null>(null)
+
+  // Restore scroll position and selection after React re-renders from formatting operations.
+  // useLayoutEffect fires synchronously after DOM mutations but before browser paint,
+  // ensuring scroll position is restored before the user sees any jump.
+  React.useLayoutEffect(() => {
+    const pending = pendingScrollRestore.current
+    if (!pending) return
+    pendingScrollRestore.current = null
+
+    const textarea = textareaRef.current
+    if (textarea) {
+      textarea.scrollTop = pending.scrollTop
+      textarea.focus({ preventScroll: true })
+      textarea.setSelectionRange(pending.selectionStart, pending.selectionEnd)
+      textarea.scrollTop = pending.scrollTop
+    }
+  })
 
   // Capture AI suggestion from draft (set by template library) and clear after consuming
   const [aiSuggestion] = React.useState(() => draft.aiSuggestion)
@@ -338,15 +373,20 @@ export function PostComposer({
     const trimmed = content.trim()
     if (!trimmed) return false
     try {
+      const ctx = generationContextRef.current
       const wordCount = trimmed.split(/\s+/).filter(Boolean).length
       const res = await fetch('/api/drafts/auto-save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: trimmed,
-          postType: 'general',
+          postType: ctx?.postType || 'general',
+          topic: ctx?.topic || null,
+          tone: ctx?.tone || null,
+          context: ctx?.context || null,
           wordCount,
           draftId: draft.savedDraftId || undefined,
+          aiMetadata: ctx?.aiMetadata || null,
         }),
       })
       if (res.ok) {
@@ -711,24 +751,16 @@ export function PostComposer({
     const targetStyle = alreadyStyled ? 'normal' : style
     const result = transformSelection(content, start, end, targetStyle)
 
-    // Preserve scroll position before the state update triggers a re-render
-    const savedScrollTop = textareaRef.current?.scrollTop ?? 0
+    // Schedule scroll + selection restore for after React re-renders
+    pendingScrollRestore.current = {
+      scrollTop: textareaRef.current?.scrollTop ?? 0,
+      selectionStart: start,
+      selectionEnd: result.newEnd,
+    }
 
     handleContentChange(result.text)
     setActiveFontStyle(targetStyle)
     cursorPositionRef.current = { start, end: result.newEnd }
-
-    setTimeout(() => {
-      const textarea = textareaRef.current
-      if (textarea) {
-        // Restore scroll position before focusing to prevent jump-to-top
-        textarea.scrollTop = savedScrollTop
-        textarea.focus({ preventScroll: true })
-        textarea.setSelectionRange(start, result.newEnd)
-        // Ensure scroll stays put after selection change
-        textarea.scrollTop = savedScrollTop
-      }
-    }, 0)
   }
 
   /**
@@ -836,25 +868,19 @@ export function PostComposer({
     const newContent =
       content.slice(0, clampedStart) + prefix + selectedText + suffix + content.slice(clampedEnd)
 
-    // Preserve scroll position before the state update triggers a re-render
-    const savedScrollTop = textareaRef.current?.scrollTop ?? 0
-
-    handleContentChange(newContent)
-
     const newPosition = selectedText
       ? clampedStart + prefix.length + selectedText.length + suffix.length
       : clampedStart + prefix.length
-    cursorPositionRef.current = { start: newPosition, end: newPosition }
 
-    setTimeout(() => {
-      const textarea = textareaRef.current
-      if (textarea) {
-        textarea.scrollTop = savedScrollTop
-        textarea.focus({ preventScroll: true })
-        textarea.setSelectionRange(newPosition, newPosition)
-        textarea.scrollTop = savedScrollTop
-      }
-    }, 0)
+    // Schedule scroll + selection restore for after React re-renders
+    pendingScrollRestore.current = {
+      scrollTop: textareaRef.current?.scrollTop ?? 0,
+      selectionStart: newPosition,
+      selectionEnd: newPosition,
+    }
+
+    handleContentChange(newContent)
+    cursorPositionRef.current = { start: newPosition, end: newPosition }
   }
 
   /**
@@ -869,25 +895,20 @@ export function PostComposer({
 
     const newContent = content.slice(0, clampedStart) + emoji + content.slice(clampedEnd)
 
-    // Preserve scroll position before the state update triggers a re-render
-    const savedScrollTop = textareaRef.current?.scrollTop ?? 0
+    const newPosition = clampedStart + emoji.length
+
+    // Schedule scroll + selection restore for after React re-renders
+    pendingScrollRestore.current = {
+      scrollTop: textareaRef.current?.scrollTop ?? 0,
+      selectionStart: newPosition,
+      selectionEnd: newPosition,
+    }
 
     handleContentChange(newContent)
-
-    const newPosition = clampedStart + emoji.length
     cursorPositionRef.current = { start: newPosition, end: newPosition }
 
-    // Ensure we're in edit mode so the textarea is mounted, then focus and set cursor
+    // Ensure we're in edit mode so the textarea is mounted
     if (!isEditing) setIsEditing(true)
-    setTimeout(() => {
-      const textarea = textareaRef.current
-      if (textarea) {
-        textarea.scrollTop = savedScrollTop
-        textarea.focus({ preventScroll: true })
-        textarea.setSelectionRange(newPosition, newPosition)
-        textarea.scrollTop = savedScrollTop
-      }
-    }, 0)
   }
 
   /**
@@ -1173,7 +1194,7 @@ export function PostComposer({
                   }}
                   hasApiKey={hasApiKey}
                   defaultPostType={selectedFormat}
-                  onGenerationContext={onGenerationContext}
+                  onGenerationContext={handleGenerationContext}
                   initialTopic={aiSuggestion?.topic || (remixMeta ? remixMeta.originalContent : undefined)}
                   initialTone={remixMeta?.tone || aiSuggestion?.tone}
                   initialLength={remixMeta?.length || aiSuggestion?.length}

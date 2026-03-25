@@ -230,7 +230,9 @@ export function CanvasEditor({
 
   /**
    * Build the carousel auto-save payload
-   * Includes text preview as content and full slide JSON in context field
+   * Includes text preview as content and full slide JSON in context field.
+   * Serializes slides directly from state (not localStorage) to avoid
+   * stale data when the debounced localStorage save hasn't completed yet.
    */
   const buildCarouselSavePayload = useCallback(() => {
     const combinedText = slides
@@ -242,8 +244,31 @@ export function CanvasEditor({
 
     if (combinedText.length < 10) return null;
 
-    // Read the safely-serialized slides from localStorage
-    const slideJson = localStorage.getItem('chainlinked-carousel-draft') || undefined;
+    // Serialize slides directly from current state — NOT from localStorage.
+    // localStorage is debounced (500ms) so it may contain stale data.
+    let slideJson: string | undefined;
+    try {
+      const cleanSlides = slides.map((slide) => ({
+        id: slide.id,
+        backgroundColor: slide.backgroundColor,
+        elements: (slide.elements || []).map((el) => {
+          const clean: Record<string, unknown> = {};
+          for (const key of Object.keys(el)) {
+            if (['id','type','x','y','width','height','rotation','text','fontSize','fontFamily',
+                 'fontWeight','fontStyle','fill','align','lineHeight','letterSpacing','textDecoration',
+                 'stroke','strokeWidth','opacity','cornerRadius','shapeType','src','alt','scaleX','scaleY'
+            ].includes(key)) {
+              clean[key] = el[key as keyof typeof el];
+            }
+          }
+          return clean;
+        }),
+      }));
+      slideJson = JSON.stringify(cleanSlides);
+    } catch {
+      // Fallback to localStorage if serialization fails
+      slideJson = localStorage.getItem('chainlinked-carousel-draft') || undefined;
+    }
 
     return {
       content: combinedText,

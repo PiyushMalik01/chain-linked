@@ -426,6 +426,8 @@ function ComposeContent() {
     // If media files are provided, convert to base64 and include
     if (mediaFiles && mediaFiles.length > 0) {
       const imageFiles = mediaFiles.filter((f) => f.type === 'image')
+      const docFiles = mediaFiles.filter((f) => f.type === 'document')
+
       if (imageFiles.length > 0) {
         const mediaBase64 = await Promise.all(
           imageFiles.map(async (mf) => ({
@@ -434,6 +436,16 @@ function ComposeContent() {
           }))
         )
         body.mediaBase64 = mediaBase64
+      }
+
+      // Send the first document file (LinkedIn supports one document per post)
+      if (docFiles.length > 0) {
+        const docFile = docFiles[0]
+        body.documentBase64 = {
+          data: await fileToBase64(docFile.file),
+          contentType: docFile.file.type || 'application/pdf',
+          title: docFile.file.name.replace(/\.[^.]+$/, '') || 'Document',
+        }
       }
     }
 

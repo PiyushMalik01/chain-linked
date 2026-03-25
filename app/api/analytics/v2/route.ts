@@ -261,8 +261,9 @@ export async function GET(request: Request) {
           average: Math.round(Number(row.current_avg) * 100) / 100,
           change: Math.round(Number(row.pct_change) * 100) / 100,
           compCount: Number(row.comp_count),
+          accumulativeTotal: Math.round(Number(row.current_total) * 100) / 100,
         }
-      : { total: 0, average: 0, change: 0, compCount: 0 }
+      : { total: 0, average: 0, change: 0, compCount: 0, accumulativeTotal: null }
 
     return NextResponse.json({ current, comparison: comparisonData, summary })
   } catch (err) {

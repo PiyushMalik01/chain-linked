@@ -356,10 +356,57 @@ export function useCanvasEditor() {
     }
   }, [state.slides, state.currentSlideIndex, state.selectedElementId]);
 
+  // Hydration flag: prevent saving until localStorage has been loaded.
+  // Without this, the initial render's default empty slide overwrites saved data.
+  const hydratedRef = useRef(false);
+
+  // Keep a ref to current slides + template for the unmount save
+  const slidesRef = useRef(state.slides);
+  slidesRef.current = state.slides;
+  const templateRef = useRef(state.template);
+  templateRef.current = state.template;
+
   /**
-   * Auto-save to localStorage
+   * Load from localStorage on mount (slides + template).
+   * Must run BEFORE the save effects to prevent the initial empty state
+   * from overwriting persisted data.
    */
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const slides = JSON.parse(saved) as CanvasSlide[];
+        if (Array.isArray(slides) && slides.length > 0) {
+          const sanitized = slides.map((s) => ({
+            ...s,
+            elements: Array.isArray(s.elements) ? s.elements : [],
+          }));
+          dispatch({ type: 'SET_SLIDES', payload: sanitized });
+        }
+      }
+
+      const savedTemplate = localStorage.getItem(TEMPLATE_STORAGE_KEY);
+      if (savedTemplate) {
+        const template = JSON.parse(savedTemplate) as CanvasTemplate;
+        if (template && template.id) {
+          dispatch({ type: 'SET_TEMPLATE', payload: template });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load carousel draft from localStorage');
+    }
+    // Mark as hydrated after loading — now saves are safe
+    hydratedRef.current = true;
+  }, []);
+
+  /**
+   * Auto-save slides to localStorage (debounced to avoid excessive writes).
+   * Skipped until hydration is complete to prevent overwriting saved data
+   * with the initial default empty slide.
+   */
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+
     const timeoutId = setTimeout(() => {
       try {
         const cleanSlides = safeCloneSlides(state.slides);
@@ -367,16 +414,40 @@ export function useCanvasEditor() {
       } catch (e) {
         console.warn('Failed to save carousel draft to localStorage');
       }
-    }, 1000);
+    }, 500);
 
     return () => clearTimeout(timeoutId);
   }, [state.slides]);
+
+  /**
+   * Save immediately on unmount so data is never lost when navigating away.
+   * The debounced save above may be cancelled by the cleanup, so this ensures
+   * the latest slides and template are always persisted.
+   */
+  useEffect(() => {
+    return () => {
+      try {
+        const cleanSlides = safeCloneSlides(slidesRef.current);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanSlides));
+        if (templateRef.current) {
+          const safeTemplate = {
+            ...templateRef.current,
+            defaultSlides: safeCloneSlides(templateRef.current.defaultSlides || []),
+          };
+          localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(safeTemplate));
+        }
+      } catch (e) {
+        console.warn('Failed to save carousel draft on unmount');
+      }
+    };
+  }, []);
 
   /**
    * Persist full template to localStorage so session can be fully restored
    * (needed for AI Generate to work after page reload)
    */
   useEffect(() => {
+    if (!hydratedRef.current) return;
     try {
       if (state.template) {
         const safeTemplate = {
@@ -389,38 +460,6 @@ export function useCanvasEditor() {
       console.warn('Failed to save template info to localStorage');
     }
   }, [state.template]);
-
-  /**
-   * Load from localStorage on mount (slides + template)
-   */
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const slides = JSON.parse(saved) as CanvasSlide[];
-        if (Array.isArray(slides) && slides.length > 0) {
-          // Ensure each slide has an elements array
-          const sanitized = slides.map((s) => ({
-            ...s,
-            elements: Array.isArray(s.elements) ? s.elements : [],
-          }));
-          dispatch({ type: 'SET_SLIDES', payload: sanitized });
-        }
-      }
-
-      // Restore template reference (without overwriting slides)
-      // so AI Generate works after page reload
-      const savedTemplate = localStorage.getItem(TEMPLATE_STORAGE_KEY);
-      if (savedTemplate) {
-        const template = JSON.parse(savedTemplate) as CanvasTemplate;
-        if (template && template.id) {
-          dispatch({ type: 'SET_TEMPLATE', payload: template });
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load carousel draft from localStorage');
-    }
-  }, []);
 
   // ============ Slide Actions ============
 

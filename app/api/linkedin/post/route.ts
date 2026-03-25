@@ -10,6 +10,7 @@ import {
   createLinkedInClient,
   createPost,
   uploadImageFromBuffer,
+  postDocument,
   type LinkedInTokenData,
   type CreatePostRequest,
   type LinkedInVisibility,
@@ -28,6 +29,18 @@ interface MediaBase64Item {
 }
 
 /**
+ * Base64-encoded document (PDF) from client-side file upload
+ */
+interface DocumentBase64Item {
+  /** Base64-encoded document data */
+  data: string
+  /** MIME type (e.g., 'application/pdf') */
+  contentType: string
+  /** Display title for the document in the LinkedIn post */
+  title?: string
+}
+
+/**
  * Request body for posting to LinkedIn
  */
 interface PostRequestBody {
@@ -36,6 +49,8 @@ interface PostRequestBody {
   mediaUrls?: string[]
   /** Base64-encoded images from client-side file uploads */
   mediaBase64?: MediaBase64Item[]
+  /** Base64-encoded document (PDF) for document posts */
+  documentBase64?: DocumentBase64Item
   scheduledPostId?: string
 }
 
@@ -68,7 +83,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { content, visibility = 'PUBLIC', mediaUrls, mediaBase64, scheduledPostId } = body
+  const { content, visibility = 'PUBLIC', mediaUrls, mediaBase64, documentBase64, scheduledPostId } = body
 
   // Validate content
   if (!content || content.trim().length === 0) {
@@ -148,6 +163,78 @@ export async function POST(request: Request) {
         .eq('user_id', user.id)
     }
   )
+
+  // If a document (PDF) is provided, use the document posting flow
+  if (documentBase64) {
+    try {
+      const pdfBuffer = Buffer.from(documentBase64.data, 'base64')
+      const result = await postDocument(client, {
+        content,
+        visibility,
+        pdfBuffer,
+        documentTitle: documentBase64.title || 'Document',
+      })
+
+      if (!result.success) {
+        if (scheduledPostId) {
+          await supabase
+            .from('scheduled_posts')
+            .update({
+              status: 'failed',
+              error_message: result.error,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', scheduledPostId)
+            .eq('user_id', user.id)
+        }
+        return NextResponse.json(
+          { error: result.error || 'Failed to post document to LinkedIn' },
+          { status: 500 }
+        )
+      }
+
+      // Update scheduled post if applicable
+      if (scheduledPostId) {
+        await supabase
+          .from('scheduled_posts')
+          .update({
+            status: 'posted',
+            linkedin_post_id: result.linkedinPostUrn,
+            activity_urn: result.linkedinPostUrn,
+            posted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', scheduledPostId)
+          .eq('user_id', user.id)
+      }
+
+      // Log the post
+      if (result.linkedinPostUrn) {
+        await supabase
+          .from('my_posts')
+          .insert({
+            user_id: user.id,
+            activity_urn: result.linkedinPostUrn,
+            content,
+            posted_at: new Date().toISOString(),
+            source: 'platform',
+          })
+      }
+
+      return NextResponse.json({
+        success: true,
+        postId: result.postId,
+        linkedinPostUrn: result.linkedinPostUrn,
+        message: 'Document post published successfully',
+      })
+    } catch (docError) {
+      console.error('Failed to post document to LinkedIn:', docError)
+      return NextResponse.json(
+        { error: docError instanceof Error ? docError.message : 'Failed to post document' },
+        { status: 500 }
+      )
+    }
+  }
 
   // If base64 images are provided, upload them to LinkedIn and collect asset URNs
   let uploadedAssets: string[] = []

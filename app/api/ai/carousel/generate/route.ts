@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
-import OpenAI from 'openai'
+import { createOpenAIClient, DEFAULT_MODEL } from '@/lib/ai/openai-client'
 import {
   buildCarouselSystemPrompt,
   buildCarouselUserPrompt,
@@ -91,32 +91,13 @@ interface GenerationResponse {
 }
 
 /**
- * Gets the API key for the user or falls back to system key
+ * Gets the API key from environment (same pattern as compose route)
  */
-async function getApiKey(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string
-): Promise<string> {
-  // Try to get user's API key first
-  const { data: userKey } = await supabase
-    .from('user_api_keys')
-    .select('encrypted_key')
-    .eq('user_id', userId)
-    .eq('provider', 'openai')
-    .eq('is_valid', true)
-    .single()
-
-  if (userKey?.encrypted_key) {
-    // In production, decrypt the key here
-    return userKey.encrypted_key
-  }
-
-  // Fall back to system key
+function getApiKey(): string {
   const systemKey = process.env.OPENROUTER_API_KEY
   if (!systemKey) {
-    throw new Error('No API key available')
+    throw new Error('No API key available. Please set OPENROUTER_API_KEY in environment.')
   }
-
   return systemKey
 }
 
@@ -264,8 +245,8 @@ export async function POST(request: NextRequest) {
 
     const input = validationResult.data as CarouselGenerationInput
 
-    // Get API key
-    const apiKey = await getApiKey(supabase, user.id)
+    // Get API key (same pattern as compose route)
+    const apiKey = getApiKey()
 
     // Fetch user context for personalisation (profile, company, recent posts, wishlist)
     const userContext = await fetchUserContext(supabase, user.id, input.tone)
@@ -278,22 +259,15 @@ export async function POST(request: NextRequest) {
     // Track start time for response metrics
     const aiStartTime = Date.now()
 
-    // Initialize OpenRouter client
-    const client = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey,
-      defaultHeaders: {
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai',
-        'X-Title': 'ChainLinked Carousel Generator'
-      }
-    })
+    // Initialize OpenRouter client (same shared helper as compose route)
+    const client = createOpenAIClient({ apiKey })
 
     // Track AI generation start
     try { trackAIEvent(user.id, 'ai_generation_started', { feature: 'carousel', topic: input.topic, tone: input.tone, totalSlides: input.templateAnalysis.totalSlides }) } catch {}
 
-    // Call AI
+    // Call AI using the same model as compose route
     const completion = await client.chat.completions.create({
-      model: 'openai/gpt-4o',
+      model: DEFAULT_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -340,7 +314,7 @@ export async function POST(request: NextRequest) {
     let caption: string | undefined
     try {
       const captionCompletion = await client.chat.completions.create({
-        model: 'openai/gpt-4o',
+        model: DEFAULT_MODEL,
         messages: [
           {
             role: 'system',
@@ -369,7 +343,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         tokensUsed: completion.usage?.total_tokens || 0,
         generationTime,
-        model: 'gpt-4o'
+        model: DEFAULT_MODEL
       }
     }
 
@@ -388,7 +362,7 @@ export async function POST(request: NextRequest) {
         inputTokens: completion.usage?.prompt_tokens,
         outputTokens: completion.usage?.completion_tokens,
         totalTokens: completion.usage?.total_tokens,
-        model: 'openai/gpt-4o',
+        model: DEFAULT_MODEL,
         responseTimeMs: aiResponseTimeMs,
         success: true,
         metadata: {
@@ -405,7 +379,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Track AI generation completed
-    try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'carousel', topic: input.topic, tone: input.tone, model: 'gpt-4o', tokens: completion.usage?.total_tokens ?? 0, response_time_ms: generationTime, slotsGenerated: slots.length }) } catch {}
+    try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'carousel', topic: input.topic, tone: input.tone, model: DEFAULT_MODEL, tokens: completion.usage?.total_tokens ?? 0, response_time_ms: generationTime, slotsGenerated: slots.length }) } catch {}
 
     return NextResponse.json(response)
 

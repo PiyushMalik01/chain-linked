@@ -681,7 +681,7 @@ function DashboardContent() {
       {/* Getting Started Checklist */}
       {!checklistDismissed && (
         <GettingStartedChecklist
-          linkedInConnected={!!profile?.linkedin_profile}
+          linkedInConnected={!!profile?.linkedin_profile || !!profile?.linkedin_connected_at}
           extensionInstalled={extensionInstalled === true}
           hasCreatedPost={hasCreatedPost}
           hasScheduledPosts={hasScheduledContent}

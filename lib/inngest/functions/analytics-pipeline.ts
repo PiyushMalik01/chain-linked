@@ -1433,8 +1433,8 @@ export const analyticsPipeline = inngest.createFunction(
           (yesterday.getTime() - postedAt.getTime()) / (1000 * 60 * 60 * 24)
         )
 
-        // Check if the post just crossed a boundary (age is exactly at boundary or 1 day past)
-        const justCrossed = boundaries.some((b) => ageDays === b || ageDays === b + 1)
+        // Check if the post crossed a boundary (within a 3-day window to handle missed pipeline runs)
+        const justCrossed = boundaries.some((b) => ageDays >= b && ageDays <= b + 3)
         if (!justCrossed) continue
 
         const newStatus = getTrackingStatus(ageDays)

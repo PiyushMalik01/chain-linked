@@ -31,6 +31,7 @@ const LOG = '[AnalyticsSummaryCompute]'
 /** Post-level metrics */
 const POST_METRICS = [
   'impressions',
+  'unique_reach',
   'reactions',
   'comments',
   'reposts',
@@ -45,6 +46,7 @@ const PROFILE_METRICS = [
   'followers',
   'profile_views',
   'search_appearances',
+  'connections',
 ] as const
 
 /** Standard periods to pre-compute */
@@ -142,7 +144,7 @@ async function fetchPostAccumulativeTotals(
   const { data: rows, error } = await supabase
     .from('post_analytics_accumulative')
     .select(
-      'post_id, impressions_total, reactions_total, comments_total, reposts_total, saves_total, sends_total, engagements_total, engagements_rate'
+      'post_id, impressions_total, unique_reach_total, reactions_total, comments_total, reposts_total, saves_total, sends_total, engagements_total, engagements_rate'
     )
     .eq('user_id', userId) as { data: Record<string, unknown>[] | null; error: unknown }
 
@@ -152,6 +154,7 @@ async function fetchPostAccumulativeTotals(
 
   const totals: Record<string, number> = {
     impressions: 0,
+    unique_reach: 0,
     reactions: 0,
     comments: 0,
     reposts: 0,
@@ -162,6 +165,7 @@ async function fetchPostAccumulativeTotals(
 
   for (const row of rows ?? []) {
     totals.impressions += Number(row.impressions_total) || 0
+    totals.unique_reach += Number(row.unique_reach_total) || 0
     totals.reactions += Number(row.reactions_total) || 0
     totals.comments += Number(row.comments_total) || 0
     totals.reposts += Number(row.reposts_total) || 0
@@ -191,7 +195,7 @@ async function fetchProfileAccumulativeTotals(
 ): Promise<Record<string, number> | null> {
   const { data: row, error } = await supabase
     .from('profile_analytics_accumulative')
-    .select('followers_total, profile_views_total, search_appearances_total')
+    .select('followers_total, profile_views_total, search_appearances_total, connections_total')
     .eq('user_id', userId)
     .order('analysis_date', { ascending: false })
     .limit(1)
@@ -207,6 +211,7 @@ async function fetchProfileAccumulativeTotals(
     followers: Number(row.followers_total) || 0,
     profile_views: Number(row.profile_views_total) || 0,
     search_appearances: Number(row.search_appearances_total) || 0,
+    connections: Number(row.connections_total) || 0,
   }
 }
 
@@ -445,15 +450,17 @@ async function computeProfileSummaries(
 
         // Current period: sum of daily gains
         const curValues = (curRows ?? []).map((r) => Number(r[col]) || 0)
+        const curDates = new Set((curRows ?? []).map((r) => r.analysis_date as string))
         const periodGained = curValues.reduce((a, b) => a + b, 0)
         const currentAvg = curValues.length > 0 ? periodGained / curValues.length : 0
-        const currentCount = curValues.length
+        const currentCount = curDates.size
 
         // Comparison period: sum of daily gains
         const compValues = (compRows ?? []).map((r) => Number(r[col]) || 0)
+        const compDates = new Set((compRows ?? []).map((r) => r.analysis_date as string))
         const compGained = compValues.reduce((a, b) => a + b, 0)
         const compAvg = compValues.length > 0 ? compGained / compValues.length : 0
-        const compCount = compValues.length
+        const compCount = compDates.size
 
         // Percentage change based on period gains
         let pctChange = 0

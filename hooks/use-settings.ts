@@ -145,10 +145,10 @@ export function useSettings(): UseSettingsReturn {
         return
       }
 
-      // Fetch user profile from profiles table
+      // Fetch user profile from profiles table (include linkedin_connected_at for OAuth status)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, avatar_url')
+        .select('id, full_name, email, avatar_url, linkedin_connected_at')
         .eq('id', authUser.id)
         .single()
 
@@ -185,7 +185,9 @@ export function useSettings(): UseSettingsReturn {
       }
 
       setLinkedinProfile(linkedinData || null)
-      setLinkedinConnected(!!linkedinData)
+      // LinkedIn is connected if we have a linkedin_profiles row (extension synced)
+      // OR if OAuth was completed (linkedin_connected_at set during OAuth callback)
+      setLinkedinConnected(!!linkedinData || !!profileData?.linkedin_connected_at)
 
       // Update user avatar with LinkedIn profile picture if profiles table avatar is missing
       if (linkedinData?.profile_picture_url) {

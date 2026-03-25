@@ -9,6 +9,7 @@
  */
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { useTheme } from "next-themes"
 import { motion, AnimatePresence, type Variants } from "framer-motion"
@@ -86,6 +87,10 @@ import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { ContentRulesEditor } from "@/components/features/content-rules-editor"
 import { DefaultHashtagsEditor } from "@/components/features/default-hashtags-editor"
+import { TeamManagement } from "@/components/features/team-management"
+import { TeamSettingsPanel } from "@/components/features/team-settings-panel"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useTeam } from "@/hooks/use-team"
 
 /* =============================================================================
    TYPES
@@ -225,6 +230,92 @@ function getRoleBadge(role: TeamMemberRole): {
 }
 
 /* =============================================================================
+   TEAM SETTINGS SECTION
+   ============================================================================= */
+
+/**
+ * Full team settings section with members, invitations, and team config
+ * @description Replaces the placeholder team section with real team management
+ * using TeamManagement and TeamSettingsPanel components in a tabbed layout.
+ * @returns Team settings section JSX
+ */
+function TeamSettingsSection() {
+  const {
+    currentTeam,
+    currentUserRole,
+    updateTeam,
+    refetchTeams,
+  } = useTeam()
+
+  const canManage = currentUserRole === 'owner' || currentUserRole === 'admin'
+
+  const handleUpdateTeamName = React.useCallback(async (name: string) => {
+    if (!currentTeam) return
+    await updateTeam(currentTeam.id, { name })
+    await refetchTeams()
+  }, [currentTeam, updateTeam, refetchTeams])
+
+  const handleDeleteTeam = React.useCallback(async () => {
+    if (!currentTeam) return
+    const response = await fetch(`/api/teams?id=${currentTeam.id}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.error || 'Failed to delete team')
+    }
+    await refetchTeams()
+  }, [currentTeam, refetchTeams])
+
+  if (!currentTeam) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-muted-foreground">
+            <IconUsers className="size-10 mx-auto mb-2 opacity-40" />
+            <p className="text-sm font-medium mb-1">No team yet</p>
+            <p className="text-xs">Create or join a team from the Team Activity page to manage settings here.</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="members">
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="members" className="gap-2">
+            <IconUsers className="size-4" />
+            Members
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="gap-2">
+            <IconSettings className="size-4" />
+            Settings
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="members" className="mt-6">
+          <TeamManagement />
+        </TabsContent>
+
+        <TabsContent value="settings" className="mt-6">
+          <div className="max-w-2xl">
+            <TeamSettingsPanel
+              team={currentTeam}
+              currentUserRole={currentUserRole}
+              canManage={canManage}
+              onUpdateTeamName={handleUpdateTeamName}
+              onDeleteTeam={handleDeleteTeam}
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+/* =============================================================================
    SUB-COMPONENTS
    ============================================================================= */
 
@@ -301,7 +392,7 @@ function SaveIndicator({ status }: { status: "idle" | "saving" | "saved" }) {
  * @returns Full settings page JSX
  */
 function SettingsContent() {
-  const { profile, signOut, user: authUser } = useAuthContext()
+  const { profile, signOut, user: authUser, refreshProfile } = useAuthContext()
   const {
     user,
     linkedinConnected,
@@ -313,8 +404,21 @@ function SettingsContent() {
     updateProfile,
   } = useSettings()
 
-  // Active section
-  const [activeSection, setActiveSection] = React.useState<SettingsSection>("profile")
+  // Active section - support ?section= URL param for deep linking
+  const searchParams = useSearchParams()
+
+  // Refresh auth profile + settings when redirected back from LinkedIn OAuth
+  const linkedinJustConnected = searchParams.get("linkedin_connected")
+  React.useEffect(() => {
+    if (linkedinJustConnected === "true") {
+      refreshProfile()
+      refetch()
+    }
+  }, [linkedinJustConnected, refreshProfile, refetch])
+  const initialSection = (searchParams.get("section") as SettingsSection) || "profile"
+  const [activeSection, setActiveSection] = React.useState<SettingsSection>(
+    NAV_ITEMS.some(item => item.id === initialSection) ? initialSection : "profile"
+  )
 
   // Profile state
   const [profileName, setProfileName] = React.useState("")
@@ -1456,73 +1560,9 @@ function SettingsContent() {
     </div>
   )
 
-  /** Team section */
+  /** Team section - real team management with members, invitations, and settings */
   const renderTeam = () => (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <div>
-          <CardTitle>Team Members</CardTitle>
-          <CardDescription>Manage your team and their permissions</CardDescription>
-        </div>
-        <Button>
-          <IconPlus className="size-4" />
-          Invite Member
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {teamMembers.map((member) => {
-          const { variant, label } = getRoleBadge(member.role)
-          const isOwner = member.role === "owner"
-          return (
-            <div
-              key={member.id}
-              className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-border transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Avatar>
-                  {member.avatarUrl ? (
-                    <AvatarImage src={member.avatarUrl} alt={member.name} />
-                  ) : null}
-                  <AvatarFallback className="bg-primary/10 text-primary">
-                    {getInitials(member.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium">{member.name}</p>
-                  <p className="text-sm text-muted-foreground">{member.email}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {isOwner ? (
-                  <Badge variant={variant}>{label}</Badge>
-                ) : (
-                  <Select value={member.role}>
-                    <SelectTrigger className="w-28">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="member">Member</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-                {!isOwner && (
-                  <Button variant="ghost" size="icon-sm">
-                    <IconTrash className="size-4 text-destructive" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          )
-        })}
-        {teamMembers.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            <IconUsers className="size-10 mx-auto mb-2 opacity-40" />
-            <p className="text-sm">No team members yet. Invite someone to get started.</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <TeamSettingsSection />
   )
 
   /** Notifications section */

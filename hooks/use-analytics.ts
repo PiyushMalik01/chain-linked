@@ -179,7 +179,7 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
           .from('linkedin_profiles')
           .select('followers_count, connections_count')
           .eq('user_id', targetUserId)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('my_posts')
           .select('impressions, reactions, comments, reposts, posted_at, created_at')
@@ -223,10 +223,10 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
           const mostRecent = timestamps.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
           return { data: [{ last_synced_at: mostRecent || null }] }
         }),
-        // Pre-computed summary metrics from Inngest pipeline (fetch both 7d and 30d)
+        // Pre-computed summary metrics from Inngest pipeline (fetch both 7d and 30d, post + profile)
         supabase
           .from('analytics_summary_cache')
-          .select('metric, current_total, current_avg, pct_change, period, timeseries')
+          .select('metric, current_total, current_avg, pct_change, period, timeseries, accumulative_total, metric_type')
           .eq('user_id', targetUserId)
           .in('period', ['7d', '30d']),
         // Latest analytics_history row with non-null profile_views
@@ -307,6 +307,14 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       const cachedImpressions30d = cache30d.find(s => s.metric === 'impressions')
       const cachedEngagements7d = cache7d.find(s => s.metric === 'engagements')
 
+      // Profile metrics from summary cache (accumulated totals from pipeline)
+      const cachedFollowers30d = cache30d.find(s => s.metric === 'followers')
+      const cachedFollowers7d = cache7d.find(s => s.metric === 'followers')
+      const cachedProfileViews30d = cache30d.find(s => s.metric === 'profile_views')
+      const cachedProfileViews7d = cache7d.find(s => s.metric === 'profile_views')
+      const cachedConnections30d = cache30d.find(s => s.metric === 'connections')
+      const cachedSearchAppearances30d = cache30d.find(s => s.metric === 'search_appearances')
+
       // REAL impressions value = sum of all individual post impressions from my_posts
       // This is what users care about: their total lifetime impressions across all posts
       const bestImpressions = postImpressions > 0 ? postImpressions : 0
@@ -364,15 +372,18 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       if (!analytics || analytics.length === 0) {
         // No linkedin_analytics data — use best available sources
         if (bestImpressions > 0 || (myPosts && myPosts.length > 0)) {
-          const totalFollowers = profile?.followers_count || 0
-          const totalConnections = profile?.connections_count || 0
+          // Followers: prefer summary cache accumulative_total > linkedin_profiles > analytics_history
+          const totalFollowers = Number(cachedFollowers30d?.accumulative_total ?? cachedFollowers7d?.accumulative_total) || profile?.followers_count || historyRows[0]?.followers || 0
+          const totalConnections = Number(cachedConnections30d?.accumulative_total) || profile?.connections_count || 0
+          const bestProfileViews = Number(cachedProfileViews30d?.accumulative_total ?? cachedProfileViews7d?.accumulative_total) || latestProfileViews
+          const bestSearchAppearances = Number(cachedSearchAppearances30d?.accumulative_total) || 0
 
           setMetrics({
             impressions: { value: bestImpressions, change: bestImpressionsChange },
             engagementRate: { value: bestEngagementRate, change: bestEngagementsChange },
-            followers: { value: totalFollowers, change: changeMap.get('followers') ?? 0 },
-            profileViews: { value: latestProfileViews, change: changeMap.get('profile_views') ?? 0 },
-            searchAppearances: { value: 0, change: 0 },
+            followers: { value: totalFollowers, change: computeTimeseriesChange(cachedFollowers30d) || changeMap.get('followers') || 0 },
+            profileViews: { value: bestProfileViews, change: computeTimeseriesChange(cachedProfileViews30d) || changeMap.get('profile_views') || 0 },
+            searchAppearances: { value: bestSearchAppearances, change: 0 },
             connections: { value: totalConnections, change: 0 },
             membersReached: { value: 0, change: 0 },
           })
@@ -427,14 +438,19 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
 
       const engagementRate = impressions > 0 ? (engagements / impressions) * 100 : 0
 
-      // Use profile followers_count for accurate total followers
-      const totalFollowers = profile?.followers_count || latestAnalytics.new_followers || 0
-      const totalConnections = profile?.connections_count || 0
+      // Followers: prefer summary cache accumulative_total > linkedin_profiles > analytics_history > analytics record
+      // NEVER use new_followers as total — it's daily gained, not total count
+      const totalFollowers = Number(cachedFollowers30d?.accumulative_total ?? cachedFollowers7d?.accumulative_total)
+        || profile?.followers_count
+        || historyRows[0]?.followers
+        || 0
+      const totalConnections = Number(cachedConnections30d?.accumulative_total) || profile?.connections_count || 0
 
-      // Profile views: prefer latest non-null history row, then analytics record
-      const profileViewsValue = latestProfileViews > 0
-        ? latestProfileViews
-        : latestAnalytics.profile_views || 0
+      // Profile views: prefer summary cache > history row > analytics record
+      const profileViewsValue = Number(cachedProfileViews30d?.accumulative_total ?? cachedProfileViews7d?.accumulative_total)
+        || latestProfileViews
+        || latestAnalytics.profile_views
+        || 0
 
       const aggregatedMetrics: AnalyticsMetrics = {
         impressions: {
@@ -447,14 +463,14 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
         },
         followers: {
           value: totalFollowers,
-          change: changeMap.get('followers') ?? 0,
+          change: computeTimeseriesChange(cachedFollowers30d) || changeMap.get('followers') || 0,
         },
         profileViews: {
           value: profileViewsValue,
-          change: changeMap.get('profile_views') ?? 0,
+          change: computeTimeseriesChange(cachedProfileViews30d) || changeMap.get('profile_views') || 0,
         },
         searchAppearances: {
-          value: latestAnalytics.search_appearances || 0,
+          value: Number(cachedSearchAppearances30d?.accumulative_total) || latestAnalytics.search_appearances || 0,
           change: 0,
         },
         connections: {

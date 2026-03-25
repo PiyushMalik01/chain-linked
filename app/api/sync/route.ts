@@ -30,6 +30,7 @@ const backupAnalyticsSchema = z.object({
   engagements: z.number().int().nonnegative().optional(),
   new_followers: z.number().int().nonnegative().optional(),
   profile_views: z.number().int().nonnegative().optional(),
+  search_appearances: z.number().int().nonnegative().optional(),
   top_posts: z.array(z.any()).optional(),
 }).strict()
 
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
             engagements: data.engagements || 0,
             new_followers: data.new_followers || 0,
             profile_views: data.profile_views || 0,
+            search_appearances: data.search_appearances || 0,
             top_posts: data.top_posts || data.topPosts || [],
             raw_data: data,
           })
@@ -167,6 +169,9 @@ export async function POST(request: Request) {
             comments: post.comments || 0,
             reposts: post.reposts || post.shares || 0,
             impressions: post.impressions || 0,
+            saves: post.saves || post.saveCount || 0,
+            sends: post.sends || post.shareCount || 0,
+            unique_views: post.unique_views || post.uniqueViews || 0,
             posted_at: post.posted_at || post.postedAt,
             raw_data: post,
           }))

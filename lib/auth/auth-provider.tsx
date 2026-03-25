@@ -539,9 +539,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Listen for real-time auth state changes from the extension
     // (instant updates when user signs in/out of the extension)
-    const removeAuthListener = onExtensionAuthStateChange((status) => {
+    const removeAuthListener = onExtensionAuthStateChange(async (status) => {
       setExtensionStatus(status)
       setExtensionInstalled(status.installed)
+      // Re-fetch profile when extension logs in — picks up linkedin_profile
+      // and extension_logged_in changes without requiring a page reload
+      if (status.platformLoggedIn && user) {
+        const updated = await fetchProfile(user.id)
+        if (updated) {
+          setProfile(updated)
+        }
+      }
     })
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -587,6 +595,55 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return () => clearTimeout(timer)
     }
   }, [user, isLoading, profile?.linkedin_profile, fetchProfile])
+
+  // Realtime subscription: auto-refresh profile when extension syncs LinkedIn data.
+  // Listens for INSERT/UPDATE on linkedin_profiles for the current user so the UI
+  // updates immediately without requiring a manual page reload.
+  useEffect(() => {
+    if (!user) return
+
+    const channel = supabase
+      .channel(`linkedin-profile-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'linkedin_profiles',
+          filter: `user_id=eq.${user.id}`,
+        },
+        async () => {
+          const updated = await fetchProfile(user.id)
+          if (updated) {
+            setProfile(updated)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`,
+        },
+        async (payload) => {
+          // Only re-fetch if LinkedIn-related fields changed
+          const newRecord = payload.new as Record<string, unknown>
+          if (newRecord.linkedin_connected_at || newRecord.extension_logged_in) {
+            const updated = await fetchProfile(user.id)
+            if (updated) {
+              setProfile(updated)
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, supabase, fetchProfile])
 
   /**
    * Memoize the context value to prevent unnecessary re-renders of consumers.
