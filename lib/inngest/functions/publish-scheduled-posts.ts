@@ -7,6 +7,8 @@
  * @module lib/inngest/functions/publish-scheduled-posts
  */
 
+import { sendEmail } from '@/lib/email/resend'
+import { PostPublishedEmail } from '@/components/emails/post-published'
 import { inngest } from '../client'
 import { createClient } from '@supabase/supabase-js'
 import {
@@ -177,6 +179,44 @@ export const publishScheduledPosts = inngest.createFunction(
           }
 
           console.log(`[PublishScheduled] Post ${post.id} published successfully`)
+
+          // Send notification email to post author
+          try {
+            const { data: authorProfile } = await supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', post.user_id)
+              .single()
+
+            if (authorProfile?.email) {
+              const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai'
+              const linkedinUrl = apiResult.linkedinPostUrn
+                ? `https://www.linkedin.com/feed/update/${apiResult.linkedinPostUrn}`
+                : undefined
+
+              await sendEmail({
+                to: authorProfile.email,
+                subject: 'Your scheduled post was published on LinkedIn',
+                react: PostPublishedEmail({
+                  userName: authorProfile.full_name || 'there',
+                  contentPreview: post.content.slice(0, 200) + (post.content.length > 200 ? '...' : ''),
+                  publishedAt: new Date().toLocaleString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    timeZoneName: 'short',
+                  }),
+                  linkedinUrl,
+                  dashboardUrl: `${appUrl}/dashboard`,
+                }),
+              })
+            }
+          } catch (emailErr) {
+            console.error(`[PublishScheduled] Failed to send notification for post ${post.id}:`, emailErr)
+          }
+
           return 'published' as const
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err)
