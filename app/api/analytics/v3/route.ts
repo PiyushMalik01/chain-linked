@@ -50,7 +50,7 @@ type Mode = (typeof VALID_MODES)[number]
 
 /** Shape of a single daily_account_snapshots row (partial) */
 interface SnapshotRow {
-  snapshot_date: string
+  date: string
   [key: string]: unknown
 }
 
@@ -112,7 +112,7 @@ function buildTimeseries(
 
   if (mode === 'absolute') {
     return rows.map((row) => ({
-      date: row.snapshot_date,
+      date: row.date,
       value: Math.round(Number(row[column] ?? 0) * 100) / 100,
     }))
   }
@@ -124,7 +124,7 @@ function buildTimeseries(
     const previous = Number(rows[i - 1][column] ?? 0)
     const delta = Math.round((current - previous) * 100) / 100
     points.push({
-      date: rows[i].snapshot_date,
+      date: rows[i].date,
       value: delta,
     })
   }
@@ -239,9 +239,9 @@ export async function GET(request: Request) {
       .from('daily_account_snapshots' as never)
       .select('*')
       .eq('user_id', user.id)
-      .gte('snapshot_date', startStr)
-      .lte('snapshot_date', endStr)
-      .order('snapshot_date', { ascending: true })
+      .gte('date', startStr)
+      .lte('date', endStr)
+      .order('date', { ascending: true })
 
     if (currentError) {
       console.error('Analytics V3 current period query error:', currentError)
@@ -252,7 +252,11 @@ export async function GET(request: Request) {
     }
 
     const snapshots = (currentRows ?? []) as unknown as SnapshotRow[]
-    const current = buildTimeseries(snapshots, column, mode)
+
+    // If only 1 day of data, delta mode returns empty — fall back to absolute
+    // so the user sees their current values instead of "still getting your data"
+    const effectiveMode: Mode = (mode === 'delta' && snapshots.length < 2) ? 'absolute' : mode
+    const current = buildTimeseries(snapshots, column, effectiveMode)
 
     // 5. Fetch comparison period snapshots if requested
     let comparison: TimeseriesPoint[] | null = null
@@ -266,28 +270,35 @@ export async function GET(request: Request) {
         .from('daily_account_snapshots' as never)
         .select('*')
         .eq('user_id', user.id)
-        .gte('snapshot_date', compStartStr)
-        .lte('snapshot_date', compEndStr)
-        .order('snapshot_date', { ascending: true })
+        .gte('date', compStartStr)
+        .lte('date', compEndStr)
+        .order('date', { ascending: true })
 
       if (compError) {
         console.error('Analytics V3 comparison period query error:', compError)
-        // Non-fatal: return current data without comparison
       } else {
         compSnapshots = (compRows ?? []) as unknown as SnapshotRow[]
-        comparison = buildTimeseries(compSnapshots, column, mode)
+        comparison = buildTimeseries(compSnapshots, column, effectiveMode)
       }
     }
 
     // 6. Compute summary statistics
-    const currentDeltas = mode === 'delta'
-      ? current
-      : buildTimeseries(snapshots, column, 'delta')
+    // When we have enough data for deltas, use deltas for summary.
+    // Otherwise use absolute values from the snapshots.
+    let total: number
+    let average: number
 
-    const total = currentDeltas.reduce((sum, p) => sum + p.value, 0)
-    const average = currentDeltas.length > 0
-      ? Math.round((total / currentDeltas.length) * 100) / 100
-      : 0
+    if (snapshots.length >= 2) {
+      const deltas = buildTimeseries(snapshots, column, 'delta')
+      total = deltas.reduce((sum, p) => sum + p.value, 0)
+      average = deltas.length > 0
+        ? Math.round((total / deltas.length) * 100) / 100
+        : 0
+    } else {
+      // Only 1 day — show the absolute value as total
+      total = current.length > 0 ? current[0].value : 0
+      average = total
+    }
 
     // % change vs comparison period
     let change = 0

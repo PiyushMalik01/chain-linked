@@ -62,6 +62,7 @@ interface RawPost {
   sends: number | null
   media_type: string | null
   posted_at: string | null
+  created_at: string | null
 }
 
 /** Engagement stacked area data point */
@@ -141,9 +142,9 @@ function useChartData(userId: string | undefined) {
     try {
       const { data, error } = await supabaseRef.current
         .from("my_posts")
-        .select("impressions, reactions, comments, reposts, saves, sends, media_type, posted_at")
+        .select("impressions, reactions, comments, reposts, saves, sends, media_type, posted_at, created_at")
         .eq("user_id", userId)
-        .order("posted_at", { ascending: true })
+        .order("created_at", { ascending: true })
 
       if (error || !data) {
         setPosts([])
@@ -205,8 +206,10 @@ function computeFrequencyData(posts: RawPost[]): FrequencyPoint[] {
   const monthMap = new Map<string, { posts: number; totalImpressions: number }>()
 
   for (const p of posts) {
-    if (!p.posted_at) continue
-    const d = new Date(p.posted_at)
+    // Use created_at (when captured by ChainLinked) so new users see current months
+    const dateStr = p.created_at || p.posted_at
+    if (!dateStr) continue
+    const d = new Date(dateStr)
     const key = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
 
     if (!monthMap.has(key)) {
@@ -269,8 +272,9 @@ function computeDayOfWeekData(posts: RawPost[]): DayOfWeekPoint[] {
   }
 
   for (const p of posts) {
-    if (!p.posted_at) continue
-    const dayIndex = new Date(p.posted_at).getDay()
+    const dateStr = p.created_at || p.posted_at
+    if (!dateStr) continue
+    const dayIndex = new Date(dateStr).getDay()
     const entry = dayMap.get(dayIndex)!
     const imp = p.impressions ?? 0
     const eng = (p.reactions ?? 0) + (p.comments ?? 0) + (p.reposts ?? 0) + (p.saves ?? 0) + (p.sends ?? 0)
