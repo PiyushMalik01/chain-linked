@@ -32,7 +32,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import type { AnalyticsV2Filters } from "@/hooks/use-analytics-v2"
+import type { AnalyticsV3Filters } from "@/hooks/use-analytics-v3"
 
 /** Content type options for filtering posts */
 const CONTENT_TYPE_OPTIONS = [
@@ -54,9 +54,9 @@ const PERIOD_OPTIONS = ["7d", "30d", "90d", "1y"] as const
  */
 interface AnalyticsFilterBarProps {
   /** Current filter values */
-  filters: AnalyticsV2Filters
+  filters: AnalyticsV3Filters
   /** Callback when any filter changes */
-  onFiltersChange: (filters: AnalyticsV2Filters) => void
+  onFiltersChange: (filters: AnalyticsV3Filters) => void
 }
 
 /**
@@ -75,7 +75,7 @@ export function AnalyticsFilterBar({ filters, onFiltersChange }: AnalyticsFilter
    * Update filters and sync to URL search params
    */
   const updateFilters = useCallback(
-    (updates: Partial<AnalyticsV2Filters>) => {
+    (updates: Partial<AnalyticsV3Filters>) => {
       const newFilters = { ...filters, ...updates }
       onFiltersChange(newFilters)
 

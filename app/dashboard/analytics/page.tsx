@@ -17,7 +17,7 @@ import { AnalyticsSummaryBar } from "@/components/features/analytics-summary-bar
 import { AnalyticsTrendChart } from "@/components/features/analytics-trend-chart"
 import { AnalyticsDataTable } from "@/components/features/analytics-data-table"
 import { AnalyticsChartsSection } from "@/components/features/analytics-charts"
-import { useAnalyticsV2, type AnalyticsV2Filters } from "@/hooks/use-analytics-v2"
+import { useAnalyticsV3, type AnalyticsV3Filters } from "@/hooks/use-analytics-v3"
 import { useAuthContext } from "@/lib/auth/auth-provider"
 import { usePageMeta } from "@/lib/dashboard-context"
 import {
@@ -30,7 +30,7 @@ import {
  * @param searchParams - URL search params
  * @returns Default filter configuration
  */
-function getDefaultFilters(searchParams: URLSearchParams): AnalyticsV2Filters {
+function getDefaultFilters(searchParams: URLSearchParams): AnalyticsV3Filters {
   return {
     metric: searchParams.get("metric") || "impressions",
     period: searchParams.get("period") || "30d",
@@ -48,8 +48,8 @@ function getDefaultFilters(searchParams: URLSearchParams): AnalyticsV2Filters {
 function AnalyticsContent() {
   const { user, profile, isLoading: authLoading } = useAuthContext()
   const searchParams = useSearchParams()
-  const [filters, setFilters] = useState<AnalyticsV2Filters>(() => getDefaultFilters(searchParams))
-  const { data, summary, comparisonData, multiData, isLoading, error } = useAnalyticsV2(filters)
+  const [filters, setFilters] = useState<AnalyticsV3Filters>(() => getDefaultFilters(searchParams))
+  const { data, summary, comparisonData, multiData, engagementBreakdown, isLoading, error } = useAnalyticsV3(filters)
 
   /**
    * Handle granularity changes from the data table
@@ -101,7 +101,7 @@ function AnalyticsContent() {
       </motion.div>
 
       {/* Analytics Charts Grid */}
-      <AnalyticsChartsSection userId={user?.id} isLoading={isLoading} />
+      <AnalyticsChartsSection userId={user?.id} isLoading={isLoading} engagementBreakdown={engagementBreakdown} />
 
       {/* Data Table */}
       <motion.div

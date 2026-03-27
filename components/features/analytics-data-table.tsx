@@ -56,8 +56,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { fadeSlideUpVariants } from "@/lib/animations"
 import { toast } from "sonner"
-import type { AnalyticsDataPoint, MultiMetricData } from "@/hooks/use-analytics-v2"
-import { ALL_MODE_METRICS } from "@/hooks/use-analytics-v2"
+import type { AnalyticsDataPoint, MultiMetricData } from "@/hooks/use-analytics-v3"
+import { ALL_MODE_METRICS } from "@/hooks/use-analytics-v3"
 import { LottieEmptyState } from "@/components/shared/lottie-empty-state"
 
 /** Metric display labels */

@@ -46,6 +46,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { createClient } from "@/lib/supabase/client"
 import { staggerContainerVariants, staggerItemVariants } from "@/lib/animations"
+import type { EngagementDataPoint } from "@/hooks/use-analytics-v3"
 
 // ============================================================================
 // Types
@@ -707,14 +708,50 @@ function BestPostingDaysChart({ data }: { data: DayOfWeekPoint[] }) {
 export function AnalyticsChartsSection({
   userId,
   isLoading: parentLoading,
+  engagementBreakdown,
 }: {
   userId: string | undefined
   isLoading: boolean
+  engagementBreakdown?: EngagementDataPoint[]
 }) {
   const { posts, isLoading: dataLoading } = useChartData(userId)
   const loading = parentLoading || dataLoading
 
-  const engagementData = useMemo(() => computeEngagementTimeline(posts), [posts])
+  const engagementByWeek = useMemo(() => {
+    if (!engagementBreakdown || engagementBreakdown.length === 0) return []
+
+    const weekMap = new Map<string, { weekStart: string; reactions: number; comments: number; reposts: number; saves: number }>()
+
+    for (const day of engagementBreakdown) {
+      const d = new Date(day.date)
+      const dayOfWeek = d.getDay()
+      const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+      const monday = new Date(d)
+      monday.setDate(diff)
+      const weekKey = monday.toISOString().split('T')[0]
+
+      const existing = weekMap.get(weekKey) || { weekStart: weekKey, reactions: 0, comments: 0, reposts: 0, saves: 0 }
+      existing.reactions += day.reactions
+      existing.comments += day.comments
+      existing.reposts += day.reposts
+      existing.saves += day.saves + day.sends
+      weekMap.set(weekKey, existing)
+    }
+
+    return Array.from(weekMap.values()).sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+  }, [engagementBreakdown])
+
+  /** Map weekly engagement data to the chart's expected format */
+  const engagementData = useMemo(() =>
+    engagementByWeek.map((w) => ({
+      date: w.weekStart,
+      reactions: w.reactions,
+      comments: w.comments,
+      reposts: w.reposts,
+      saves: w.saves,
+    })),
+    [engagementByWeek]
+  )
   const frequencyData = useMemo(() => computeFrequencyData(posts), [posts])
   const contentTypeData = useMemo(() => computeContentTypeData(posts), [posts])
   const dayOfWeekData = useMemo(() => computeDayOfWeekData(posts), [posts])

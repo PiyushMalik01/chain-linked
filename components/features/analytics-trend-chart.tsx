@@ -40,8 +40,8 @@ import {
 } from "@/components/ui/chart"
 import { Skeleton } from "@/components/ui/skeleton"
 import { fadeSlideUpVariants } from "@/lib/animations"
-import type { AnalyticsDataPoint, MultiMetricData } from "@/hooks/use-analytics-v2"
-import { ALL_MODE_METRICS } from "@/hooks/use-analytics-v2"
+import type { AnalyticsDataPoint, MultiMetricData } from "@/hooks/use-analytics-v3"
+import { ALL_MODE_METRICS } from "@/hooks/use-analytics-v3"
 import { LottieEmptyState } from "@/components/shared/lottie-empty-state"
 
 /** Metric display labels */
