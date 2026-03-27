@@ -66,22 +66,55 @@ export function useTextSelectionPopup(
       return
     }
 
-    // Calculate position using line/column heuristic (same pattern as detectMention)
-    const lineHeight = 24
-    const charWidth = 8
-    const textBeforeSelection = content.slice(0, start)
-    const lines = textBeforeSelection.split('\n')
-    const currentLine = lines.length - 1
-    const col = lines[lines.length - 1].length
+    // Use a hidden mirror element to measure exact selection position
+    // This accounts for font size, line wrapping, padding, and scroll
+    const textareaRect = textarea.getBoundingClientRect()
+    const parentRect = textarea.parentElement?.getBoundingClientRect()
+    if (!parentRect) return
 
-    // Position popup below the selection start, accounting for scroll offset
-    const scrollTop = textarea.scrollTop || 0
-    const top = (currentLine + 1) * lineHeight + 8 - scrollTop
-    const left = Math.min(col * charWidth, 250)
+    // Create a temporary mirror div matching the textarea's styling
+    const mirror = document.createElement('div')
+    const computed = getComputedStyle(textarea)
+    const mirrorStyles = [
+      'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
+      'word-spacing', 'white-space', 'word-wrap', 'overflow-wrap',
+      'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+      'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+      'box-sizing', 'width',
+    ] as const
+    mirror.style.position = 'absolute'
+    mirror.style.visibility = 'hidden'
+    mirror.style.whiteSpace = 'pre-wrap'
+    mirror.style.wordWrap = 'break-word'
+    for (const prop of mirrorStyles) {
+      mirror.style.setProperty(prop, computed.getPropertyValue(prop))
+    }
+
+    // Fill mirror with text up to selection start, then a marker span
+    const textBefore = content.slice(0, start)
+    const beforeNode = document.createTextNode(textBefore)
+    const marker = document.createElement('span')
+    marker.textContent = '|'
+    mirror.appendChild(beforeNode)
+    mirror.appendChild(marker)
+    document.body.appendChild(mirror)
+
+    const markerRect = marker.getBoundingClientRect()
+    const mirrorRect = mirror.getBoundingClientRect()
+
+    // Calculate position relative to the parent container (which has position: relative)
+    const top = markerRect.top - mirrorRect.top - textarea.scrollTop - 28 // 28px above the line
+    const left = Math.min(markerRect.left - mirrorRect.left, parentRect.width - 140)
+
+    document.body.removeChild(mirror)
+
+    // Clamp: don't let popup go above the textarea (top < 0) or too far left
+    const clampedTop = Math.max(0, top)
+    const clampedLeft = Math.max(0, left)
 
     setState({
       showPopup: true,
-      popupPosition: { top, left },
+      popupPosition: { top: clampedTop, left: clampedLeft },
       selectedText: selected,
       selectionRange: { start, end },
     })
