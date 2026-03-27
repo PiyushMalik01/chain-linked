@@ -29,17 +29,11 @@ export function getInitials(name: string): string {
 }
 
 /**
- * Formats a number into a compact, human-readable string with K/M suffixes
+ * Formats a number with locale-aware comma separators
  * @param num - The number to format
- * @returns Formatted string (e.g., "1.2K", "3.4M")
+ * @returns Formatted string (e.g., "1,469", "9,554")
  */
 export function formatMetricNumber(num: number | null | undefined): string {
   if (num == null) return "0"
-  if (num >= 1_000_000) {
-    return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
-  }
-  if (num >= 1_000) {
-    return `${(num / 1_000).toFixed(1).replace(/\.0$/, "")}K`
-  }
-  return num.toString()
+  return Math.round(num).toLocaleString()
 }
