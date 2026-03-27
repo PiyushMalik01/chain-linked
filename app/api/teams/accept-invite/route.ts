@@ -9,6 +9,7 @@ import { createClient as createAdminSupabase } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email/resend'
 import { WelcomeToTeamEmail } from '@/components/emails/welcome-to-team'
+import { MemberJoinedTeamEmail } from '@/components/emails/member-joined-team'
 import { copyTeamContextToMember } from '@/lib/team/copy-context'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -249,6 +250,42 @@ export async function POST(request: Request) {
           dashboardUrl,
         }),
       })
+    }
+
+    // Notify team owner that a new member joined
+    try {
+      const { data: ownerMember } = await adminClient
+        .from('team_members')
+        .select('user_id')
+        .eq('team_id', invitation.team_id)
+        .eq('role', 'owner')
+        .single()
+
+      if (ownerMember) {
+        const { data: ownerProfile } = await adminClient
+          .from('profiles')
+          .select('email')
+          .eq('id', ownerMember.user_id)
+          .single()
+
+        if (ownerProfile?.email) {
+          await sendEmail({
+            to: ownerProfile.email,
+            subject: `${userProfile?.full_name || user.email} joined ${team?.name}`,
+            react: MemberJoinedTeamEmail({
+              memberName: userProfile?.full_name || '',
+              memberEmail: user.email || '',
+              teamName: team?.name || 'the team',
+              companyName: company?.name,
+              companyLogoUrl: company?.logo_url || team?.logo_url || undefined,
+              role: invitation.role as 'admin' | 'member',
+              dashboardUrl,
+            }),
+          })
+        }
+      }
+    } catch (emailErr) {
+      console.error('[accept-invite] Failed to notify owner:', emailErr)
     }
 
     return NextResponse.json({
