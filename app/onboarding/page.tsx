@@ -7,8 +7,8 @@
  * @module app/onboarding/page
  */
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   IconBuilding,
@@ -104,8 +104,10 @@ function RoleCard({
  * onboarding_type set in their profile, redirect to the appropriate path.
  * @returns Role selection screen or loading state
  */
-export default function OnboardingPage() {
+function OnboardingPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get('invite')
   const {
     isLoading,
     isAuthenticated,
@@ -117,6 +119,7 @@ export default function OnboardingPage() {
   const [selected, setSelected] = useState<OnboardingType | null>(null)
   const [saving, setSaving] = useState(false)
   const [checkingType, setCheckingType] = useState(true)
+  const inviteRedirectedRef = useRef(false)
 
   // Check if user already has an onboarding type set
   useEffect(() => {
@@ -163,6 +166,33 @@ export default function OnboardingPage() {
 
     checkOnboardingType()
   }, [isLoading, isAuthenticated, hasCompletedOnboarding, currentOnboardingStep, user, router])
+
+  /**
+   * If an invite token is present, skip role selection entirely.
+   * Sets onboarding_type to 'member' and redirects to step1 with the token.
+   */
+  useEffect(() => {
+    if (!inviteToken || isLoading || !isAuthenticated || !user) return
+    if (inviteRedirectedRef.current) return
+    inviteRedirectedRef.current = true
+
+    const skipRoleSelection = async () => {
+      try {
+        const supabase = createClient()
+        await supabase
+          .from('profiles')
+          .update({ onboarding_type: 'member' })
+          .eq('id', user.id)
+
+        router.replace(`/onboarding/step1?invite=${inviteToken}`)
+      } catch (err) {
+        console.error('Failed to set onboarding type for invite flow:', err)
+        toast.error('Something went wrong. Please try again.')
+      }
+    }
+
+    skipRoleSelection()
+  }, [inviteToken, isLoading, isAuthenticated, user, router])
 
   const handleContinue = async () => {
     if (!selected || !user) return
@@ -255,5 +285,26 @@ export default function OnboardingPage() {
         </Button>
       </motion.div>
     </div>
+  )
+}
+
+/**
+ * Onboarding page wrapped in Suspense for useSearchParams compatibility
+ * @returns Suspense-wrapped onboarding page
+ */
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Loading your progress...</p>
+          </div>
+        </div>
+      }
+    >
+      <OnboardingPageContent />
+    </Suspense>
   )
 }

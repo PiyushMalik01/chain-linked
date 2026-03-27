@@ -7,7 +7,7 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
@@ -32,6 +32,8 @@ function SignupForm() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get('invite')
 
   /**
    * Calculate password strength
@@ -137,7 +139,7 @@ function SignupForm() {
       }
 
       toast.success('Account created successfully!')
-      router.push('/onboarding')
+      router.push(inviteToken ? `/onboarding?invite=${inviteToken}` : '/onboarding')
       router.refresh()
     } catch (error) {
       console.error('Signup error:', error)
@@ -154,10 +156,14 @@ function SignupForm() {
     const supabase = createClient()
 
     try {
+      const callbackUrl = inviteToken
+        ? `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(`/onboarding?invite=${inviteToken}`)}`
+        : `${window.location.origin}/api/auth/callback`
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback`,
+          redirectTo: callbackUrl,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',

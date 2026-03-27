@@ -330,11 +330,12 @@ export default function InviteAcceptPage() {
             </p>
 
             <div className="flex flex-col gap-3">
-              <Button onClick={handleLogin} className="w-full h-11">
-                Sign In
-              </Button>
-              <Button onClick={handleSignup} variant="outline" className="w-full h-11">
+              <Button onClick={() => router.push(`/signup?invite=${token}`)} className="w-full h-11">
+                <IconUserPlus className="mr-2 h-4 w-4" />
                 Create Account
+              </Button>
+              <Button onClick={() => router.push(`/login?redirect=/invite/${token}`)} variant="outline" className="w-full h-11">
+                Already have an account? Sign In
               </Button>
             </div>
 
