@@ -19,7 +19,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { AnalyticsSummary } from "@/hooks/use-analytics-v3"
-import { isProfileMetric } from "@/hooks/use-analytics-v2"
+import { isProfileMetric } from "@/hooks/use-analytics-v3"
 import { LottieEmptyState } from "@/components/shared/lottie-empty-state"
 import { AnimatedNumber } from "@/components/shared/animated-number"
 

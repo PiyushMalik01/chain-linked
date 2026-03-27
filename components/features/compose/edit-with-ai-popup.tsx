@@ -105,7 +105,7 @@ export function EditWithAIPopup({
                 e.stopPropagation()
                 setIsExpanded(true)
               }}
-              className="gap-1.5 rounded-full shadow-md border-primary/30 bg-background hover:bg-accent text-xs h-7"
+              className="gap-1.5 rounded-full shadow-md border border-border bg-card hover:bg-accent text-xs h-7"
             >
               <IconSparkles className="size-3 text-primary" />
               Edit with AI
@@ -117,7 +117,7 @@ export function EditWithAIPopup({
               animate={{ width: 320 }}
               transition={{ duration: 0.2 }}
               onSubmit={handleSubmit}
-              className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-background shadow-lg px-2 py-1"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-card shadow-lg px-2 py-1"
               onClick={(e) => e.stopPropagation()}
             >
               <IconSparkles className="size-3.5 text-primary shrink-0 ml-1" />

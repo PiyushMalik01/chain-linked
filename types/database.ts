@@ -21,6 +21,120 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_account_snapshots: {
+        Row: {
+          id: string
+          user_id: string
+          date: string
+          total_impressions: number
+          total_reactions: number
+          total_comments: number
+          total_reposts: number
+          total_saves: number
+          total_sends: number
+          total_engagements: number
+          followers: number
+          connections: number
+          profile_views: number
+          search_appearances: number
+          post_count: number
+          updated_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          date: string
+          total_impressions?: number
+          total_reactions?: number
+          total_comments?: number
+          total_reposts?: number
+          total_saves?: number
+          total_sends?: number
+          total_engagements?: number
+          followers?: number
+          connections?: number
+          profile_views?: number
+          search_appearances?: number
+          post_count?: number
+          updated_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          date?: string
+          total_impressions?: number
+          total_reactions?: number
+          total_comments?: number
+          total_reposts?: number
+          total_saves?: number
+          total_sends?: number
+          total_engagements?: number
+          followers?: number
+          connections?: number
+          profile_views?: number
+          search_appearances?: number
+          post_count?: number
+          updated_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      daily_post_snapshots: {
+        Row: {
+          id: string
+          user_id: string
+          activity_urn: string
+          date: string
+          impressions: number
+          reactions: number
+          comments: number
+          reposts: number
+          saves: number
+          sends: number
+          engagements: number
+          media_type: string | null
+          posted_at: string | null
+          updated_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          activity_urn: string
+          date: string
+          impressions?: number
+          reactions?: number
+          comments?: number
+          reposts?: number
+          saves?: number
+          sends?: number
+          engagements?: number
+          media_type?: string | null
+          posted_at?: string | null
+          updated_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          activity_urn?: string
+          date?: string
+          impressions?: number
+          reactions?: number
+          comments?: number
+          reposts?: number
+          saves?: number
+          sends?: number
+          engagements?: number
+          media_type?: string | null
+          posted_at?: string | null
+          updated_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       analytics_history: {
         Row: {
           created_at: string | null

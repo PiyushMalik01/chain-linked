@@ -13,6 +13,18 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 /** The five post metrics fetched in "all" mode */
 export const ALL_MODE_METRICS = ['impressions', 'reactions', 'comments', 'reposts', 'engagements'] as const
 
+/** Profile-level metrics (as opposed to post-level) */
+export const PROFILE_METRICS = ['followers', 'profile_views', 'search_appearances', 'connections'] as const
+
+/**
+ * Check if a metric is a profile-level metric
+ * @param metric - The metric name to check
+ * @returns Whether this is a profile metric
+ */
+export function isProfileMetric(metric: string): boolean {
+  return (PROFILE_METRICS as readonly string[]).includes(metric)
+}
+
 /**
  * Filter configuration for the analytics V3 endpoint
  */

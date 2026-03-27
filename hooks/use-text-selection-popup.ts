@@ -74,8 +74,9 @@ export function useTextSelectionPopup(
     const currentLine = lines.length - 1
     const col = lines[lines.length - 1].length
 
-    // Position popup below the selection start
-    const top = (currentLine + 1) * lineHeight + 8
+    // Position popup below the selection start, accounting for scroll offset
+    const scrollTop = textarea.scrollTop || 0
+    const top = (currentLine + 1) * lineHeight + 8 - scrollTop
     const left = Math.min(col * charWidth, 250)
 
     setState({
