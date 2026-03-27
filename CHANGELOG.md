@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] - 2026-03-28
+
+### Added
+- Daily snapshot analytics pipeline: `daily_account_snapshots` and `daily_post_snapshots` tables with Inngest cron (every 5 min) for absolute-value daily tracking
+- Analytics v3 API (`/api/analytics/v3`, `/api/analytics/v3/posts`) with delta/absolute modes and comparison periods
+- `useAnalyticsV3` hook for snapshot-based analytics
+- Seamless invite-to-signup flow: non-registered invitees auto-redirect to signup, shortened onboarding (LinkedIn connect only), auto-accept invite on completion
+- Email notification: team owner notified when a new member joins
+- Email notification: post author notified when scheduled post is published on LinkedIn
+- `MemberJoinedTeamEmail` and `PostPublishedEmail` React Email templates
+
+### Fixed
+- Dashboard metrics now read from `daily_account_snapshots` instead of stale `analytics_summary_cache`, eliminating incorrect +105300% change display
+- Analytics page shows data only from user's first capture date (not historical post publication dates)
+- Engagement breakdown uses snapshot capture dates instead of `posted_at`
+- Posting frequency and best days charts use `created_at` (capture date)
+- Edit with AI button: accurate positioning via mirror-div measurement (works at any scroll position)
+- Edit with AI button: opaque background in both dark/light modes (was transparent due to Button outline variant)
+- Post cards show actual numbers (9,554) instead of abbreviated (1.5K)
+
+### Changed
+- Analytics page wired to v3 snapshot-based pipeline (replaces v2 delta-computation pipeline)
+- Dashboard `useAnalytics` hook simplified to single `daily_account_snapshots` query (was 8 parallel queries across 5 tables)
+- `formatMetricNumber` utility now returns locale-formatted numbers instead of K/M abbreviations
+
+---
+
 ## [Unreleased] - 2026-03-24
 
 ### Added

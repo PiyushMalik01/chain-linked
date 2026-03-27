@@ -420,6 +420,31 @@ Profile-level analytics from daily and accumulative tables.
 - **Query params:** `period`, `metric`, `granularity`
 - **Response:** Profile analytics data
 
+### Analytics V3 (Snapshot-Based)
+
+#### `GET /api/analytics/v3`
+Account-level analytics from daily snapshots.
+
+- **Auth required:** Yes
+- **Query params:**
+  - `metric` -- impressions, reactions, comments, reposts, saves, sends, engagements, followers, connections, profile_views, search_appearances
+  - `period` -- 7d, 30d, 90d, 1y, custom
+  - `compare` -- true/false (comparison period)
+  - `mode` -- delta (day-over-day change) or absolute (raw values)
+  - `startDate`, `endDate` -- for custom period
+- **Response:** `{ current: [{date, value}], comparison: [{date, value}] | null, summary: {total, average, change, compCount, accumulativeTotal} }`
+
+#### `GET /api/analytics/v3/posts`
+Per-post analytics from daily post snapshots.
+
+- **Auth required:** Yes
+- **Query params:**
+  - `metric` -- impressions, reactions, comments, reposts, saves, sends, engagements
+  - `period` -- 7d, 30d, 90d, 1y, custom
+  - `activity_urn` -- optional specific post filter
+  - `contentType` -- optional media type filter
+- **Response:** `{ timeseries: [{date, impressions, reactions, comments, reposts, saves, sends, engagements, delta}], posts?: [...] }`
+
 ---
 
 ## Teams

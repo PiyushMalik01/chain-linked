@@ -1,6 +1,6 @@
 # ChainLinked Architecture Documentation
 
-> Last updated: 2026-03-24
+> Last updated: 2026-03-28
 
 ChainLinked is a LinkedIn content management platform for teams. It combines a Next.js 16 web application, a Chrome extension for LinkedIn data capture, Supabase for database/auth, and Inngest for background job orchestration.
 
@@ -160,7 +160,7 @@ All API routes are under `app/api/` and use Next.js Route Handlers:
 | `api/settings/*` | API key management |
 | `api/teams/[teamId]/*` | Team members, invitations, join requests |
 | `api/brand-kit/*` | Brand kit extraction and management |
-| `api/analytics/*` | Analytics data (v1 and v2) |
+| `api/analytics/*` | Analytics data (v1, v2, and v3 snapshot-based) |
 | `api/influencers/*` | Influencer management and post scraping |
 | `api/inspiration/*` | Inspiration feed search |
 | `api/posts/*` | Post management |
@@ -287,13 +287,16 @@ ChainLinked/
 |   |   +-- email-verification.tsx
 |   |   +-- team-invitation.tsx
 |   |   +-- welcome-to-team.tsx
+|   |   +-- member-joined-team.tsx
+|   |   +-- post-published.tsx
 |   +-- debug/                    # Debug utilities
 |       +-- session-replay-debug.tsx
 |
 +-- hooks/                        # Custom React hooks (50+)
 |   +-- use-auth.ts               # Auth helpers
 |   +-- use-analytics.ts          # Analytics data fetching
-|   +-- use-analytics-v2.ts       # V2 analytics (rollup-based)
+|   +-- use-analytics-v2.ts       # V2 analytics (rollup-based, legacy)
+|   +-- use-analytics-v3.ts       # V3 analytics (snapshot-based, primary)
 |   +-- use-post-analytics.ts     # Per-post performance
 |   +-- use-drafts.ts             # Draft CRUD
 |   +-- use-auto-save.ts          # Auto-save drafts
@@ -404,6 +407,7 @@ ChainLinked/
 |   |       +-- on-demand-content-ingest.ts
 |   |       +-- swipe-auto-refill.ts
 |   |       +-- analytics-pipeline.ts
+|   |       +-- daily-snapshot-pipeline.ts
 |   |       +-- analytics-summary-compute.ts
 |   |       +-- analytics-backfill.ts
 |   |       +-- first-sync-backfill.ts
@@ -900,8 +904,9 @@ All background jobs are powered by **Inngest** and served via a single API route
 | **dailyContentIngest** | Cron schedule | Ingests fresh content from configured topics for the discover feed |
 | **onDemandContentIngest** | `discover/ingest` event | User-triggered content ingest for specific topics |
 | **swipeAutoRefill** | Cron schedule | Checks all users and auto-triggers suggestion generation when below threshold |
-| **analyticsPipeline** | `analytics/pipeline` event or cron (every 5 min) | Computes analytics snapshots using accumulative totals, rolls up to weekly/monthly/quarterly/yearly |
-| **analyticsSummaryCompute** | Cron (every 5 min) | Pre-computes dashboard summary cache using `post_analytics_accumulative` for lifetime totals |
+| **analyticsPipeline** | `analytics/pipeline` event or cron (every 5 min) | *Legacy pipeline.* Computes analytics snapshots using accumulative totals, rolls up to weekly/monthly/quarterly/yearly. Superseded by `dailySnapshotPipeline` for dashboard and analytics page. |
+| **dailySnapshotPipeline** | Cron (every 5 min) | Snapshots absolute metric values into `daily_account_snapshots` and `daily_post_snapshots`. Same-day runs update; new day inserts. Primary source for dashboard and analytics page. |
+| **analyticsSummaryCompute** | Cron (every 5 min) | *Legacy.* Pre-computes dashboard summary cache using `post_analytics_accumulative` for lifetime totals. Dashboard now reads from `daily_account_snapshots` instead. |
 | **analyticsBackfill** | Manual trigger | Backfills historical analytics data for new or corrected metrics |
 | **firstSyncBackfill** | `sync/first-data` event | Triggered on first extension data sync, runs initial analytics backfill |
 | **templateAutoGenerate** | `templates/auto-generate` event or cron | Auto-generates post templates per user/category based on writing style |

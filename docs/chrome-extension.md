@@ -487,7 +487,19 @@ LinkedIn (browser)
        |
        v
 [Supabase PostgreSQL]
+       |
+       v (Inngest cron, every 5 min)
+[dailySnapshotPipeline]
+  |-- Reads from my_posts, linkedin_profiles, linkedin_analytics
+  |-- Upserts into daily_account_snapshots (account-level)
+  |-- Upserts into daily_post_snapshots (per-post)
+  |-- Same-day runs UPDATE existing row; new day = new INSERT
+       |
+       v
+[Analytics Dashboard & Analytics Page]
 ```
+
+> **Note:** The extension syncs data to `my_posts`, `linkedin_profiles`, and `linkedin_analytics` tables. The `dailySnapshotPipeline` (Inngest, every 5 min) then aggregates this data into `daily_account_snapshots` and `daily_post_snapshots` for the analytics dashboard.
 
 ### Offline-First Queue
 

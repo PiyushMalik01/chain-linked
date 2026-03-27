@@ -149,6 +149,15 @@ The Analytics Dashboard provides detailed LinkedIn performance tracking with int
 5. Scroll to the data table for detailed row-by-row data.
 6. Adjust granularity in the data table for different levels of aggregation.
 
+### Data Pipeline
+
+- Data comes from `daily_account_snapshots` and `daily_post_snapshots` tables (v3 snapshot pipeline)
+- Shows data only from user's first capture date onward (not historical post publication dates)
+- Day-over-day deltas computed from consecutive daily snapshots
+- Falls back to absolute values when only 1 day of data is available
+- Engagement breakdown uses capture-date weekly grouping (not `posted_at`)
+- All numbers shown in full with locale formatting (e.g., 9,554 instead of 1.5K)
+
 ### Pages and Components
 
 - `app/dashboard/analytics/page.tsx` -- Analytics page with filters, summary, chart, and table
@@ -157,8 +166,9 @@ The Analytics Dashboard provides detailed LinkedIn performance tracking with int
 - `components/features/analytics-trend-chart.tsx` -- Trend chart with comparison overlay
 - `components/features/analytics-data-table.tsx` -- Data table with granularity switching
 - `components/features/analytics-charts.tsx` -- Additional analytics chart grid
-- `hooks/use-analytics-v2.ts` -- Analytics data fetching and processing hook
-- `hooks/use-analytics.ts` -- Dashboard-level analytics hook
+- `hooks/use-analytics-v3.ts` -- V3 snapshot-based analytics data fetching hook (primary)
+- `hooks/use-analytics-v2.ts` -- V2 analytics data fetching hook (legacy)
+- `hooks/use-analytics.ts` -- Dashboard-level analytics hook (reads from `daily_account_snapshots`)
 
 ---
 
@@ -695,7 +705,7 @@ The onboarding flow guides new users through initial setup with a multi-step pro
 - **Step 3: Brand Kit** -- Automatically extracts brand colors, fonts, and logo from the company website URL provided in Step 2 using Brandfetch. Displays the results for review and editing before saving.
 - **Step 4: Review and Complete** -- Review the AI-extracted company context (mission, products, target audience, value propositions, tone guidelines). Edit any field inline with compose-style textareas. Confirm and complete onboarding.
 - **Join Flow** -- Members who select the joining path can search for teams, send join requests, and wait for approval on a pending page.
-- **Invite Flow** -- Users who arrive via an email invitation are guided through an invite-specific onboarding path.
+- **Invite Flow** -- Users who arrive via an email invitation are guided through an invite-specific onboarding path. Non-registered invitees are auto-redirected to `/signup?invite=TOKEN`. After signup (email/password or Google OAuth), onboarding is shortened to the LinkedIn connect step only (role selection is skipped). The connect button reads "Connect & Join Team". After LinkedIn connect, the invite is auto-accepted, onboarding completes, and the user lands on the dashboard.
 - **Progress Persistence** -- Onboarding step progress is saved to the database, allowing users to resume from where they left off.
 - **Onboarding Guard** -- A hook ensures users are on the correct step and redirects them if they try to skip ahead.
 

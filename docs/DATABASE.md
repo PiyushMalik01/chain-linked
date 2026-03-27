@@ -550,6 +550,58 @@ Pre-computed dashboard summary metrics for fast loading.
 | `computed_at` | timestamptz | Last computation time |
 | `created_at` | timestamptz | |
 
+### Daily Snapshot Tables (V3 Analytics)
+
+#### `daily_account_snapshots`
+
+One row per user per day. Stores absolute totals aggregated across all posts plus profile metrics. Updated every 5 minutes by the `dailySnapshotPipeline`; same-day runs update the existing row, new day inserts a new row.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | FK -> auth.users |
+| `date` | date | Snapshot date |
+| `total_impressions` | integer | Sum of impressions across all posts |
+| `total_reactions` | integer | Sum of reactions across all posts |
+| `total_comments` | integer | Sum of comments across all posts |
+| `total_reposts` | integer | Sum of reposts across all posts |
+| `total_saves` | integer | Sum of saves across all posts |
+| `total_sends` | integer | Sum of sends across all posts |
+| `total_engagements` | integer | reactions + comments + reposts |
+| `followers` | integer | Follower count |
+| `connections` | integer | Connection count |
+| `profile_views` | integer | Profile view count |
+| `search_appearances` | integer | Search appearance count |
+| `post_count` | integer | Number of posts |
+| `updated_at` | timestamptz | Last update timestamp |
+| `created_at` | timestamptz | Row creation timestamp |
+
+**Unique constraint:** `(user_id, date)`
+
+#### `daily_post_snapshots`
+
+One row per user per post per day. Stores absolute values for each individual post.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | FK -> auth.users |
+| `activity_urn` | text | LinkedIn activity URN |
+| `date` | date | Snapshot date |
+| `impressions` | integer | Post impressions |
+| `reactions` | integer | Post reactions |
+| `comments` | integer | Post comments |
+| `reposts` | integer | Post reposts |
+| `saves` | integer | Post saves |
+| `sends` | integer | Post sends |
+| `engagements` | integer | reactions + comments + reposts |
+| `media_type` | text | Post media type (nullable) |
+| `posted_at` | timestamptz | Original post date (nullable) |
+| `updated_at` | timestamptz | Last update timestamp |
+| `created_at` | timestamptz | Row creation timestamp |
+
+**Unique constraint:** `(user_id, activity_urn, date)`
+
 ---
 
 ## 7. Discover & Content
