@@ -22,6 +22,7 @@ import {
   influencerPostScrape,
   viralPostIngest,
   publishScheduledPosts,
+  dailySnapshotPipeline,
 } from '@/lib/inngest/functions'
 
 /**
@@ -46,5 +47,6 @@ export const { GET, POST, PUT } = serve({
     influencerPostScrape,
     viralPostIngest,
     publishScheduledPosts,
+    dailySnapshotPipeline,
   ],
 })
