@@ -284,6 +284,21 @@ export function useTeamInvitations(options: UseTeamInvitationsOptions): UseTeamI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId])
 
+  // Refetch when window regains focus (catches accepted invitations)
+  useEffect(() => {
+    if (!teamId) return
+    const handleFocus = () => { fetchInvitations() }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [teamId, fetchInvitations])
+
+  // Poll every 30 seconds to catch status changes
+  useEffect(() => {
+    if (!teamId) return
+    const interval = setInterval(fetchInvitations, 30000)
+    return () => clearInterval(interval)
+  }, [teamId, fetchInvitations])
+
   return {
     invitations,
     isLoading,

@@ -5,6 +5,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminSupabase } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import {
@@ -14,6 +15,18 @@ import {
   getLinkedInScopes,
 } from '@/lib/linkedin'
 import { encrypt } from '@/lib/crypto'
+
+/**
+ * Creates admin client to bypass RLS for token storage
+ */
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) {
+    throw new Error('[LinkedIn Callback] Missing SUPABASE_SERVICE_ROLE_KEY')
+  }
+  return createAdminSupabase(url, serviceKey)
+}
 
 /**
  * Cookie name for storing OAuth state
@@ -100,8 +113,10 @@ export async function GET(request: Request) {
     const encryptedAccessToken = encrypt(tokens.access_token)
     const encryptedRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : null
 
-    // Store tokens in database (upsert to handle reconnection)
-    const { error: upsertError } = await supabase
+    // Store tokens in database using admin client to bypass RLS
+    // (new users may not have INSERT permission on linkedin_tokens yet)
+    const adminClient = getAdminClient()
+    const { error: upsertError } = await adminClient
       .from('linkedin_tokens')
       .upsert(
         {

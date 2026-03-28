@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthContext } from '@/lib/auth/auth-provider'
 import type { Tables } from '@/types/database'
@@ -57,7 +57,8 @@ export function useTeamPosts(limit: number = 20, teamId?: string | null): UseTea
   const [rawPosts, setRawPosts] = useState<Tables<'my_posts'>[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetch posts from all team members

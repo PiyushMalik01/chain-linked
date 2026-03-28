@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type {
   BrandKit,
@@ -103,7 +103,8 @@ export function useBrandKit(): UseBrandKitReturn {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetches saved brand kits from the database

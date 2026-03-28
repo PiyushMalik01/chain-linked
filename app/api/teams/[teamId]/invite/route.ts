@@ -251,6 +251,15 @@ export async function POST(request: Request, context: RouteContext) {
         continue
       }
 
+      // Clean up old accepted/cancelled/expired invitations for this email
+      // so re-inviting a removed member works without constraint conflicts
+      await supabase
+        .from('team_invitations')
+        .delete()
+        .eq('team_id', teamId)
+        .eq('email', normalizedEmail)
+        .in('status', ['accepted', 'cancelled', 'expired'])
+
       // Generate token and calculate expiration
       const token = generateSecureToken()
       const expiresAt = new Date()

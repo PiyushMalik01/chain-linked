@@ -5,6 +5,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminSupabase } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import {
   createLinkedInClient,
@@ -17,6 +18,17 @@ import {
 } from '@/lib/linkedin'
 import { isPostingEnabled, POSTING_DISABLED_MESSAGE, DISABLED_DRAFT_STATUS } from '@/lib/linkedin/posting-config'
 import { safeDecrypt, encrypt } from '@/lib/crypto'
+import { sendEmail } from '@/lib/email/resend'
+import { PostPublishedEmail } from '@/components/emails/post-published'
+
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) {
+    throw new Error('[LinkedIn Post] Missing SUPABASE_SERVICE_ROLE_KEY')
+  }
+  return createAdminSupabase(url, serviceKey)
+}
 
 /**
  * Base64-encoded media item from client-side file upload
@@ -120,8 +132,9 @@ export async function POST(request: Request) {
     })
   }
 
-  // Get LinkedIn tokens for user
-  const { data: tokenData, error: tokenError } = await supabase
+  // Get LinkedIn tokens for user (admin client bypasses RLS)
+  const adminClient = getAdminClient()
+  const { data: tokenData, error: tokenError } = await adminClient
     .from('linkedin_tokens')
     .select('*')
     .eq('user_id', user.id)
@@ -157,7 +170,7 @@ export async function POST(request: Request) {
       if (newTokenData.refresh_token) {
         encryptedUpdate.refresh_token = encrypt(newTokenData.refresh_token)
       }
-      await supabase
+      await adminClient
         .from('linkedin_tokens')
         .update(encryptedUpdate)
         .eq('user_id', user.id)
@@ -219,6 +232,39 @@ export async function POST(request: Request) {
             posted_at: new Date().toISOString(),
             source: 'platform',
           })
+      }
+
+      // Send post-published email for document posts (fire-and-forget)
+      try {
+        if (user.email) {
+          const { data: profile } = await adminClient
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single()
+
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai'
+          const linkedinPostUrl = result.linkedinPostUrn
+            ? `https://www.linkedin.com/feed/update/${result.linkedinPostUrn}`
+            : undefined
+
+          await sendEmail({
+            to: user.email,
+            subject: 'Your post has been published on LinkedIn!',
+            react: PostPublishedEmail({
+              userName: profile?.full_name || user.email.split('@')[0],
+              contentPreview: content.slice(0, 200),
+              publishedAt: new Date().toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              }),
+              linkedinUrl: linkedinPostUrl,
+              dashboardUrl: `${appUrl}/dashboard`,
+            }),
+          })
+        }
+      } catch (emailErr) {
+        console.error('[LinkedIn Post] Failed to send published email:', emailErr)
       }
 
       return NextResponse.json({
@@ -317,6 +363,39 @@ export async function POST(request: Request) {
         posted_at: new Date().toISOString(),
         source: 'platform',
       })
+  }
+
+  // Send post-published email notification (fire-and-forget)
+  try {
+    if (user.email) {
+      const { data: profile } = await adminClient
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single()
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai'
+      const linkedinPostUrl = result.linkedinPostUrn
+        ? `https://www.linkedin.com/feed/update/${result.linkedinPostUrn}`
+        : undefined
+
+      await sendEmail({
+        to: user.email,
+        subject: 'Your post has been published on LinkedIn!',
+        react: PostPublishedEmail({
+          userName: profile?.full_name || user.email.split('@')[0],
+          contentPreview: content.slice(0, 200),
+          publishedAt: new Date().toLocaleDateString('en-US', {
+            year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+          }),
+          linkedinUrl: linkedinPostUrl,
+          dashboardUrl: `${appUrl}/dashboard`,
+        }),
+      })
+    }
+  } catch (emailErr) {
+    console.error('[LinkedIn Post] Failed to send published email:', emailErr)
   }
 
   return NextResponse.json({

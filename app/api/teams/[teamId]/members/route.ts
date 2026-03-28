@@ -283,5 +283,21 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Failed to remove member' }, { status: 500 })
   }
 
+  // Clean up old accepted invitations for this user so they can be re-invited
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('id', targetUserId)
+    .single()
+
+  if (targetProfile?.email) {
+    await supabase
+      .from('team_invitations')
+      .delete()
+      .eq('team_id', teamId)
+      .eq('email', targetProfile.email.toLowerCase())
+      .in('status', ['accepted', 'cancelled', 'expired'])
+  }
+
   return NextResponse.json({ success: true })
 }

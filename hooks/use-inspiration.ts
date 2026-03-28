@@ -192,7 +192,8 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
   const hasAttemptedUserDataFetchRef = useRef(false)
   const lastUserIdRef = useRef<string | null>(null)
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetch user's saved inspiration posts

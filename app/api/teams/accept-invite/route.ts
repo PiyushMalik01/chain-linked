@@ -232,24 +232,31 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .single()
 
-    // Send welcome email
+    // Send welcome email (fire-and-forget, don't block invitation acceptance)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chainlinked.ai'
     const dashboardUrl = `${appUrl}/dashboard`
 
-    if (user.email) {
-      await sendEmail({
-        to: user.email,
-        subject: `Welcome to ${team?.name}!`,
-        react: WelcomeToTeamEmail({
-          memberName: userProfile?.full_name || '',
-          memberEmail: user.email || '',
-          teamName: team?.name || 'the team',
-          companyName: company?.name,
-          companyLogoUrl: company?.logo_url || team?.logo_url || undefined,
-          role: invitation.role as 'admin' | 'member',
-          dashboardUrl,
-        }),
-      })
+    try {
+      if (user.email) {
+        const welcomeResult = await sendEmail({
+          to: user.email,
+          subject: `Welcome to ${team?.name}!`,
+          react: WelcomeToTeamEmail({
+            memberName: userProfile?.full_name || '',
+            memberEmail: user.email || '',
+            teamName: team?.name || 'the team',
+            companyName: company?.name,
+            companyLogoUrl: company?.logo_url || team?.logo_url || undefined,
+            role: invitation.role as 'admin' | 'member',
+            dashboardUrl,
+          }),
+        })
+        if (!welcomeResult.success) {
+          console.error('[accept-invite] Welcome email failed:', welcomeResult.error)
+        }
+      }
+    } catch (emailErr) {
+      console.error('[accept-invite] Welcome email exception:', emailErr)
     }
 
     // Notify team owner that a new member joined
@@ -307,8 +314,6 @@ export async function POST(request: Request) {
  * @returns Invitation details with team info
  */
 export async function GET(request: Request) {
-  const supabase = await createClient()
-
   const { searchParams } = new URL(request.url)
   const token = searchParams.get('token')
 
@@ -317,8 +322,12 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Use admin client to bypass RLS — unauthenticated users need to view
+    // invitation details before signing up. The token itself is the auth.
+    const adminClient = getAdminClient()
+
     // Get invitation
-    const { data: invitation, error: fetchError } = await supabase
+    const { data: invitation, error: fetchError } = await adminClient
       .from('team_invitations')
       .select('*')
       .eq('token', token)
@@ -329,7 +338,7 @@ export async function GET(request: Request) {
     }
 
     // Get team info
-    const { data: team } = await supabase
+    const { data: team } = await adminClient
       .from('teams')
       .select('name, logo_url, company_id')
       .eq('id', invitation.team_id)
@@ -337,7 +346,7 @@ export async function GET(request: Request) {
 
     let company = null
     if (team?.company_id) {
-      const { data: companyData } = await supabase
+      const { data: companyData } = await adminClient
         .from('companies')
         .select('name, logo_url')
         .eq('id', team.company_id)
@@ -346,7 +355,7 @@ export async function GET(request: Request) {
     }
 
     // Get inviter info
-    const { data: inviter } = await supabase
+    const { data: inviter } = await adminClient
       .from('profiles')
       .select('full_name, email, avatar_url')
       .eq('id', invitation.invited_by ?? '')

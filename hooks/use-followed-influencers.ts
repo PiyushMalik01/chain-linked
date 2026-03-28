@@ -7,7 +7,7 @@
  * @module hooks/use-followed-influencers
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthContext } from '@/lib/auth/auth-provider'
@@ -125,7 +125,8 @@ export function useFollowedInfluencers(): UseFollowedInfluencersReturn {
   const [influencers, setInfluencers] = useState<FollowedInfluencer[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetches followed influencers from Supabase for the current user.

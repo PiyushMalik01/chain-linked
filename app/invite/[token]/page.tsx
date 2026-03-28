@@ -60,7 +60,7 @@ export default function InviteAcceptPage() {
   const router = useRouter()
   const token = params.token as string
 
-  const { getInvitationByToken, acceptInvitation } = useInvitations()
+  const { acceptInvitation } = useInvitations()
 
   const [status, setStatus] = useState<InvitationPageStatus>('loading')
   const [invitation, setInvitation] = useState<TeamInvitationWithInviter | null>(null)
@@ -92,47 +92,79 @@ export default function InviteAcceptPage() {
           }
         }
 
-        // Fetch invitation
-        const invitationData = await getInvitationByToken(token)
-
-        if (!invitationData) {
+        // Fetch invitation via API (bypasses RLS for unauthenticated users)
+        const res = await fetch(`/api/teams/accept-invite?token=${encodeURIComponent(token)}`)
+        if (!res.ok) {
           setStatus('invalid')
           return
+        }
+
+        const data = await res.json()
+        const inv = data.invitation
+        if (!inv) {
+          setStatus('invalid')
+          return
+        }
+
+        // Build invitation data for display
+        const invitationData: TeamInvitationWithInviter = {
+          id: inv.id,
+          email: inv.email,
+          role: inv.role,
+          status: inv.status,
+          expires_at: inv.expires_at,
+          created_at: inv.created_at,
+          team_id: '',
+          token: token,
+          invited_by: null,
+          accepted_at: null,
+          inviter: data.inviter ? {
+            name: data.inviter.name,
+            email: data.inviter.email || '',
+            avatar_url: data.inviter.avatar_url,
+          } : undefined,
+          team: data.team ? {
+            name: data.team.name,
+            company: data.company ? {
+              name: data.company.name,
+              logo_url: data.company.logo_url,
+            } : undefined,
+          } : undefined,
         }
 
         setInvitation(invitationData)
 
         // Check invitation status
-        if (invitationData.status === 'accepted') {
+        if (inv.status === 'accepted') {
           setStatus('already_accepted')
           return
         }
 
-        if (invitationData.status === 'cancelled') {
+        if (inv.status === 'cancelled') {
           setStatus('invalid')
           setErrorMessage('This invitation has been cancelled.')
           return
         }
 
-        // Check expiration
-        if (new Date(invitationData.expires_at) < new Date()) {
+        if (inv.status === 'expired') {
           setStatus('expired')
           return
         }
 
-        // If not authenticated, prompt login
+        // Check expiration
+        if (new Date(inv.expires_at) < new Date()) {
+          setStatus('expired')
+          return
+        }
+
+        // If not authenticated, redirect directly to signup with invite token
         if (!user) {
-          setStatus('not_authenticated')
+          sessionStorage.setItem('pendingInviteToken', token)
+          router.push(`/signup?invite=${encodeURIComponent(token)}&redirect=${encodeURIComponent(`/invite/${token}`)}`)
           return
         }
 
-        // Check email match
-        if (user.email?.toLowerCase() !== invitationData.email.toLowerCase()) {
-          setStatus('email_mismatch')
-          return
-        }
-
-        // Ready to accept
+        // Ready to accept (email match is checked server-side on accept)
         setStatus('ready')
       } catch (err) {
         console.error('Load invitation error:', err)
@@ -142,7 +174,8 @@ export default function InviteAcceptPage() {
     }
 
     loadInvitation()
-  }, [token, supabase, getInvitationByToken])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
 
   /**
    * Handle accepting the invitation

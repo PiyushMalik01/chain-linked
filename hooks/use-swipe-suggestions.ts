@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Tables } from '@/types/database'
 import type { PostSuggestion } from '@/components/features/swipe-interface'
@@ -115,7 +115,8 @@ export function useSwipeSuggestions(initialLimit = DEFAULT_LIMIT): UseSwipeSugge
   const [filters, setFilters] = useState<SuggestionFilters>({})
   const [categories, setCategories] = useState<string[]>([])
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetch suggestions from database with filters

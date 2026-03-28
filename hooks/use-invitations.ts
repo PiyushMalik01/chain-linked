@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type {
   TeamInvitation,
@@ -109,7 +109,8 @@ export function useInvitations(options: UseInvitationsOptions = {}): UseInvitati
   const [invitations, setInvitations] = useState<TeamInvitationWithInviter[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetch invitations for the team

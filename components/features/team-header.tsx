@@ -8,6 +8,8 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import {
   IconUsers,
   IconSettings,
@@ -16,6 +18,7 @@ import {
   IconChevronDown,
   IconDoorExit,
   IconBuilding,
+  IconLoader2,
 } from '@tabler/icons-react'
 import { getLogoUrlsWithFallback } from '@/lib/logo-dev'
 import { Button } from '@/components/ui/button'
@@ -28,6 +31,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { InviteTeamDialog } from './invite-team-dialog'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useAuthContext } from '@/lib/auth/auth-provider'
 import type { TeamWithMeta } from '@/hooks/use-team'
 import type { TeamMemberRole } from '@/types/database'
 import { cn } from '@/lib/utils'
@@ -81,8 +86,45 @@ export function TeamHeader({
   onSettingsClick,
   onInvitationsSent,
 }: TeamHeaderProps) {
+  const router = useRouter()
+  const { user } = useAuthContext()
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog()
   const canInvite = userRole === 'owner' || userRole === 'admin'
   const canManage = userRole === 'owner' || userRole === 'admin'
+  const [isLeaving, setIsLeaving] = useState(false)
+
+  const handleLeaveTeam = useCallback(async () => {
+    const confirmed = await confirm({
+      title: userRole === 'owner' ? 'Leave & delete team?' : 'Leave team?',
+      description: userRole === 'owner'
+        ? `As the owner, leaving will delete "${team.name}" and remove all members. This cannot be undone.`
+        : `Are you sure you want to leave "${team.name}"? You'll need a new invitation to rejoin.`,
+      confirmText: 'Leave',
+      cancelText: 'Stay',
+      variant: 'destructive',
+    })
+    if (!confirmed) return
+
+    setIsLeaving(true)
+    try {
+      const res = await fetch(`/api/teams/${team.id}/members?userId=${encodeURIComponent(user?.id || '')}`, {
+        method: 'DELETE',
+      })
+
+      if (res.ok) {
+        toast.success('You have left the team')
+        router.push('/dashboard/team')
+        router.refresh()
+      } else {
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || 'Failed to leave team')
+      }
+    } catch {
+      toast.error('Failed to leave team')
+    } finally {
+      setIsLeaving(false)
+    }
+  }, [confirm, team.id, team.name, userRole, router])
 
   const fallbackUrls = getLogoUrlsWithFallback({
     website: companyWebsite,
@@ -106,6 +148,7 @@ export function TeamHeader({
   const roleLabel = userRole === 'owner' ? 'Owner' : userRole === 'admin' ? 'Admin' : 'Member'
 
   return (
+    <>
     <div className="px-4 md:px-6 pt-4 md:pt-6">
       <div className="relative rounded-2xl overflow-hidden border border-border/50 bg-card shadow-sm max-w-5xl mx-auto">
         {/* Gradient banner */}
@@ -218,7 +261,11 @@ export function TeamHeader({
                     Team Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive">
+                  <DropdownMenuItem
+                    onClick={handleLeaveTeam}
+                    disabled={isLeaving}
+                    className="gap-2 text-destructive focus:text-destructive"
+                  >
                     <IconDoorExit className="size-4" />
                     Leave Team
                   </DropdownMenuItem>
@@ -239,9 +286,25 @@ export function TeamHeader({
                 }
               />
             )}
+
+            {/* Leave button visible to all members (non-admins don't see the Manage dropdown) */}
+            {!canManage && userRole && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-xl h-9 text-destructive hover:text-destructive hover:bg-destructive/5"
+                onClick={handleLeaveTeam}
+                disabled={isLeaving}
+              >
+                {isLeaving ? <IconLoader2 className="size-4 animate-spin" /> : <IconDoorExit className="size-4" />}
+                Leave Team
+              </Button>
+            )}
           </div>
         </div>
       </div>
     </div>
+    <ConfirmDialogComponent />
+    </>
   )
 }

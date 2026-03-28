@@ -32,9 +32,10 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
-import { InviteTeamModal } from '@/components/features/invite-team-modal'
+import { InviteTeamDialog } from '@/components/features/invite-team-dialog'
 import { TeamMemberList } from '@/components/features/team-member-list'
 import { PendingInvitations } from '@/components/features/pending-invitations'
+import { JoinRequestsList } from '@/components/features/join-requests-list'
 import { useTeam, type TeamWithMeta } from '@/hooks/use-team'
 import { useTeamInvitations } from '@/hooks/use-team-invitations'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -195,10 +196,10 @@ export function TeamManagement({ className, teamId: preselectedTeamId }: TeamMan
             </div>
             <div className="flex items-center gap-2">
               {canManageTeam && (
-                <InviteTeamModal
+                <InviteTeamDialog
                   teamId={currentTeam.id}
                   teamName={currentTeam.name}
-                  onSuccess={handleInviteSuccess}
+                  onInvited={() => handleInviteSuccess()}
                   trigger={
                     <Button>
                       <IconUserPlus className="size-4 mr-2" />
@@ -261,7 +262,7 @@ export function TeamManagement({ className, teamId: preselectedTeamId }: TeamMan
         <Card>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <CardHeader className="pb-0">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="members" className="gap-2">
                   <IconUsers className="size-4" />
                   Members
@@ -276,6 +277,9 @@ export function TeamManagement({ className, teamId: preselectedTeamId }: TeamMan
                       {pendingInvitationsCount}
                     </Badge>
                   )}
+                </TabsTrigger>
+                <TabsTrigger value="requests" className="gap-2">
+                  Requests
                 </TabsTrigger>
               </TabsList>
             </CardHeader>
@@ -299,6 +303,12 @@ export function TeamManagement({ className, teamId: preselectedTeamId }: TeamMan
                   onCancel={cancelInvitation}
                   onResend={resendInvitation}
                 />
+              </TabsContent>
+
+              <TabsContent value="requests" className="mt-0">
+                {currentTeam && (
+                  <JoinRequestsList teamId={currentTeam.id} />
+                )}
               </TabsContent>
             </CardContent>
           </Tabs>

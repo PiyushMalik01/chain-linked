@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthContext } from '@/lib/auth/auth-provider'
 import type { Tables } from '@/types/database'
@@ -177,7 +177,8 @@ export function usePostingGoals(userId?: string): UsePostingGoalsReturn {
   const [bestStreak, setBestStreak] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetch posting goals from database

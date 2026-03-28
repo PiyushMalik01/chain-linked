@@ -125,7 +125,8 @@ export function useGeneratedSuggestions(): UseGeneratedSuggestionsReturn {
   // Polling interval ref
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Clear polling interval
