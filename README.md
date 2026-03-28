@@ -50,6 +50,9 @@ ChainLinked also includes a companion Chrome extension that captures LinkedIn da
 
 ### Analytics Dashboard
 - Personal and team performance tracking
+- Daily snapshot pipeline with absolute and delta modes
+- Data table shows absolute daily values (impressions, reactions, comments, etc.)
+- Trend charts show daily gains (deltas) for growth visualization
 - Daily delta computation with weekly/monthly/quarterly/yearly rollups
 - Interactive trend charts built with Recharts
 - Filterable data tables powered by TanStack React Table
@@ -75,8 +78,10 @@ ChainLinked also includes a companion Chrome extension that captures LinkedIn da
 - Daily automated news ingestion via Perplexity (sonar-pro)
 - Trending topic tracking across 15+ categories
 - Viral post curation with quality filtering
+- Infinite scroll feed (IntersectionObserver-based auto-loading)
 - Influencer tracking and post scraping via Apify
 - News article detail view with source attribution
+- Database-indexed queries for fast feed loading
 
 ### Swipe Interface
 - Tinder-style card UI for accepting or dismissing post suggestions
@@ -260,7 +265,7 @@ chainlinked/
 │   ├── firecrawl/              # Website scraping
 │   ├── graphics-library/       # Graphics asset management
 │   ├── image/                  # Image processing utilities
-│   ├── inngest/                # Inngest client + 15 workflow functions
+│   ├── inngest/                # Inngest client + 17+ workflow functions
 │   ├── linkedin/               # LinkedIn API client (official + Voyager)
 │   ├── perplexity/             # Perplexity API client
 │   ├── prompts/                # Prompt management utilities
@@ -287,7 +292,7 @@ chainlinked/
 
 ## Inngest Workflows
 
-ChainLinked uses 15 Inngest workflow functions for background processing:
+ChainLinked uses 17+ Inngest workflow functions for background processing:
 
 | Function | Trigger | Description |
 |---|---|---|
@@ -299,9 +304,11 @@ ChainLinked uses 15 Inngest workflow functions for background processing:
 | `onDemandContentIngest` | `discover/ingest` event | On-demand article ingestion for specific topics |
 | `publishScheduledPosts` | Cron (every 2 minutes) | Queries pending scheduled posts, posts to LinkedIn, updates status |
 | `swipeAutoRefill` | Cron | Checks suggestion queues and triggers refills for users running low |
-| `analyticsPipeline` | Cron (midnight UTC) | Computes daily deltas, rolls up into weekly/monthly/quarterly/yearly aggregates |
-| `analyticsSummaryCompute` | Event-driven | Computes summary statistics for analytics dashboard |
-| `analyticsBackfill` | Event-driven | Backfills historical analytics data |
+| `analyticsPipeline` | Cron (every 5 min) | Computes daily deltas, rolls up into weekly/monthly/quarterly/yearly aggregates |
+| `dailySnapshotPipeline` | Cron (every 5 min) | Upserts `daily_account_snapshots` and `daily_post_snapshots` with absolute values |
+| `analyticsSummaryCompute` | Cron (every 5 min) | Pre-computes summary statistics for analytics dashboard |
+| `analyticsBackfill` | Cron (every 5 min) | Backfills historical analytics data for new users |
+| `firstSyncBackfill` | `sync/first-data` event | Single-user targeted backfill for immediate dashboard data after extension install |
 | `templateAutoGenerate` | Cron | Auto-generates post templates based on company context |
 | `influencerPostScrape` | `influencer/follow` event | Scrapes recent posts from followed influencers via Apify |
 | `viralPostIngest` | Cron | Ingests viral posts from curated LinkedIn profiles with quality filtering |
@@ -360,15 +367,27 @@ graph TB
 
 ```mermaid
 graph TB
-    A[Cron: Midnight UTC] --> B[Profile Daily Deltas]
-    B --> C[Profile Accumulative Update]
-    C --> D[Post Daily Deltas]
-    D --> E[Post Accumulative Update]
-    E --> F[Weekly Rollup]
-    F --> G[Monthly Rollup]
-    G --> H[Quarterly Rollup]
-    H --> I[Yearly Rollup]
-    I --> J[Phase Transitions]
+    A[Cron: Every 5 min] --> B1[Daily Snapshot Pipeline]
+    A --> B2[Analytics Pipeline]
+    A --> B3[Summary Compute]
+    A --> B4[Backfill]
+
+    B1 --> S1[Upsert daily_account_snapshots]
+    B1 --> S2[Upsert daily_post_snapshots]
+
+    B2 --> D1[Profile Daily Deltas]
+    D1 --> D2[Profile Accumulative Update]
+    D2 --> D3[Post Daily Deltas]
+    D3 --> D4[Post Accumulative Update]
+    D4 --> D5[Weekly Rollup]
+    D5 --> D6[Monthly Rollup]
+    D6 --> D7[Quarterly Rollup]
+    D7 --> D8[Yearly Rollup]
+
+    B3 --> C1[Compute per-metric summaries]
+    C1 --> C2[Upsert analytics_summary_cache]
+
+    B4 --> F1[Seed missing post/profile rows]
 ```
 
 ---
@@ -388,7 +407,7 @@ graph TB
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/chainlinked.git
+git clone https://github.com/om13rajpal/chain-linked.git
 cd chainlinked
 
 # Install dependencies
@@ -520,7 +539,7 @@ Key table groups:
 - **Users and Auth** -- `users`, `linkedin_profiles`, `linkedin_tokens`, `user_api_keys`
 - **Teams** -- team membership, invitations, join requests, role-based access
 - **Content** -- `scheduled_posts`, `drafts`, `my_posts`, `post_analytics`
-- **Analytics** -- `linkedin_analytics`, `analytics_history`, `audience_data`, `audience_history`
+- **Analytics** -- `daily_account_snapshots`, `daily_post_snapshots`, `post_analytics_daily`, `post_analytics_accumulative`, `profile_analytics_daily`, `profile_analytics_accumulative`, `analytics_summary_cache`, `linkedin_analytics`, `analytics_history`
 - **Discovery** -- `discover_posts`, `feed_posts`, `wishlist_collections`
 - **AI and Research** -- `company_context`, `research_tables`, `swipe_suggestions`, `prompt_system`
 - **Templates** -- `carousel_templates`, post templates
@@ -546,7 +565,7 @@ ChainLinked is designed for deployment on **Vercel**.
 
 ### Inngest Production Setup
 
-Register the Inngest serve endpoint at `/api/inngest` in your Inngest dashboard. All 15 workflow functions will be automatically discovered and registered.
+Register the Inngest serve endpoint at `/api/inngest` in your Inngest dashboard. All workflow functions will be automatically discovered and registered.
 
 ### Chrome Extension
 

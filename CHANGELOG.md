@@ -11,13 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Daily snapshot analytics pipeline: `daily_account_snapshots` and `daily_post_snapshots` tables with Inngest cron (every 5 min) for absolute-value daily tracking
 - Analytics v3 API (`/api/analytics/v3`, `/api/analytics/v3/posts`) with delta/absolute modes and comparison periods
-- `useAnalyticsV3` hook for snapshot-based analytics
+- Analytics v3 API now returns both `absolute` and `current` (delta) timeseries in a single response
+- `useAnalyticsV3` hook with `absoluteData` and `multiAbsoluteData` for data table display
+- Infinite scroll on Inspiration feed using IntersectionObserver (replaces manual "Load More" button)
 - Seamless invite-to-signup flow: non-registered invitees auto-redirect to signup, shortened onboarding (LinkedIn connect only), auto-accept invite on completion
 - Email notification: team owner notified when a new member joins
 - Email notification: post author notified when scheduled post is published on LinkedIn
 - `MemberJoinedTeamEmail` and `PostPublishedEmail` React Email templates
+- Database indexes on `linkedin_research_posts`, `discover_posts`, and `influencer_posts` for faster feed queries
 
 ### Fixed
+- Analytics data table now shows absolute daily values (e.g., 9,564 impressions) instead of deltas (e.g., 10)
 - Dashboard metrics now read from `daily_account_snapshots` instead of stale `analytics_summary_cache`, eliminating incorrect +105300% change display
 - Analytics page shows data only from user's first capture date (not historical post publication dates)
 - Engagement breakdown uses snapshot capture dates instead of `posted_at`
@@ -25,8 +29,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Edit with AI button: accurate positioning via mirror-div measurement (works at any scroll position)
 - Edit with AI button: opaque background in both dark/light modes (was transparent due to Button outline variant)
 - Post cards show actual numbers (9,554) instead of abbreviated (1.5K)
+- PostHog debug mode disabled to eliminate console log spam and failed fetch retry storms
+- Middleware profile query timeout reduced from 8s to 3s (worst-case page load reduced from 16s to 6s)
 
 ### Changed
+- Analytics data table wired to absolute values; trend charts continue using deltas for growth visualization
+- Inspiration feed cards use CSS animations instead of per-card Framer Motion stagger (eliminates 1.2s+ animation delay for 24 cards)
 - Analytics page wired to v3 snapshot-based pipeline (replaces v2 delta-computation pipeline)
 - Dashboard `useAnalytics` hook simplified to single `daily_account_snapshots` query (was 8 parallel queries across 5 tables)
 - `formatMetricNumber` utility now returns locale-formatted numbers instead of K/M abbreviations
