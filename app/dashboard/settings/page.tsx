@@ -85,6 +85,7 @@ import { useAuthContext } from "@/lib/auth/auth-provider"
 import { useSettings } from "@/hooks/use-settings"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
+import { CompanyContextEditor } from "@/components/features/company-context-editor"
 import { ContentRulesEditor } from "@/components/features/content-rules-editor"
 import { DefaultHashtagsEditor } from "@/components/features/default-hashtags-editor"
 import { TeamManagement } from "@/components/features/team-management"
@@ -465,6 +466,7 @@ function SettingsContent() {
 
   // Company context edit dialog state
   const [showCompanyDialog, setShowCompanyDialog] = React.useState(false)
+  const [showCompanyContextEditor, setShowCompanyContextEditor] = React.useState(false)
   const [companyForm, setCompanyForm] = React.useState({
     companyName: "",
     companyWebsite: "",
@@ -1436,144 +1438,55 @@ function SettingsContent() {
         </Card>
       )}
 
-      {/* AI Context link */}
-      <Card>
-        <CardHeader>
-          <CardTitle>AI Context</CardTitle>
-          <CardDescription>
-            Company information and tone settings used by AI to generate on-brand content
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {profile?.company_name && (
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-border/50">
-              <IconBuilding className="size-5 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Company</p>
-                <p className="text-sm font-medium">{profile.company_name}</p>
+      {/* AI Context — full inline editor */}
+      {showCompanyContextEditor ? (
+        <CompanyContextEditor onClose={() => setShowCompanyContextEditor(false)} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI Context</CardTitle>
+            <CardDescription>
+              Company information and tone settings used by AI to generate on-brand content
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {profile?.company_name && (
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-border/50">
+                <IconBuilding className="size-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Company</p>
+                  <p className="text-sm font-medium">{profile.company_name}</p>
+                </div>
               </div>
-            </div>
-          )}
-          {profile?.company_website && (
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-border/50">
-              <IconLink className="size-5 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Website</p>
-                <a
-                  href={
-                    profile.company_website.startsWith("http")
-                      ? profile.company_website
-                      : `https://${profile.company_website}`
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
-                >
-                  {profile.company_website}
-                  <IconExternalLink className="size-3" />
-                </a>
+            )}
+            {profile?.company_website && (
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-border/50">
+                <IconLink className="size-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Website</p>
+                  <a
+                    href={
+                      profile.company_website.startsWith("http")
+                        ? profile.company_website
+                        : `https://${profile.company_website}`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    {profile.company_website}
+                    <IconExternalLink className="size-3" />
+                  </a>
+                </div>
               </div>
-            </div>
-          )}
-          <Button variant="outline" onClick={handleOpenCompanyDialog}>
-            <IconSettings className="size-4" />
-            Edit AI Context & Company Info
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Edit Company Context Dialog */}
-      <Dialog open={showCompanyDialog} onOpenChange={setShowCompanyDialog}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit AI Context & Company Info</DialogTitle>
-            <DialogDescription>
-              Update your company information used by AI to generate on-brand content.
-            </DialogDescription>
-          </DialogHeader>
-          {isLoadingCompanyContext ? (
-            <div className="flex items-center justify-center py-8">
-              <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="edit-company-name">Company Name</Label>
-                <Input
-                  id="edit-company-name"
-                  value={companyForm.companyName}
-                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, companyName: e.target.value }))}
-                  placeholder="Enter your company name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-company-website">Website URL</Label>
-                <Input
-                  id="edit-company-website"
-                  value={companyForm.companyWebsite}
-                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, companyWebsite: e.target.value }))}
-                  placeholder="https://yourcompany.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-industry">Industry</Label>
-                <Input
-                  id="edit-industry"
-                  value={companyForm.industry}
-                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, industry: e.target.value }))}
-                  placeholder="e.g. Technology / SaaS"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-target-audience">Target Audience</Label>
-                <Textarea
-                  id="edit-target-audience"
-                  value={companyForm.targetAudience}
-                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, targetAudience: e.target.value }))}
-                  placeholder="Describe your ideal customers..."
-                  rows={2}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-company-desc">Company Description / Summary</Label>
-                <Textarea
-                  id="edit-company-desc"
-                  value={companyForm.companyDescription}
-                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, companyDescription: e.target.value }))}
-                  placeholder="Brief description of what your company does..."
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              variant="secondary"
-              onClick={handleReanalyze}
-              disabled={isReanalyzing || !companyForm.companyWebsite || !companyForm.companyName}
-              className="sm:mr-auto gap-1.5"
-            >
-              {isReanalyzing ? (
-                <IconLoader2 className="size-4 animate-spin" />
-              ) : (
-                <IconRefresh className="size-4" />
-              )}
-              {isReanalyzing ? "Analyzing..." : "Re-analyze Website"}
+            )}
+            <Button variant="outline" onClick={() => setShowCompanyContextEditor(true)}>
+              <IconSettings className="size-4" />
+              Edit AI Context & Company Info
             </Button>
-            <Button variant="outline" onClick={() => setShowCompanyDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveCompanyContext} disabled={isSavingCompany || isLoadingCompanyContext}>
-              {isSavingCompany ? (
-                <IconLoader2 className="size-4 animate-spin" />
-              ) : (
-                <IconCheck className="size-4" />
-              )}
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 

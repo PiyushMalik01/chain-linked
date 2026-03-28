@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased] - 2026-03-28
 
 ### Added
+- **Supabase Realtime subscriptions** for dashboard and analytics: `useAnalytics`, `useAnalyticsV3`, `usePostAnalytics`, and `useMyRecentPosts` hooks now auto-refetch when the Chrome extension writes new data — no page reload needed
+- 7 tables added to `supabase_realtime` publication with `REPLICA IDENTITY FULL`: `daily_account_snapshots`, `daily_post_snapshots`, `linkedin_analytics`, `post_analytics`, `my_posts`, `linkedin_profiles`, `followers`
+- **Duplicate company detection in onboarding**: when a user creates a company that already matches an existing name, the form shows the existing company and offers a "Send Join Request" button instead of silently creating a duplicate
+- **Full inline company context editor in Settings**: "Edit AI Context & Company Info" now opens the step 4 "Review Brand Context" UI inline (Company Information, Brand Identity, Products & Services, Target Audience/ICP, Tone & Voice) instead of a basic dialog
+- `CompanyContextEditor` reusable component (`components/features/company-context-editor.tsx`) with section blocks, compose-style editors, and product dialog
+- `checkExistingCompany()` function in `useCompany` hook for case-insensitive company name lookup with team info
+- `onJoinRequestSent` callback prop on `CompanySetupForm` for onboarding flow integration
 - Daily snapshot analytics pipeline: `daily_account_snapshots` and `daily_post_snapshots` tables with Inngest cron (every 5 min) for absolute-value daily tracking
 - Analytics v3 API (`/api/analytics/v3`, `/api/analytics/v3/posts`) with delta/absolute modes and comparison periods
 - Analytics v3 API now returns both `absolute` and `current` (delta) timeseries in a single response
@@ -33,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Middleware profile query timeout reduced from 8s to 3s (worst-case page load reduced from 16s to 6s)
 
 ### Changed
+- Settings "Edit AI Context" replaced basic dialog with full inline `CompanyContextEditor` (step 4 UI) — includes section blocks for Company Info, Brand Identity, Products, Target Audience, and Tone & Voice
+- Company setup form now checks for existing companies before creating (case-insensitive match) and offers join request flow
 - Analytics data table wired to absolute values; trend charts continue using deltas for growth visualization
 - Inspiration feed cards use CSS animations instead of per-card Framer Motion stagger (eliminates 1.2s+ animation delay for 24 cards)
 - Analytics page wired to v3 snapshot-based pipeline (replaces v2 delta-computation pipeline)

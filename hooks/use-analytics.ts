@@ -289,6 +289,62 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
     fetchAnalytics()
   }, [fetchAnalytics])
 
+  // Real-time subscriptions: auto-refetch when extension writes new data
+  useEffect(() => {
+    const targetUserId = userId || user?.id
+    if (!targetUserId || authLoading) return
+
+    const supabase = supabaseRef.current
+
+    const channel = supabase
+      .channel(`analytics-realtime-${targetUserId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'daily_account_snapshots',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'linkedin_analytics',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'post_analytics',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'my_posts',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'linkedin_profiles',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, user?.id, authLoading, fetchAnalytics])
+
   // Combined loading state - loading if auth is loading OR data is loading
   const combinedLoading = authLoading || isLoading
 

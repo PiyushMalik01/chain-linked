@@ -9,6 +9,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useAuthContext } from '@/lib/auth/auth-provider'
 
 /** The five post metrics fetched in "all" mode */
 export const ALL_MODE_METRICS = ['impressions', 'reactions', 'comments', 'reposts', 'engagements'] as const
@@ -176,6 +178,7 @@ function buildParams(filters: AnalyticsV3Filters, metricOverride?: string): URLS
  * })
  */
 export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Return {
+  const { user } = useAuthContext()
   const [data, setData] = useState<AnalyticsDataPoint[]>([])
   const [absoluteData, setAbsoluteData] = useState<AnalyticsDataPoint[]>([])
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
@@ -186,6 +189,7 @@ export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Retur
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const supabaseRef = useRef(createClient())
 
   const fetchData = useCallback(async () => {
     // Cancel any in-flight request
@@ -330,6 +334,54 @@ export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Retur
       abortRef.current?.abort()
     }
   }, [fetchData])
+
+  // Real-time subscriptions: auto-refetch when extension writes new data
+  useEffect(() => {
+    const targetUserId = user?.id
+    if (!targetUserId) return
+
+    const supabase = supabaseRef.current
+
+    const channel = supabase
+      .channel(`analytics-v3-realtime-${targetUserId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'daily_account_snapshots',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'daily_post_snapshots',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'post_analytics',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchData()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'my_posts',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchData()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id, fetchData])
 
   return { data, absoluteData, summary, comparisonData, multiData, multiAbsoluteData, engagementBreakdown, isLoading, error }
 }

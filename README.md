@@ -50,6 +50,7 @@ ChainLinked also includes a companion Chrome extension that captures LinkedIn da
 
 ### Analytics Dashboard
 - Personal and team performance tracking
+- **Real-time updates via Supabase Realtime** -- dashboard and analytics refresh automatically when the Chrome extension syncs new data (no page reload needed)
 - Daily snapshot pipeline with absolute and delta modes
 - Data table shows absolute daily values (impressions, reactions, comments, etc.)
 - Trend charts show daily gains (deltas) for growth visualization
@@ -60,12 +61,13 @@ ChainLinked also includes a companion Chrome extension that captures LinkedIn da
 - CSV export for offline analysis
 - Analytics backfill for historical data
 
-### Brand Kit
+### Brand Kit & AI Context
 - Automatic brand extraction from any website URL via Firecrawl
 - Logo and color palette retrieval via Brandfetch and Logo.dev
 - Company context generation (value proposition, target audience, tone of voice)
 - Perplexity-powered company research enrichment
 - AI-extracted products/services, pain points, and competitive positioning
+- **Full inline company context editor in Settings** -- same rich UI as onboarding step 4 (company info, brand identity, products & services, target audience/ICP, tone & voice) accessible from the settings page
 
 ### Team Management
 - Email-based team invitations with Resend transactional emails
@@ -112,6 +114,7 @@ ChainLinked also includes a companion Chrome extension that captures LinkedIn da
 
 ### Onboarding
 - Dual-path flow: company owner (creates team) vs. individual (joins team)
+- **Duplicate company detection**: when creating a company that already exists, users are prompted to send a join request instead of creating a duplicate
 - Four-step guided setup: profile, company context, brand kit, invite teammates
 - Company analysis workflow triggered automatically on completion
 - Join-by-invite and join-by-request team entry
@@ -137,7 +140,7 @@ ChainLinked also includes a companion Chrome extension that captures LinkedIn da
 |---|---|
 | **Framework** | Next.js 16.1.1 (App Router) |
 | **UI** | React 19.2.3, shadcn/ui (new-york style), Tailwind CSS v4 |
-| **Database** | Supabase (PostgreSQL) with Row Level Security |
+| **Database** | Supabase (PostgreSQL) with Row Level Security and Realtime subscriptions |
 | **Auth** | Supabase Auth (email/password, Google OAuth) |
 | **AI / LLM** | OpenRouter (GPT-4o, GPT-4o-mini) via OpenAI SDK, Vercel AI SDK |
 | **Background Jobs** | Inngest (15 workflow functions, cron schedules) |

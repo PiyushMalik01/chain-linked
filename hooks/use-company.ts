@@ -18,6 +18,18 @@ import type {
 } from '@/types/database'
 
 /**
+ * Result of checking for an existing company by name
+ */
+export interface ExistingCompanyMatch {
+  /** The existing company */
+  company: Company
+  /** The company's team (if any) */
+  team: Team | null
+  /** Whether the team is discoverable (accepts join requests) */
+  discoverable: boolean
+}
+
+/**
  * Hook return type for company operations
  */
 interface UseCompanyReturn {
@@ -33,6 +45,8 @@ interface UseCompanyReturn {
   updateCompany: (id: string, data: CompanyUpdate) => Promise<Company | null>
   /** Get company by ID */
   getCompany: (id: string) => Promise<CompanyWithTeam | null>
+  /** Check if a company with this name already exists */
+  checkExistingCompany: (name: string) => Promise<ExistingCompanyMatch | null>
   /** Check if user has a company */
   hasCompany: boolean
   /** Refetch company data */
@@ -390,6 +404,45 @@ export function useCompany(): UseCompanyReturn {
     }
   }, [supabase])
 
+  /**
+   * Check if a company with the given name already exists
+   * @param name - Company name to check (case-insensitive)
+   * @returns Matching company with team info, or null if no match
+   */
+  const checkExistingCompany = useCallback(async (name: string): Promise<ExistingCompanyMatch | null> => {
+    try {
+      const trimmedName = name.trim()
+      if (!trimmedName) return null
+
+      // Case-insensitive match on company name
+      const { data: existing } = await supabase
+        .from('companies')
+        .select('*')
+        .ilike('name', trimmedName)
+        .limit(1)
+        .maybeSingle()
+
+      if (!existing) return null
+
+      // Fetch the company's team
+      const { data: team } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('company_id', existing.id)
+        .limit(1)
+        .maybeSingle()
+
+      return {
+        company: existing,
+        team: team || null,
+        discoverable: team?.discoverable ?? false,
+      }
+    } catch (err) {
+      console.error('Check existing company error:', err)
+      return null
+    }
+  }, [supabase])
+
   // Fetch company on mount
   useEffect(() => {
     fetchUserCompany()
@@ -403,6 +456,7 @@ export function useCompany(): UseCompanyReturn {
     createCompany,
     updateCompany,
     getCompany,
+    checkExistingCompany,
     hasCompany: company !== null,
     refetch: fetchUserCompany,
   }

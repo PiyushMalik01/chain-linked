@@ -123,6 +123,28 @@ export function useMyRecentPosts(userId: string | undefined, limit = 9) {
     fetchPosts()
   }, [fetchPosts])
 
+  // Real-time: auto-refetch when extension writes new posts
+  useEffect(() => {
+    if (!userId) return
+
+    const supabase = supabaseRef.current
+    const channel = supabase
+      .channel(`my-recent-posts-realtime-${userId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'my_posts',
+        filter: `user_id=eq.${userId}`,
+      }, () => {
+        fetchPosts()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, fetchPosts])
+
   return { posts, isLoading }
 }
 

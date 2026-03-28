@@ -299,6 +299,38 @@ export function usePostAnalytics(userId?: string, limit = 10): UsePostAnalyticsR
     fetchAnalytics()
   }, [fetchAnalytics])
 
+  // Real-time subscriptions: auto-refetch when extension writes new post data
+  useEffect(() => {
+    const targetUserId = userId || user?.id
+    if (!targetUserId || authLoading) return
+
+    const supabase = supabaseRef.current
+
+    const channel = supabase
+      .channel(`post-analytics-realtime-${targetUserId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'post_analytics',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'my_posts',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, user?.id, authLoading, fetchAnalytics])
+
   // Combined loading state
   const combinedLoading = authLoading || isLoading
 

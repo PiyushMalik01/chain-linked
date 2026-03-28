@@ -141,10 +141,20 @@ export default function CompanySetupPage() {
     )
   }
 
+  /**
+   * Handle join request sent — mark onboarding complete and let user proceed
+   */
+  const handleJoinRequestSent = async () => {
+    // Mark onboarding as complete so the user can access the dashboard
+    await completeOnboardingInDatabase()
+    await refreshProfile()
+  }
+
   return (
     <div className="flex flex-col items-center justify-start pt-8 pb-12">
       <CompanySetupForm
         onComplete={handleComplete}
+        onJoinRequestSent={handleJoinRequestSent}
         onSkip={handleSkip}
         showSkip={true}
       />

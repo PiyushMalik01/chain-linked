@@ -1,6 +1,7 @@
 /**
  * Company Setup Form Component
- * @description Form for creating a new company during onboarding
+ * @description Form for creating a new company during onboarding.
+ * Detects duplicate companies and offers to send a join request instead.
  * @module components/features/company-setup-form
  */
 
@@ -13,6 +14,8 @@ import {
   IconCamera,
   IconCheck,
   IconLoader2,
+  IconSend,
+  IconUsers,
   IconX,
 } from '@tabler/icons-react'
 
@@ -21,7 +24,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useCompany, type CreateCompanyInput } from '@/hooks/use-company'
+import { useCompany, type CreateCompanyInput, type ExistingCompanyMatch } from '@/hooks/use-company'
+import { useJoinRequests } from '@/hooks/use-join-requests'
 import type { CompanyWithTeam } from '@/types/database'
 
 /**
@@ -30,6 +34,8 @@ import type { CompanyWithTeam } from '@/types/database'
 export interface CompanySetupFormProps {
   /** Callback fired when company is created successfully */
   onComplete: (company: CompanyWithTeam) => void
+  /** Callback fired when a join request is sent successfully */
+  onJoinRequestSent?: () => void
   /** Callback fired when user chooses to skip (optional) */
   onSkip?: () => void
   /** Whether to show skip button */
@@ -74,11 +80,13 @@ const ALLOWED_LOGO_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'
  */
 export function CompanySetupForm({
   onComplete,
+  onJoinRequestSent,
   onSkip,
   showSkip = false,
   className,
 }: CompanySetupFormProps) {
-  const { createCompany, isLoading: isCreating, error: createError } = useCompany()
+  const { createCompany, checkExistingCompany, isLoading: isCreating, error: createError } = useCompany()
+  const { submitRequest } = useJoinRequests()
 
   // Form state
   const [companyName, setCompanyName] = React.useState('')
@@ -87,6 +95,12 @@ export function CompanySetupForm({
   const [isUploading, setIsUploading] = React.useState(false)
   const [validationError, setValidationError] = React.useState<string | null>(null)
   const [isDragging, setIsDragging] = React.useState(false)
+
+  // Duplicate company state
+  const [existingMatch, setExistingMatch] = React.useState<ExistingCompanyMatch | null>(null)
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = React.useState(false)
+  const [isSendingRequest, setIsSendingRequest] = React.useState(false)
+  const [joinRequestSent, setJoinRequestSent] = React.useState(false)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -195,7 +209,44 @@ export function CompanySetupForm({
   }
 
   /**
-   * Handle form submission
+   * Handle sending a join request to the existing company's team
+   */
+  const handleSendJoinRequest = async () => {
+    if (!existingMatch?.team) return
+
+    setIsSendingRequest(true)
+    setValidationError(null)
+
+    const request = await submitRequest(existingMatch.team.id)
+
+    if (request) {
+      setJoinRequestSent(true)
+      onJoinRequestSent?.()
+    }
+
+    setIsSendingRequest(false)
+  }
+
+  /**
+   * Reset duplicate state and allow creating a new company anyway
+   */
+  const handleCreateAnyway = async () => {
+    setExistingMatch(null)
+
+    const input: CreateCompanyInput = {
+      name: companyName.trim(),
+      logoUrl: logoUrl || undefined,
+    }
+
+    const company = await createCompany(input)
+
+    if (company) {
+      onComplete(company)
+    }
+  }
+
+  /**
+   * Handle form submission — checks for duplicate first
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -209,10 +260,21 @@ export function CompanySetupForm({
 
     setValidationError(null)
 
-    // Create company
+    // Check for existing company with same name
+    setIsCheckingDuplicate(true)
+    const match = await checkExistingCompany(companyName.trim())
+    setIsCheckingDuplicate(false)
+
+    if (match) {
+      // Company exists — show the duplicate state
+      setExistingMatch(match)
+      return
+    }
+
+    // No duplicate — create the company
     const input: CreateCompanyInput = {
       name: companyName.trim(),
-      logoUrl: logoUrl || undefined, // TODO: Use uploaded URL from storage
+      logoUrl: logoUrl || undefined,
     }
 
     const company = await createCompany(input)
@@ -231,8 +293,139 @@ export function CompanySetupForm({
     }
   }, [logoUrl, logoFile])
 
-  const isSubmitting = isCreating || isUploading
+  const isSubmitting = isCreating || isUploading || isCheckingDuplicate
   const displayError = validationError || createError
+
+  // If join request was sent successfully, show confirmation
+  if (joinRequestSent && existingMatch) {
+    return (
+      <Card className={cn('w-full max-w-lg', className)}>
+        <CardHeader className="text-center space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-500/10">
+            <IconCheck className="h-8 w-8 text-green-500" />
+          </div>
+          <div>
+            <CardTitle className="text-2xl font-bold">Request Sent</CardTitle>
+            <CardDescription className="mt-2">
+              Your request to join <strong>{existingMatch.company.name}</strong> has been sent.
+              The team admin will review your request and you&apos;ll be notified once approved.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3">
+            {showSkip && onSkip && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={onSkip}
+              >
+                Continue to Dashboard
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // If a duplicate company was found, show the duplicate state
+  if (existingMatch) {
+    return (
+      <Card className={cn('w-full max-w-lg', className)}>
+        <CardHeader className="text-center space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10">
+            <IconUsers className="h-8 w-8 text-amber-500" />
+          </div>
+          <div>
+            <CardTitle className="text-2xl font-bold">Company Already Exists</CardTitle>
+            <CardDescription className="mt-2">
+              A company named <strong>{existingMatch.company.name}</strong> is already on ChainLinked.
+              {existingMatch.team
+                ? ' You can send a request to join their team.'
+                : ' However, they don\'t have a team set up yet.'}
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Existing company info */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
+                {existingMatch.company.logo_url ? (
+                  <Image
+                    src={existingMatch.company.logo_url}
+                    alt={existingMatch.company.name}
+                    width={40}
+                    height={40}
+                    className="rounded-full object-cover"
+                  />
+                ) : (
+                  <IconBuilding className="h-5 w-5 text-primary" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium truncate">{existingMatch.company.name}</p>
+                {existingMatch.team && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    Team: {existingMatch.team.name}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {displayError && (
+              <p className="text-sm text-destructive" role="alert">
+                {displayError}
+              </p>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-col gap-3 pt-2">
+              {existingMatch.team && (
+                <Button
+                  className="w-full h-11"
+                  onClick={handleSendJoinRequest}
+                  disabled={isSendingRequest}
+                >
+                  {isSendingRequest ? (
+                    <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <IconSend className="mr-2 h-4 w-4" />
+                  )}
+                  {isSendingRequest ? 'Sending Request...' : 'Send Join Request'}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleCreateAnyway}
+                disabled={isCreating}
+              >
+                {isCreating ? (
+                  <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <IconBuilding className="mr-2 h-4 w-4" />
+                )}
+                {isCreating ? 'Creating...' : 'Create as New Company Anyway'}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setExistingMatch(null)
+                  setCompanyName('')
+                }}
+              >
+                Go Back
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className={cn('w-full max-w-lg', className)}>
@@ -354,12 +547,14 @@ export function CompanySetupForm({
               className="w-full h-11"
               disabled={isSubmitting || !companyName.trim()}
             >
-              {isSubmitting ? (
+              {isCheckingDuplicate ? (
+                <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : isCreating ? (
                 <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <IconCheck className="mr-2 h-4 w-4" />
               )}
-              {isSubmitting ? 'Creating...' : 'Create Company'}
+              {isCheckingDuplicate ? 'Checking...' : isCreating ? 'Creating...' : 'Create Company'}
             </Button>
 
             {showSkip && onSkip && (
