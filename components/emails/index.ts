@@ -15,3 +15,12 @@ export type { EmailVerificationEmailProps } from './email-verification'
 
 export { PasswordResetEmail } from './password-reset'
 export type { PasswordResetEmailProps } from './password-reset'
+
+export { WelcomeEmail } from './welcome'
+export type { WelcomeEmailProps } from './welcome'
+
+export { MemberJoinedTeamEmail } from './member-joined-team'
+export type { MemberJoinedTeamEmailProps } from './member-joined-team'
+
+export { PostPublishedEmail } from './post-published'
+export type { PostPublishedEmailProps } from './post-published'

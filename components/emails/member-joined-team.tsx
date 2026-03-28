@@ -9,7 +9,6 @@ import {
   Button,
   Container,
   Head,
-  Heading,
   Hr,
   Html,
   Img,
@@ -18,6 +17,19 @@ import {
   Section,
   Text,
 } from '@react-email/components'
+import {
+  layout,
+  headerStyle,
+  headerHeading,
+  headerSubtext,
+  GRADIENT_BRAND,
+  content,
+  card,
+  buttons,
+  divider,
+  footer,
+  SITE_URL,
+} from './shared-styles'
 
 /**
  * Props for the MemberJoinedTeamEmail component
@@ -74,66 +86,80 @@ export function MemberJoinedTeamEmail({
     <Html>
       <Head />
       <Preview>{previewText}</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          {/* Header with logo */}
-          <Section style={logoSection}>
+      <Body style={layout.main}>
+        <Container style={layout.container}>
+          {/* Gradient header */}
+          <Section style={headerStyle(GRADIENT_BRAND)}>
             {companyLogoUrl ? (
               <Img
                 src={companyLogoUrl}
-                width="60"
-                height="60"
+                width="48"
+                height="48"
                 alt={companyName || teamName}
-                style={companyLogo}
+                style={companyLogoStyle}
               />
             ) : (
-              <div style={logoPlaceholder}>
-                <Text style={logoPlaceholderText}>
+              <div style={teamLogoPlaceholder}>
+                <Text style={teamLogoText}>
                   {(companyName || teamName).charAt(0).toUpperCase()}
                 </Text>
               </div>
             )}
+            <Text style={headerHeading}>New team member!</Text>
+            <Text style={headerSubtext}>
+              Your team is growing
+            </Text>
           </Section>
 
           {/* Main content */}
-          <Section style={contentSection}>
-            <Heading style={heading}>
-              New team member joined
-            </Heading>
-
-            <Text style={paragraph}>
+          <Section style={content.section}>
+            <Text style={content.paragraph}>
               <strong>{displayName}</strong> has joined{' '}
               <strong>{teamName}</strong>
               {companyName && companyName !== teamName && (
-                <> at <strong>{companyName}</strong></>
-              )}{' '}
-              as a {roleLabel}.
+                <>
+                  {' '}
+                  at <strong>{companyName}</strong>
+                </>
+              )}.
             </Text>
 
-            <Section style={buttonSection}>
-              <Button style={button} href={dashboardUrl}>
-                Go to Dashboard
+            <Section style={card.info}>
+              <Text style={memberInfoRow}>
+                <strong>Name:</strong> {displayName}
+              </Text>
+              <Text style={memberInfoRow}>
+                <strong>Email:</strong> {memberEmail}
+              </Text>
+              <Text style={{ ...memberInfoRow, margin: '0' }}>
+                <strong>Role:</strong> {roleLabel}
+              </Text>
+            </Section>
+
+            <Section style={buttons.section}>
+              <Button style={buttons.primary} href={dashboardUrl}>
+                View Team
               </Button>
             </Section>
 
-            <Text style={paragraphSmall}>
+            <Text style={content.paragraphSmall}>
               You are receiving this because you are the owner of {teamName}.
             </Text>
           </Section>
 
-          <Hr style={hr} />
+          <Hr style={divider} />
 
           {/* Footer */}
-          <Section style={footer}>
-            <Text style={footerText}>
+          <Section style={footer.section}>
+            <Text style={footer.text}>
               This email was sent by ChainLinked.
             </Text>
-            <Text style={footerLinks}>
-              <Link href="https://chainlinked.io" style={link}>
+            <Text style={footer.links}>
+              <Link href={SITE_URL} style={footer.link}>
                 ChainLinked
               </Link>
-              {' | '}
-              <Link href="https://chainlinked.io/privacy" style={link}>
+              {footer.separator}
+              <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
               </Link>
             </Text>
@@ -149,124 +175,35 @@ export function MemberJoinedTeamEmail({
  */
 export default MemberJoinedTeamEmail
 
-// Styles
-const main = {
-  backgroundColor: '#f6f9fc',
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, sans-serif',
+// Template-specific styles
+const companyLogoStyle = {
+  borderRadius: '12px',
+  margin: '0 auto 16px',
+  border: '2px solid rgba(255, 255, 255, 0.3)',
 }
 
-const container = {
-  backgroundColor: '#ffffff',
-  margin: '0 auto',
-  padding: '20px 0 48px',
-  marginBottom: '64px',
-  borderRadius: '8px',
-  maxWidth: '600px',
-}
-
-const logoSection = {
-  padding: '32px 40px 0',
+const teamLogoPlaceholder = {
+  width: '48px',
+  height: '48px',
+  borderRadius: '12px',
+  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  margin: '0 auto 16px',
+  lineHeight: '48px',
   textAlign: 'center' as const,
 }
 
-const companyLogo = {
-  borderRadius: '8px',
-  margin: '0 auto',
-}
-
-const logoPlaceholder = {
-  width: '60px',
-  height: '60px',
-  borderRadius: '8px',
-  backgroundColor: '#0077b5',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  margin: '0 auto',
-}
-
-const logoPlaceholderText = {
-  color: '#ffffff',
-  fontSize: '24px',
-  fontWeight: 'bold',
-  margin: 0,
-  lineHeight: '60px',
+const teamLogoText = {
+  color: '#FFFFFF',
+  fontSize: '22px',
+  fontWeight: 'bold' as const,
+  margin: '0',
+  lineHeight: '48px',
   textAlign: 'center' as const,
 }
 
-const contentSection = {
-  padding: '24px 40px',
-}
-
-const heading = {
-  color: '#1a1a1a',
-  fontSize: '24px',
-  fontWeight: '600',
-  lineHeight: '1.3',
-  margin: '16px 0 24px',
-  textAlign: 'center' as const,
-}
-
-const paragraph = {
-  color: '#525f7f',
-  fontSize: '16px',
-  lineHeight: '1.6',
-  margin: '0 0 20px',
-  textAlign: 'center' as const,
-}
-
-const paragraphSmall = {
-  color: '#8898aa',
+const memberInfoRow = {
+  color: '#374151',
   fontSize: '14px',
   lineHeight: '1.5',
-  margin: '0 0 12px',
-  textAlign: 'center' as const,
-}
-
-const buttonSection = {
-  textAlign: 'center' as const,
-  margin: '32px 0',
-}
-
-const button = {
-  backgroundColor: '#0077b5',
-  borderRadius: '6px',
-  color: '#ffffff',
-  fontSize: '16px',
-  fontWeight: '600',
-  textDecoration: 'none',
-  textAlign: 'center' as const,
-  display: 'inline-block',
-  padding: '14px 32px',
-}
-
-const hr = {
-  borderColor: '#e6ebf1',
-  margin: '32px 0',
-}
-
-const footer = {
-  padding: '0 40px',
-}
-
-const footerText = {
-  color: '#8898aa',
-  fontSize: '12px',
-  lineHeight: '1.5',
-  margin: '0 0 8px',
-  textAlign: 'center' as const,
-}
-
-const footerLinks = {
-  color: '#8898aa',
-  fontSize: '12px',
-  lineHeight: '1.5',
-  margin: '16px 0 0',
-  textAlign: 'center' as const,
-}
-
-const link = {
-  color: '#0077b5',
-  textDecoration: 'underline',
+  margin: '0 0 6px',
 }

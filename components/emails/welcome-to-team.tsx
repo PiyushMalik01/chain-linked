@@ -9,7 +9,6 @@ import {
   Button,
   Container,
   Head,
-  Heading,
   Hr,
   Html,
   Img,
@@ -18,6 +17,20 @@ import {
   Section,
   Text,
 } from '@react-email/components'
+import {
+  layout,
+  headerStyle,
+  headerHeading,
+  headerSubtext,
+  GRADIENT_TEAM,
+  content,
+  card,
+  buttons,
+  steps,
+  divider,
+  footer,
+  SITE_URL,
+} from './shared-styles'
 
 /**
  * Props for the WelcomeToTeamEmail component
@@ -72,15 +85,18 @@ export function WelcomeToTeamEmail({
   const nextSteps = [
     {
       title: 'Explore the Dashboard',
-      description: 'Get familiar with analytics, scheduling, and content tools.',
+      description:
+        'Get familiar with analytics, scheduling, and content tools.',
     },
     {
       title: 'Connect Your LinkedIn',
-      description: 'Link your LinkedIn account to start posting and tracking performance.',
+      description:
+        'Link your LinkedIn account to start posting and tracking performance.',
     },
     {
       title: 'Check Team Activity',
-      description: "See what your teammates are posting and how content is performing.",
+      description:
+        "See what your teammates are posting and how content is performing.",
     },
   ]
 
@@ -95,50 +111,53 @@ export function WelcomeToTeamEmail({
     <Html>
       <Head />
       <Preview>{previewText}</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          {/* Header with logo */}
-          <Section style={logoSection}>
+      <Body style={layout.main}>
+        <Container style={layout.container}>
+          {/* Gradient header */}
+          <Section style={headerStyle(GRADIENT_TEAM)}>
             {companyLogoUrl ? (
               <Img
                 src={companyLogoUrl}
-                width="60"
-                height="60"
+                width="48"
+                height="48"
                 alt={companyName || teamName}
-                style={companyLogo}
+                style={companyLogoStyle}
               />
             ) : (
-              <div style={logoPlaceholder}>
-                <Text style={logoPlaceholderText}>
+              <div style={teamLogoPlaceholder}>
+                <Text style={teamLogoText}>
                   {(companyName || teamName).charAt(0).toUpperCase()}
                 </Text>
               </div>
             )}
+            <Text style={headerHeading}>Welcome to {teamName}!</Text>
+            <Text style={headerSubtext}>
+              You&apos;re now part of the team
+            </Text>
           </Section>
 
           {/* Welcome message */}
-          <Section style={contentSection}>
-            <Heading style={heading}>
-              Welcome to {teamName}!
-            </Heading>
-
-            <Text style={paragraph}>
-              Hi {displayName},
+          <Section style={content.section}>
+            <Text style={content.paragraph}>
+              Hi <strong>{displayName}</strong>,
             </Text>
 
-            <Text style={paragraph}>
+            <Text style={content.paragraph}>
               You have successfully joined <strong>{teamName}</strong>
               {companyName && companyName !== teamName && (
-                <> at <strong>{companyName}</strong></>
+                <>
+                  {' '}
+                  at <strong>{companyName}</strong>
+                </>
               )}
-              ! You are now part of the team and can start collaborating on LinkedIn content.
+              ! You can now collaborate on LinkedIn content with your team.
             </Text>
 
-            <Section style={roleBox}>
-              <Text style={roleTitle}>
-                Your role: {role === 'admin' ? 'Admin' : 'Member'}
+            <Section style={roleCard}>
+              <Text style={roleBadge}>
+                {role === 'admin' ? 'Admin' : 'Member'}
               </Text>
-              <Text style={roleDescriptionText}>
+              <Text style={card.description}>
                 {role === 'admin'
                   ? 'You can invite new members, manage team settings, and access all team features.'
                   : 'You can collaborate on content, view analytics, and participate in team activities.'}
@@ -147,43 +166,47 @@ export function WelcomeToTeamEmail({
           </Section>
 
           {/* Next steps */}
-          <Section style={stepsSection}>
-            <Text style={stepsTitle}>Get Started</Text>
+          <Section style={steps.section}>
+            <Text style={steps.title}>Get Started</Text>
             {nextSteps.map((step, index) => (
-              <Section key={index} style={stepItem}>
-                <Text style={stepNumber}>{index + 1}</Text>
-                <Section style={stepContent}>
-                  <Text style={stepItemTitle}>{step.title}</Text>
-                  <Text style={stepItemDescription}>{step.description}</Text>
-                </Section>
+              <Section key={index} style={steps.item}>
+                <Text style={teamStepNumber}>{index + 1}</Text>
+                <div style={steps.content}>
+                  <Text style={steps.itemTitle}>{step.title}</Text>
+                  <Text style={steps.itemDescription}>
+                    {step.description}
+                  </Text>
+                </div>
               </Section>
             ))}
           </Section>
 
           {/* CTA Button */}
-          <Section style={buttonSection}>
-            <Button style={button} href={dashboardUrl}>
+          <Section style={buttons.section}>
+            <Button style={teamButton} href={dashboardUrl}>
               Go to Dashboard
             </Button>
           </Section>
 
-          <Hr style={hr} />
+          <Section style={{ padding: '16px 0' }} />
+
+          <Hr style={divider} />
 
           {/* Footer */}
-          <Section style={footer}>
-            <Text style={footerText}>
+          <Section style={footer.section}>
+            <Text style={footer.text}>
               Need help? Check out our{' '}
-              <Link href="https://chainlinked.io/help" style={link}>
+              <Link href={`${SITE_URL}/help`} style={footer.link}>
                 Help Center
               </Link>{' '}
               or reach out to your team admin.
             </Text>
-            <Text style={footerLinks}>
-              <Link href="https://chainlinked.io" style={link}>
+            <Text style={footer.links}>
+              <Link href={SITE_URL} style={footer.link}>
                 ChainLinked
               </Link>
-              {' | '}
-              <Link href="https://chainlinked.io/privacy" style={link}>
+              {footer.separator}
+              <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
               </Link>
             </Text>
@@ -199,186 +222,73 @@ export function WelcomeToTeamEmail({
  */
 export default WelcomeToTeamEmail
 
-// Styles
-const main = {
-  backgroundColor: '#f6f9fc',
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, sans-serif',
+// Template-specific styles
+const companyLogoStyle = {
+  borderRadius: '12px',
+  margin: '0 auto 16px',
+  border: '2px solid rgba(255, 255, 255, 0.3)',
 }
 
-const container = {
-  backgroundColor: '#ffffff',
-  margin: '0 auto',
-  padding: '20px 0 48px',
-  marginBottom: '64px',
-  borderRadius: '8px',
-  maxWidth: '600px',
-}
-
-const logoSection = {
-  padding: '32px 40px 0',
+const teamLogoPlaceholder = {
+  width: '48px',
+  height: '48px',
+  borderRadius: '12px',
+  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  margin: '0 auto 16px',
+  lineHeight: '48px',
   textAlign: 'center' as const,
 }
 
-const companyLogo = {
-  borderRadius: '8px',
-  margin: '0 auto',
-}
-
-const logoPlaceholder = {
-  width: '60px',
-  height: '60px',
-  borderRadius: '8px',
-  backgroundColor: '#0077b5',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  margin: '0 auto',
-}
-
-const logoPlaceholderText = {
-  color: '#ffffff',
-  fontSize: '24px',
-  fontWeight: 'bold',
-  margin: 0,
-  lineHeight: '60px',
+const teamLogoText = {
+  color: '#FFFFFF',
+  fontSize: '22px',
+  fontWeight: 'bold' as const,
+  margin: '0',
+  lineHeight: '48px',
   textAlign: 'center' as const,
 }
 
-const contentSection = {
-  padding: '24px 40px',
-}
-
-const heading = {
-  color: '#1a1a1a',
-  fontSize: '28px',
-  fontWeight: '600',
-  lineHeight: '1.3',
-  margin: '16px 0 24px',
-  textAlign: 'center' as const,
-}
-
-const paragraph = {
-  color: '#525f7f',
-  fontSize: '16px',
-  lineHeight: '1.6',
-  margin: '0 0 16px',
-}
-
-const roleBox = {
-  backgroundColor: '#e8f5e9',
-  borderRadius: '8px',
-  padding: '16px 20px',
+const roleCard = {
+  backgroundColor: '#F5F3FF',
+  borderRadius: '12px',
+  padding: '20px 24px',
   margin: '24px 0',
-  borderLeft: '4px solid #4caf50',
+  border: '1px solid #DDD6FE',
 }
 
-const roleTitle = {
-  color: '#2e7d32',
-  fontSize: '14px',
-  fontWeight: '600',
-  margin: '0 0 4px',
+const roleBadge = {
+  color: '#7C3AED',
+  fontSize: '13px',
+  fontWeight: '700' as const,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.5px',
+  margin: '0 0 8px',
 }
 
-const roleDescriptionText = {
-  color: '#525f7f',
-  fontSize: '14px',
-  lineHeight: '1.5',
-  margin: 0,
-}
-
-const stepsSection = {
-  padding: '0 40px 24px',
-}
-
-const stepsTitle = {
-  color: '#1a1a1a',
-  fontSize: '18px',
-  fontWeight: '600',
-  margin: '0 0 16px',
-}
-
-const stepItem = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  marginBottom: '16px',
-}
-
-const stepNumber = {
-  backgroundColor: '#0077b5',
-  color: '#ffffff',
+const teamStepNumber = {
+  backgroundColor: '#7C3AED',
+  color: '#FFFFFF',
   borderRadius: '50%',
-  width: '24px',
-  height: '24px',
-  fontSize: '12px',
-  fontWeight: '600',
+  width: '28px',
+  height: '28px',
+  fontSize: '13px',
+  fontWeight: '700' as const,
   textAlign: 'center' as const,
-  lineHeight: '24px',
-  marginRight: '12px',
-  flexShrink: 0,
+  lineHeight: '28px',
+  marginRight: '14px',
+  display: 'inline-block',
+  verticalAlign: 'top',
 }
 
-const stepContent = {
-  flex: 1,
-}
-
-const stepItemTitle = {
-  color: '#1a1a1a',
-  fontSize: '14px',
-  fontWeight: '600',
-  margin: '0 0 2px',
-}
-
-const stepItemDescription = {
-  color: '#525f7f',
-  fontSize: '14px',
-  lineHeight: '1.4',
-  margin: 0,
-}
-
-const buttonSection = {
-  textAlign: 'center' as const,
-  padding: '0 40px 32px',
-}
-
-const button = {
-  backgroundColor: '#0077b5',
-  borderRadius: '6px',
-  color: '#ffffff',
-  fontSize: '16px',
-  fontWeight: '600',
+const teamButton = {
+  backgroundColor: '#7C3AED',
+  borderRadius: '10px',
+  color: '#FFFFFF',
+  fontSize: '15px',
+  fontWeight: '600' as const,
   textDecoration: 'none',
   textAlign: 'center' as const,
   display: 'inline-block',
-  padding: '14px 32px',
-}
-
-const hr = {
-  borderColor: '#e6ebf1',
-  margin: '0 40px 32px',
-}
-
-const footer = {
-  padding: '0 40px',
-}
-
-const footerText = {
-  color: '#8898aa',
-  fontSize: '14px',
-  lineHeight: '1.5',
-  margin: '0 0 16px',
-  textAlign: 'center' as const,
-}
-
-const footerLinks = {
-  color: '#8898aa',
-  fontSize: '12px',
-  lineHeight: '1.5',
-  margin: 0,
-  textAlign: 'center' as const,
-}
-
-const link = {
-  color: '#0077b5',
-  textDecoration: 'underline',
+  padding: '14px 36px',
+  letterSpacing: '0.2px',
 }

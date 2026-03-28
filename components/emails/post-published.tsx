@@ -9,7 +9,6 @@ import {
   Button,
   Container,
   Head,
-  Heading,
   Hr,
   Html,
   Link,
@@ -17,6 +16,20 @@ import {
   Section,
   Text,
 } from '@react-email/components'
+import {
+  layout,
+  headerStyle,
+  headerLogo,
+  headerHeading,
+  headerSubtext,
+  GRADIENT_SUCCESS,
+  content,
+  buttons,
+  divider,
+  footer,
+  colors,
+  SITE_URL,
+} from './shared-styles'
 
 /**
  * Props for the PostPublishedEmail component
@@ -59,7 +72,7 @@ export function PostPublishedEmail({
   linkedinUrl,
   dashboardUrl,
 }: PostPublishedEmailProps) {
-  const previewText = `Your scheduled post is now live on LinkedIn`
+  const previewText = 'Your scheduled post is now live on LinkedIn'
   const ctaHref = linkedinUrl || dashboardUrl
   const ctaLabel = linkedinUrl ? 'View on LinkedIn' : 'Go to Dashboard'
 
@@ -67,51 +80,51 @@ export function PostPublishedEmail({
     <Html>
       <Head />
       <Preview>{previewText}</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          {/* Header with ChainLinked logo placeholder */}
-          <Section style={logoSection}>
-            <div style={logoPlaceholder}>
-              <Text style={logoPlaceholderText}>C</Text>
-            </div>
+      <Body style={layout.main}>
+        <Container style={layout.container}>
+          {/* Gradient header */}
+          <Section style={headerStyle(GRADIENT_SUCCESS)}>
+            <div style={headerLogo}>CL</div>
+            <Text style={headerHeading}>Your post is live!</Text>
+            <Text style={headerSubtext}>
+              Successfully published on LinkedIn
+            </Text>
           </Section>
 
           {/* Main content */}
-          <Section style={contentSection}>
-            <Heading style={heading}>
-              Your post is live!
-            </Heading>
-
-            <Text style={paragraph}>
-              Hi {userName}, your scheduled post was published on LinkedIn.
+          <Section style={content.section}>
+            <Text style={content.paragraph}>
+              Hi <strong>{userName}</strong>, your scheduled post was published
+              on LinkedIn.
             </Text>
 
             {/* Content preview box */}
             <Section style={previewBox}>
-              <Text style={previewText_style}>{contentPreview}</Text>
+              <Text style={previewLabel}>Post Preview</Text>
+              <Text style={previewContent}>{contentPreview}</Text>
               <Text style={previewTimestamp}>Published on {publishedAt}</Text>
             </Section>
 
-            <Section style={buttonSection}>
-              <Button style={button} href={ctaHref}>
+            <Section style={buttons.section}>
+              <Button style={successButton} href={ctaHref}>
                 {ctaLabel}
               </Button>
             </Section>
           </Section>
 
-          <Hr style={hr} />
+          <Hr style={divider} />
 
           {/* Footer */}
-          <Section style={footer}>
-            <Text style={footerText}>
+          <Section style={footer.section}>
+            <Text style={footer.text}>
               This email was sent by ChainLinked.
             </Text>
-            <Text style={footerLinks}>
-              <Link href="https://chainlinked.io" style={link}>
+            <Text style={footer.links}>
+              <Link href={SITE_URL} style={footer.link}>
                 ChainLinked
               </Link>
-              {' | '}
-              <Link href="https://chainlinked.io/privacy" style={link}>
+              {footer.separator}
+              <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
               </Link>
             </Text>
@@ -127,133 +140,50 @@ export function PostPublishedEmail({
  */
 export default PostPublishedEmail
 
-// Styles
-const main = {
-  backgroundColor: '#f6f9fc',
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, sans-serif',
-}
-
-const container = {
-  backgroundColor: '#ffffff',
-  margin: '0 auto',
-  padding: '20px 0 48px',
-  marginBottom: '64px',
-  borderRadius: '8px',
-  maxWidth: '600px',
-}
-
-const logoSection = {
-  padding: '32px 40px 0',
-  textAlign: 'center' as const,
-}
-
-const logoPlaceholder = {
-  width: '60px',
-  height: '60px',
-  borderRadius: '8px',
-  backgroundColor: '#0077b5',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  margin: '0 auto',
-}
-
-const logoPlaceholderText = {
-  color: '#ffffff',
-  fontSize: '24px',
-  fontWeight: 'bold',
-  margin: 0,
-  lineHeight: '60px',
-  textAlign: 'center' as const,
-}
-
-const contentSection = {
-  padding: '24px 40px',
-}
-
-const heading = {
-  color: '#1a1a1a',
-  fontSize: '24px',
-  fontWeight: '600',
-  lineHeight: '1.3',
-  margin: '16px 0 24px',
-  textAlign: 'center' as const,
-}
-
-const paragraph = {
-  color: '#525f7f',
-  fontSize: '16px',
-  lineHeight: '1.6',
-  margin: '0 0 20px',
-  textAlign: 'center' as const,
-}
-
+// Template-specific styles
 const previewBox = {
-  backgroundColor: '#f6f9fc',
-  borderRadius: '8px',
-  padding: '16px 20px',
+  backgroundColor: colors.successBg,
+  borderRadius: '12px',
+  padding: '20px 24px',
   margin: '24px 0',
+  border: `1px solid ${colors.successBorder}`,
 }
 
-const previewText_style = {
-  color: '#525f7f',
+const previewLabel = {
+  color: colors.success,
+  fontSize: '11px',
+  fontWeight: '700' as const,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.5px',
+  margin: '0 0 10px',
+}
+
+const previewContent = {
+  color: colors.body,
   fontSize: '14px',
-  lineHeight: '1.6',
-  margin: '0 0 8px',
+  lineHeight: '1.7',
+  margin: '0 0 12px',
   whiteSpace: 'pre-wrap' as const,
 }
 
 const previewTimestamp = {
-  color: '#8898aa',
+  color: colors.muted,
   fontSize: '12px',
   lineHeight: '1.5',
-  margin: 0,
+  margin: '0',
+  borderTop: `1px solid ${colors.successBorder}`,
+  paddingTop: '10px',
 }
 
-const buttonSection = {
-  textAlign: 'center' as const,
-  margin: '32px 0',
-}
-
-const button = {
-  backgroundColor: '#0077b5',
-  borderRadius: '6px',
-  color: '#ffffff',
-  fontSize: '16px',
-  fontWeight: '600',
+const successButton = {
+  backgroundColor: '#059669',
+  borderRadius: '10px',
+  color: '#FFFFFF',
+  fontSize: '15px',
+  fontWeight: '600' as const,
   textDecoration: 'none',
   textAlign: 'center' as const,
   display: 'inline-block',
-  padding: '14px 32px',
-}
-
-const hr = {
-  borderColor: '#e6ebf1',
-  margin: '32px 0',
-}
-
-const footer = {
-  padding: '0 40px',
-}
-
-const footerText = {
-  color: '#8898aa',
-  fontSize: '12px',
-  lineHeight: '1.5',
-  margin: '0 0 8px',
-  textAlign: 'center' as const,
-}
-
-const footerLinks = {
-  color: '#8898aa',
-  fontSize: '12px',
-  lineHeight: '1.5',
-  margin: '16px 0 0',
-  textAlign: 'center' as const,
-}
-
-const link = {
-  color: '#0077b5',
-  textDecoration: 'underline',
+  padding: '14px 36px',
+  letterSpacing: '0.2px',
 }

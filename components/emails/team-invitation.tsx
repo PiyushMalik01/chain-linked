@@ -9,7 +9,6 @@ import {
   Button,
   Container,
   Head,
-  Heading,
   Hr,
   Html,
   Img,
@@ -18,6 +17,20 @@ import {
   Section,
   Text,
 } from '@react-email/components'
+import {
+  layout,
+  headerStyle,
+  headerHeading,
+  headerSubtext,
+  GRADIENT_TEAM,
+  content,
+  card,
+  buttons,
+  divider,
+  footer,
+  colors,
+  SITE_URL,
+} from './shared-styles'
 
 /**
  * Props for the TeamInvitationEmail component
@@ -72,86 +85,95 @@ export function TeamInvitationEmail({
 }: TeamInvitationEmailProps) {
   const previewText = `${inviterName || inviterEmail} invited you to join ${teamName} on ChainLinked`
   const displayName = inviterName || inviterEmail
-  const roleDescription = role === 'admin'
-    ? 'As an Admin, you will be able to invite members and manage team settings.'
-    : 'As a Member, you will be able to collaborate on content and view team analytics.'
+  const roleDescription =
+    role === 'admin'
+      ? 'You will be able to invite members, manage team settings, and access all team features.'
+      : 'You will be able to collaborate on content, view analytics, and participate in team activities.'
 
   return (
     <Html>
       <Head />
       <Preview>{previewText}</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          {/* Header with logo */}
-          <Section style={logoSection}>
+      <Body style={layout.main}>
+        <Container style={layout.container}>
+          {/* Gradient header */}
+          <Section style={headerStyle(GRADIENT_TEAM)}>
             {companyLogoUrl ? (
               <Img
                 src={companyLogoUrl}
-                width="60"
-                height="60"
+                width="48"
+                height="48"
                 alt={companyName || teamName}
-                style={companyLogo}
+                style={companyLogoStyle}
               />
             ) : (
-              <div style={logoPlaceholder}>
-                <Text style={logoPlaceholderText}>
+              <div style={teamLogoPlaceholder}>
+                <Text style={teamLogoText}>
                   {(companyName || teamName).charAt(0).toUpperCase()}
                 </Text>
               </div>
             )}
+            <Text style={headerHeading}>
+              You&apos;re invited to join {teamName}
+            </Text>
+            <Text style={headerSubtext}>
+              <strong>{displayName}</strong> wants you on the team
+            </Text>
           </Section>
 
           {/* Main content */}
-          <Section style={contentSection}>
-            <Heading style={heading}>
-              You have been invited to join {teamName}
-            </Heading>
-
-            <Text style={paragraph}>
+          <Section style={content.section}>
+            <Text style={content.paragraph}>
               <strong>{displayName}</strong> has invited you to join{' '}
               <strong>{teamName}</strong>
               {companyName && companyName !== teamName && (
-                <> at <strong>{companyName}</strong></>
+                <>
+                  {' '}
+                  at <strong>{companyName}</strong>
+                </>
               )}{' '}
-              on ChainLinked.
+              on ChainLinked — the LinkedIn content platform for teams.
             </Text>
 
-            <Section style={roleBox}>
-              <Text style={roleTitle}>Your role: {role === 'admin' ? 'Admin' : 'Member'}</Text>
-              <Text style={roleDescriptionText}>{roleDescription}</Text>
+            <Section style={roleCard}>
+              <Text style={roleBadge}>
+                {role === 'admin' ? 'Admin' : 'Member'}
+              </Text>
+              <Text style={card.description}>{roleDescription}</Text>
             </Section>
 
-            <Section style={buttonSection}>
-              <Button style={button} href={inviteLink}>
+            <Section style={buttons.section}>
+              <Button style={acceptButton} href={inviteLink}>
                 Accept Invitation
               </Button>
             </Section>
 
-            <Text style={paragraphSmall}>
-              This invitation will expire on <strong>{expiresAt}</strong>.
+            <Text style={content.paragraphSmall}>
+              This invitation expires on <strong>{expiresAt}</strong>.
             </Text>
 
-            <Text style={paragraphSmall}>
-              If you were not expecting this invitation, you can safely ignore this email.
+            <Text style={content.paragraphSmall}>
+              If you were not expecting this invitation, you can safely ignore
+              this email.
             </Text>
           </Section>
 
-          <Hr style={hr} />
+          <Hr style={divider} />
 
           {/* Footer */}
-          <Section style={footer}>
-            <Text style={footerText}>
+          <Section style={footer.section}>
+            <Text style={footer.text}>
               This email was sent by ChainLinked on behalf of {displayName}.
             </Text>
-            <Text style={footerText}>
+            <Text style={footer.text}>
               If you have questions, please contact the person who invited you.
             </Text>
-            <Text style={footerLinks}>
-              <Link href="https://chainlinked.io" style={link}>
+            <Text style={footer.links}>
+              <Link href={SITE_URL} style={footer.link}>
                 ChainLinked
               </Link>
-              {' | '}
-              <Link href="https://chainlinked.io/privacy" style={link}>
+              {footer.separator}
+              <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
               </Link>
             </Text>
@@ -167,147 +189,58 @@ export function TeamInvitationEmail({
  */
 export default TeamInvitationEmail
 
-// Styles
-const main = {
-  backgroundColor: '#f6f9fc',
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, sans-serif',
+// Template-specific styles
+const companyLogoStyle = {
+  borderRadius: '12px',
+  margin: '0 auto 16px',
+  border: '2px solid rgba(255, 255, 255, 0.3)',
 }
 
-const container = {
-  backgroundColor: '#ffffff',
-  margin: '0 auto',
-  padding: '20px 0 48px',
-  marginBottom: '64px',
-  borderRadius: '8px',
-  maxWidth: '600px',
-}
-
-const logoSection = {
-  padding: '32px 40px 0',
+const teamLogoPlaceholder = {
+  width: '48px',
+  height: '48px',
+  borderRadius: '12px',
+  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  margin: '0 auto 16px',
+  lineHeight: '48px',
   textAlign: 'center' as const,
 }
 
-const companyLogo = {
-  borderRadius: '8px',
-  margin: '0 auto',
-}
-
-const logoPlaceholder = {
-  width: '60px',
-  height: '60px',
-  borderRadius: '8px',
-  backgroundColor: '#0077b5',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  margin: '0 auto',
-}
-
-const logoPlaceholderText = {
-  color: '#ffffff',
-  fontSize: '24px',
-  fontWeight: 'bold',
-  margin: 0,
-  lineHeight: '60px',
+const teamLogoText = {
+  color: '#FFFFFF',
+  fontSize: '22px',
+  fontWeight: 'bold' as const,
+  margin: '0',
+  lineHeight: '48px',
   textAlign: 'center' as const,
 }
 
-const contentSection = {
-  padding: '24px 40px',
-}
-
-const heading = {
-  color: '#1a1a1a',
-  fontSize: '24px',
-  fontWeight: '600',
-  lineHeight: '1.3',
-  margin: '16px 0 24px',
-  textAlign: 'center' as const,
-}
-
-const paragraph = {
-  color: '#525f7f',
-  fontSize: '16px',
-  lineHeight: '1.6',
-  margin: '0 0 20px',
-  textAlign: 'center' as const,
-}
-
-const paragraphSmall = {
-  color: '#8898aa',
-  fontSize: '14px',
-  lineHeight: '1.5',
-  margin: '0 0 12px',
-  textAlign: 'center' as const,
-}
-
-const roleBox = {
-  backgroundColor: '#f6f9fc',
-  borderRadius: '8px',
-  padding: '16px 20px',
+const roleCard = {
+  backgroundColor: '#F5F3FF',
+  borderRadius: '12px',
+  padding: '20px 24px',
   margin: '24px 0',
+  border: '1px solid #DDD6FE',
 }
 
-const roleTitle = {
-  color: '#1a1a1a',
-  fontSize: '14px',
-  fontWeight: '600',
-  margin: '0 0 4px',
-  textAlign: 'center' as const,
+const roleBadge = {
+  color: '#7C3AED',
+  fontSize: '13px',
+  fontWeight: '700' as const,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.5px',
+  margin: '0 0 8px',
 }
 
-const roleDescriptionText = {
-  color: '#525f7f',
-  fontSize: '14px',
-  lineHeight: '1.5',
-  margin: 0,
-  textAlign: 'center' as const,
-}
-
-const buttonSection = {
-  textAlign: 'center' as const,
-  margin: '32px 0',
-}
-
-const button = {
-  backgroundColor: '#0077b5',
-  borderRadius: '6px',
-  color: '#ffffff',
-  fontSize: '16px',
-  fontWeight: '600',
+const acceptButton = {
+  backgroundColor: '#7C3AED',
+  borderRadius: '10px',
+  color: '#FFFFFF',
+  fontSize: '15px',
+  fontWeight: '600' as const,
   textDecoration: 'none',
   textAlign: 'center' as const,
   display: 'inline-block',
-  padding: '14px 32px',
-}
-
-const hr = {
-  borderColor: '#e6ebf1',
-  margin: '32px 0',
-}
-
-const footer = {
-  padding: '0 40px',
-}
-
-const footerText = {
-  color: '#8898aa',
-  fontSize: '12px',
-  lineHeight: '1.5',
-  margin: '0 0 8px',
-  textAlign: 'center' as const,
-}
-
-const footerLinks = {
-  color: '#8898aa',
-  fontSize: '12px',
-  lineHeight: '1.5',
-  margin: '16px 0 0',
-  textAlign: 'center' as const,
-}
-
-const link = {
-  color: '#0077b5',
-  textDecoration: 'underline',
+  padding: '14px 36px',
+  letterSpacing: '0.2px',
 }
