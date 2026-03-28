@@ -326,7 +326,10 @@ export async function GET(request: Request) {
       accumulativeTotal,
     }
 
-    return NextResponse.json({ current, comparison, summary })
+    // Always include absolute timeseries for the data table
+    const absolute = buildTimeseries(snapshots, column, 'absolute')
+
+    return NextResponse.json({ current, absolute, comparison, summary })
   } catch (err) {
     console.error('Analytics V3 error:', err)
     return NextResponse.json(

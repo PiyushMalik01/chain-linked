@@ -7,7 +7,8 @@
  */
 
 import * as React from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useRef, useCallback } from "react"
+import { motion } from "framer-motion"
 import {
   IconSearch,
   IconBulb,
@@ -186,6 +187,36 @@ const NICHE_LABELS: Record<InspirationNiche, string> = {
   'engineering': 'Engineering',
   'design': 'Design',
   'general': 'General',
+}
+
+/**
+ * Invisible sentinel element that triggers a callback when scrolled into view.
+ * Uses IntersectionObserver for efficient scroll-based pagination.
+ * @param props.onIntersect - Callback fired when the sentinel enters the viewport
+ */
+function InfiniteScrollSentinel({ onIntersect }: { onIntersect: () => void }) {
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const onIntersectRef = useRef(onIntersect)
+  onIntersectRef.current = onIntersect
+
+  React.useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onIntersectRef.current()
+        }
+      },
+      { rootMargin: "400px" }
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  return <div ref={sentinelRef} className="h-1 w-full" aria-hidden />
 }
 
 /**
@@ -715,50 +746,29 @@ export function InspirationFeed({
         ) : (
           /* Posts Grid with Stagger Animation */
           <>
-            <motion.div
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-              variants={staggerContainerVariants}
-              initial="initial"
-              animate="animate"
-            >
-              <AnimatePresence mode="popLayout">
-                {displayPosts.map((post, index) => (
-                  <motion.div
-                    key={post.id}
-                    variants={staggerItemVariants}
-                    layout
-                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                    transition={{
-                      duration: 0.3,
-                      delay: index * 0.05,
-                      ease: [0.16, 1, 0.3, 1],
-                    }}
-                  >
-                    <InspirationPostCard
-                      post={post}
-                      isSaved={savedPostIds.has(post.id)}
-                      isFollowingAuthor={post.authorUrl ? (isFollowing?.(post.authorUrl) ?? false) : false}
-                      onRemix={handleRemix}
-                      onSave={handleSave}
-                      onUnsave={handleUnsave}
-                      onExpand={onExpand}
-                      onFollow={onFollow}
-                      onUnfollow={onUnfollow}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {displayPosts.map((post) => (
+                <div
+                  key={post.id}
+                  className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both"
+                >
+                  <InspirationPostCard
+                    post={post}
+                    isSaved={savedPostIds.has(post.id)}
+                    isFollowingAuthor={post.authorUrl ? (isFollowing?.(post.authorUrl) ?? false) : false}
+                    onRemix={handleRemix}
+                    onSave={handleSave}
+                    onUnsave={handleUnsave}
+                    onExpand={onExpand}
+                    onFollow={onFollow}
+                    onUnfollow={onUnfollow}
+                  />
+                </div>
+              ))}
+            </div>
 
-            {/* Pagination / Load More */}
-            <motion.div
-              className="flex flex-col items-center gap-4 pt-6 mt-6 border-t border-border/50"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5, duration: 0.4 }}
-            >
+            {/* Infinite Scroll Sentinel + Post Count */}
+            <div className="flex flex-col items-center gap-4 pt-6 mt-6 border-t border-border/50">
               {/* Post Count */}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <IconSparkles className="size-4 text-primary" />
@@ -773,30 +783,24 @@ export function InspirationFeed({
                 </span>
               </div>
 
-              {/* Load More Button */}
-              {pagination?.hasMore && onLoadMore && (
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    variant="outline"
-                    onClick={onLoadMore}
-                    disabled={pagination.isLoadingMore}
-                    className="gap-2 border-primary/30 hover:border-primary/50 hover:bg-primary/5"
-                  >
-                    {pagination.isLoadingMore ? (
-                      <>
-                        <IconLoader2 className="size-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <IconChevronDown className="size-4" />
-                        Load More
-                      </>
-                    )}
-                  </Button>
-                </motion.div>
+              {/* Loading indicator while fetching next page */}
+              {pagination?.isLoadingMore && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                  <IconLoader2 className="size-4 animate-spin text-primary" />
+                  <span>Loading more posts...</span>
+                </div>
               )}
-            </motion.div>
+
+              {/* Infinite scroll sentinel — triggers loadMore when visible */}
+              {pagination?.hasMore && onLoadMore && !pagination.isLoadingMore && (
+                <InfiniteScrollSentinel onIntersect={onLoadMore} />
+              )}
+
+              {/* End of results */}
+              {!pagination?.hasMore && displayPosts.length > 0 && (
+                <p className="text-xs text-muted-foreground">You&apos;ve reached the end</p>
+              )}
+            </div>
           </>
         )}
         </CardContent>

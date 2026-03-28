@@ -49,7 +49,7 @@ function AnalyticsContent() {
   const { user, profile, isLoading: authLoading } = useAuthContext()
   const searchParams = useSearchParams()
   const [filters, setFilters] = useState<AnalyticsV3Filters>(() => getDefaultFilters(searchParams))
-  const { data, summary, comparisonData, multiData, engagementBreakdown, isLoading, error } = useAnalyticsV3(filters)
+  const { data, absoluteData, summary, comparisonData, multiData, multiAbsoluteData, engagementBreakdown, isLoading, error } = useAnalyticsV3(filters)
 
   /**
    * Handle granularity changes from the data table
@@ -111,12 +111,12 @@ function AnalyticsContent() {
       >
         <motion.div variants={staggerItemVariants}>
           <AnalyticsDataTable
-            data={data}
+            data={absoluteData}
             metric={filters.metric}
             granularity={filters.granularity}
             onGranularityChange={handleGranularityChange}
             isLoading={isLoading}
-            multiData={multiData}
+            multiData={multiAbsoluteData}
           />
         </motion.div>
       </motion.div>

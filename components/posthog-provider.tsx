@@ -48,14 +48,6 @@ export function PostHogProvider({ children }: PostHogProviderProps): React.React
       return
     }
 
-    console.log("[PostHog] Initializing with config:", {
-      api_host: apiHost,
-      api_key: apiKey?.substring(0, 10) + "...",
-      enable_heatmaps: true,
-      session_recording: true,
-      autocapture: true,
-    })
-
     posthog.init(apiKey, {
       api_host: apiHost,
       ui_host: "https://us.posthog.com",
@@ -155,20 +147,12 @@ export function PostHogProvider({ children }: PostHogProviderProps): React.React
       // Bootstrap feature flags from server if available
       bootstrap: {},
 
-      // Debug mode in development
-      debug: process.env.NODE_ENV === "development",
+      // Disable debug mode to reduce console noise
+      debug: false,
+
     })
 
     setIsReady(true)
-
-    // Log feature status after init
-    console.log("[PostHog] Initialized successfully:", {
-      sessionRecordingActive: posthog.sessionRecordingStarted?.() ?? "unknown",
-      sessionId: posthog.get_session_id?.() ?? "unknown",
-      distinctId: posthog.get_distinct_id?.(),
-      heatmapsEnabled: true,
-      proxyHost: apiHost,
-    })
 
     // Note: We intentionally don't call posthog.reset() on cleanup
     // as it fragments sessions during React Strict Mode remounts
@@ -211,7 +195,6 @@ function PostHogPageview(): null {
   }, [pathname])
 
   useEffect(() => {
-    console.log("[PostHog] Capturing pageview:", { url, dashboardSection })
     posthog.capture("$pageview", {
       $current_url: url,
       page_title: typeof document !== "undefined" ? document.title : undefined,
@@ -246,7 +229,6 @@ export function PostHogUserSync(): null {
 
     // Identify the authenticated user
     const userName = profile?.full_name ?? profile?.name ?? user.user_metadata?.name
-    console.log("[PostHog] Identifying user:", { id: user.id, email: user.email, name: userName })
     posthog.identify(user.id, {
       email: user.email,
       name: userName,

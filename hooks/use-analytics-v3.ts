@@ -104,14 +104,18 @@ export type MultiMetricData = Record<string, AnalyticsDataPoint[]>
  * Return type for the useAnalyticsV3 hook
  */
 export interface UseAnalyticsV3Return {
-  /** Current period data points */
+  /** Current period data points (deltas for charts) */
   data: AnalyticsDataPoint[]
+  /** Absolute values per day (for data table display) */
+  absoluteData: AnalyticsDataPoint[]
   /** Summary statistics */
   summary: AnalyticsSummary | null
   /** Comparison period data points (when compare is enabled) */
   comparisonData: AnalyticsDataPoint[] | null
-  /** Multi-metric data map (when metric is "all") */
+  /** Multi-metric data map (when metric is "all") — deltas */
   multiData: MultiMetricData | null
+  /** Multi-metric absolute data map (when metric is "all") — for data table */
+  multiAbsoluteData: MultiMetricData | null
   /** Engagement breakdown data from the posts endpoint */
   engagementBreakdown: EngagementDataPoint[]
   /** Whether data is currently loading */
@@ -173,9 +177,11 @@ function buildParams(filters: AnalyticsV3Filters, metricOverride?: string): URLS
  */
 export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Return {
   const [data, setData] = useState<AnalyticsDataPoint[]>([])
+  const [absoluteData, setAbsoluteData] = useState<AnalyticsDataPoint[]>([])
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [comparisonData, setComparisonData] = useState<AnalyticsDataPoint[] | null>(null)
   const [multiData, setMultiData] = useState<MultiMetricData | null>(null)
+  const [multiAbsoluteData, setMultiAbsoluteData] = useState<MultiMetricData | null>(null)
   const [engagementBreakdown, setEngagementBreakdown] = useState<EngagementDataPoint[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -241,12 +247,14 @@ export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Retur
 
         if (!controller.signal.aborted) {
           const multiMap: MultiMetricData = {}
+          const multiAbsMap: MultiMetricData = {}
           let totalSum = 0
           let avgSum = 0
           let count = 0
 
           for (const { metric: m, json } of metricsResults) {
             multiMap[m] = json.current ?? []
+            multiAbsMap[m] = json.absolute ?? []
             if (json.summary) {
               totalSum += json.summary.total ?? 0
               avgSum += json.summary.average ?? 0
@@ -256,7 +264,9 @@ export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Retur
 
           // Use impressions as the "primary" data for single-metric consumers
           setData(multiMap.impressions ?? [])
+          setAbsoluteData(multiAbsMap.impressions ?? [])
           setMultiData(multiMap)
+          setMultiAbsoluteData(multiAbsMap)
           setSummary({
             total: totalSum,
             average: count > 0 ? Math.round((avgSum / count) * 100) / 100 : 0,
@@ -284,9 +294,11 @@ export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Retur
 
         if (!controller.signal.aborted) {
           setData(json.current ?? [])
+          setAbsoluteData(json.absolute ?? [])
           setSummary(json.summary ?? null)
           setComparisonData(json.comparison ?? null)
           setMultiData(null)
+          setMultiAbsoluteData(null)
           setEngagementBreakdown(engagementJson.posts ?? engagementJson.data ?? [])
         }
       }
@@ -298,9 +310,11 @@ export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Retur
       if (!controller.signal.aborted) {
         setError(err instanceof Error ? err.message : 'Failed to fetch analytics')
         setData([])
+        setAbsoluteData([])
         setSummary(null)
         setComparisonData(null)
         setMultiData(null)
+        setMultiAbsoluteData(null)
         setEngagementBreakdown([])
       }
     } finally {
@@ -317,5 +331,5 @@ export function useAnalyticsV3(filters: AnalyticsV3Filters): UseAnalyticsV3Retur
     }
   }, [fetchData])
 
-  return { data, summary, comparisonData, multiData, engagementBreakdown, isLoading, error }
+  return { data, absoluteData, summary, comparisonData, multiData, multiAbsoluteData, engagementBreakdown, isLoading, error }
 }
