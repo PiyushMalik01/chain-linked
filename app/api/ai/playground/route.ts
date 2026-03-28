@@ -26,7 +26,7 @@ interface PlaygroundRequest {
   systemPrompt: string
   /** User prompt text */
   userPrompt: string
-  /** Optional model override (e.g. openai/gpt-4o, openai/gpt-4o-mini, openai/gpt-3.5-turbo) */
+  /** Optional model override (e.g. openai/gpt-5.4, openai/gpt-5.4-mini, openai/gpt-4o) */
   model?: string
   /** Optional temperature override (0.0 - 2.0) */
   temperature?: number
@@ -50,9 +50,9 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "openai/gpt-4o": { input: 2.5, output: 10 },
   "openai/gpt-4o-mini": { input: 0.15, output: 0.6 },
   "openai/gpt-3.5-turbo": { input: 0.5, output: 1.5 },
-  "openai/gpt-4.1": { input: 2.0, output: 8.0 },
-  "openai/gpt-4.1-mini": { input: 0.4, output: 1.6 },
-  "openai/gpt-4.1-nano": { input: 0.1, output: 0.4 },
+  "openai/gpt-5.4": { input: 2.5, output: 15.0 },
+  "openai/gpt-5.4-mini": { input: 0.75, output: 4.5 },
+  "openai/gpt-5.4-nano": { input: 0.2, output: 1.25 },
 }
 
 /**
@@ -63,7 +63,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
  * @returns Estimated cost in USD
  */
 function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
-  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING["openai/gpt-4.1"]
+  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING["openai/gpt-5.4"]
   const inputCost = (promptTokens / 1_000_000) * pricing.input
   const outputCost = (completionTokens / 1_000_000) * pricing.output
   return inputCost + outputCost

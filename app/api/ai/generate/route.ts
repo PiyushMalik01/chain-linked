@@ -46,10 +46,10 @@ function calculateEstimatedCost(
 ): number {
   // Pricing per 1K tokens (USD)
   const pricing: Record<string, { input: number; output: number }> = {
-    'openai/gpt-4.1': { input: 0.002, output: 0.008 },
+    'openai/gpt-5.4': { input: 0.0025, output: 0.015 },
     'openai/gpt-4o': { input: 0.0025, output: 0.01 },
   }
-  const rates = pricing[model] || pricing['openai/gpt-4.1']
+  const rates = pricing[model] || pricing['openai/gpt-5.4']
   return (promptTokens / 1000) * rates.input + (completionTokens / 1000) * rates.output
 }
 

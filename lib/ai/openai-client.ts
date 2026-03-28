@@ -15,10 +15,10 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
 /**
  * Default model to use for AI generation
- * GPT-4.1 is optimized for instruction following and coding tasks
- * @see https://openrouter.ai/openai/gpt-4.1
+ * GPT-5.4 is OpenAI's latest frontier model with 1M+ context window
+ * @see https://openrouter.ai/openai/gpt-5.4
  */
-export const DEFAULT_MODEL = 'openai/gpt-4.1'
+export const DEFAULT_MODEL = 'openai/gpt-5.4'
 
 /**
  * Configuration for creating an OpenRouter client instance
@@ -42,7 +42,7 @@ export interface ChatCompletionRequest {
   systemPrompt: string
   /** User message/content to process */
   userMessage: string
-  /** Optional model to use (default: openai/gpt-4.1 via OpenRouter) */
+  /** Optional model to use (default: openai/gpt-5.4 via OpenRouter) */
   model?: string
   /** Optional temperature for creativity (default: 0.7) */
   temperature?: number

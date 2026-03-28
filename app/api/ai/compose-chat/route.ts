@@ -269,7 +269,7 @@ export async function POST(request: Request) {
     const startTime = Date.now()
 
     const result = streamText({
-      model: provider('openai/gpt-4.1'),
+      model: provider('openai/gpt-5.4'),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       temperature: 0.8,
@@ -287,8 +287,8 @@ export async function POST(request: Request) {
         const outputTokens = usage?.outputTokens ?? 0
         const totalTokens = inputTokens + outputTokens
 
-        // Calculate cost: gpt-4.1 pricing
-        const estimatedCost = (inputTokens * 0.002 + outputTokens * 0.008) / 1000
+        // Calculate cost: gpt-5.4 pricing ($2.50/$15.00 per million tokens)
+        const estimatedCost = (inputTokens * 0.0025 + outputTokens * 0.015) / 1000
 
         try {
           await PromptService.logUsage({
@@ -299,7 +299,7 @@ export async function POST(request: Request) {
             inputTokens,
             outputTokens,
             totalTokens,
-            model: 'openai/gpt-4.1',
+            model: 'openai/gpt-5.4',
             responseTimeMs,
             success: true,
             estimatedCost,
@@ -312,7 +312,7 @@ export async function POST(request: Request) {
           console.error('[ComposeChat] Failed to log usage:', logError)
         }
 
-        try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'compose-chat', tone, message_count: messages.length, model: 'openai/gpt-4.1', tokens: totalTokens, response_time_ms: responseTimeMs }) } catch {}
+        try { trackAIEvent(user.id, 'ai_generation_completed', { feature: 'compose-chat', tone, message_count: messages.length, model: 'openai/gpt-5.4', tokens: totalTokens, response_time_ms: responseTimeMs }) } catch {}
       },
     })
 
@@ -321,7 +321,7 @@ export async function POST(request: Request) {
     console.error('Compose chat error:', error)
 
     Sentry.captureException(error, {
-      tags: { feature: 'compose-chat', model: 'openai/gpt-4.1' },
+      tags: { feature: 'compose-chat', model: 'openai/gpt-5.4' },
     })
 
     // Track AI generation failure

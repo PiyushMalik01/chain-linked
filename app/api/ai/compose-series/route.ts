@@ -239,7 +239,7 @@ export async function POST(request: Request) {
     }
 
     const result = streamText({
-      model: provider('openai/gpt-4.1'),
+      model: provider('openai/gpt-5.4'),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       temperature: 0.8,

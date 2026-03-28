@@ -204,9 +204,9 @@ const DEFAULT_VARIABLES: TemplateVariable[] = [
 
 /** Available model options */
 const MODEL_OPTIONS = [
-  { value: "openai/gpt-4.1", label: "GPT-4.1" },
-  { value: "openai/gpt-4.1-mini", label: "GPT-4.1 Mini" },
-  { value: "openai/gpt-4.1-nano", label: "GPT-4.1 Nano" },
+  { value: "openai/gpt-5.4", label: "GPT-5.4" },
+  { value: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" },
+  { value: "openai/gpt-5.4-nano", label: "GPT-5.4 Nano" },
   { value: "openai/gpt-4o", label: "GPT-4o" },
   { value: "openai/gpt-4o-mini", label: "GPT-4o Mini" },
   { value: "openai/gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
@@ -1722,7 +1722,7 @@ export function PromptPlayground() {
   const [variables, setVariables] = React.useState<TemplateVariable[]>(DEFAULT_VARIABLES)
 
   // Model controls
-  const [model, setModel] = React.useState("openai/gpt-4.1")
+  const [model, setModel] = React.useState("openai/gpt-5.4")
   const [temperature, setTemperature] = React.useState(0.7)
   const [maxTokens, setMaxTokens] = React.useState(1200)
   const [topP, setTopP] = React.useState(1.0)

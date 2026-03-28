@@ -116,7 +116,7 @@ Return ONLY valid JSON, no markdown fences.`,
       userMessage: `Search query: "${query}"`,
       temperature: 0.1,
       maxTokens: 300,
-      model: "openai/gpt-4.1-mini",
+      model: "openai/gpt-5.4-mini",
     })
 
     const cleaned = response.content
