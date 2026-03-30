@@ -32,6 +32,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 import type { AnalyticsV3Filters } from "@/hooks/use-analytics-v3"
 
 /** Content type options for filtering posts */
@@ -52,11 +53,21 @@ const PERIOD_OPTIONS = ["7d", "30d", "90d", "1y"] as const
 /**
  * Props for the AnalyticsFilterBar component
  */
+/** Maps period codes to their required number of days of data */
+const PERIOD_DAYS: Record<string, number> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+  '1y': 365,
+}
+
 interface AnalyticsFilterBarProps {
   /** Current filter values */
   filters: AnalyticsV3Filters
   /** Callback when any filter changes */
   onFiltersChange: (filters: AnalyticsV3Filters) => void
+  /** Earliest date with data (YYYY-MM-DD) — used to grey out periods without enough data */
+  dataStartDate?: string
 }
 
 /**
@@ -66,7 +77,11 @@ interface AnalyticsFilterBarProps {
  * @param props.onFiltersChange - Handler for filter state changes
  * @returns Filter bar with metric selector, period toggle, content type, and compare controls
  */
-export function AnalyticsFilterBar({ filters, onFiltersChange }: AnalyticsFilterBarProps) {
+export function AnalyticsFilterBar({ filters, onFiltersChange, dataStartDate }: AnalyticsFilterBarProps) {
+  // Calculate how many days of data we have
+  const daysOfData = dataStartDate
+    ? Math.floor((Date.now() - new Date(dataStartDate + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24)) + 1
+    : 0
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -143,16 +158,25 @@ export function AnalyticsFilterBar({ filters, onFiltersChange }: AnalyticsFilter
           variant="outline"
           className="hidden sm:flex"
         >
-          {PERIOD_OPTIONS.map((p) => (
-            <ToggleGroupItem
-              key={p}
-              value={p}
-              aria-label={`Last ${p}`}
-              className="transition-all data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-            >
-              {p.toUpperCase()}
-            </ToggleGroupItem>
-          ))}
+          {PERIOD_OPTIONS.map((p) => {
+            const requiredDays = PERIOD_DAYS[p] || 0
+            const hasEnoughData = daysOfData > 0 && daysOfData >= requiredDays
+            return (
+              <ToggleGroupItem
+                key={p}
+                value={p}
+                aria-label={`Last ${p}`}
+                disabled={!hasEnoughData}
+                className={cn(
+                  "transition-all data-[state=on]:bg-primary/10 data-[state=on]:text-primary",
+                  !hasEnoughData && "opacity-40 cursor-not-allowed"
+                )}
+                title={!hasEnoughData ? `Need ${requiredDays} days of data (have ${daysOfData})` : undefined}
+              >
+                {p.toUpperCase()}
+              </ToggleGroupItem>
+            )
+          })}
         </ToggleGroup>
 
         {/* Time Period Select (mobile) */}
@@ -168,11 +192,15 @@ export function AnalyticsFilterBar({ filters, onFiltersChange }: AnalyticsFilter
             <SelectValue placeholder="Period" />
           </SelectTrigger>
           <SelectContent>
-            {PERIOD_OPTIONS.map((p) => (
-              <SelectItem key={p} value={p}>
-                Last {p.toUpperCase()}
-              </SelectItem>
-            ))}
+            {PERIOD_OPTIONS.map((p) => {
+              const requiredDays = PERIOD_DAYS[p] || 0
+              const hasEnoughData = daysOfData > 0 && daysOfData >= requiredDays
+              return (
+                <SelectItem key={p} value={p} disabled={!hasEnoughData}>
+                  Last {p.toUpperCase()}{!hasEnoughData ? ' (not enough data)' : ''}
+                </SelectItem>
+              )
+            })}
           </SelectContent>
         </Select>
 
@@ -182,7 +210,9 @@ export function AnalyticsFilterBar({ filters, onFiltersChange }: AnalyticsFilter
             <Button
               variant={filters.period === "custom" ? "default" : "outline"}
               size="sm"
-              className="gap-1.5"
+              className={cn("gap-1.5", daysOfData === 0 && "opacity-40 cursor-not-allowed")}
+              disabled={daysOfData === 0}
+              title={daysOfData === 0 ? "No data available yet" : undefined}
             >
               <IconCalendar className="size-3.5" />
               <span className="hidden sm:inline">Custom</span>

@@ -62,6 +62,8 @@ interface ComposeBasicModeProps {
   initialLength?: string
   /** Initial context value */
   initialContext?: string
+  /** Increment to reset all fields */
+  resetKey?: number
 }
 
 /**
@@ -79,6 +81,7 @@ export function ComposeBasicMode({
   initialTone,
   initialLength,
   initialContext,
+  resetKey,
 }: ComposeBasicModeProps) {
   const STORAGE_KEY = 'chainlinked-compose-basic-fields'
 
@@ -101,6 +104,19 @@ export function ComposeBasicMode({
   const [context, setContext] = React.useState(initialContext ?? persisted?.context ?? '')
   const [isGenerating, setIsGenerating] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+
+  // Reset all fields when resetKey changes
+  React.useEffect(() => {
+    if (resetKey !== undefined && resetKey > 0) {
+      setTopic('')
+      setTone('professional')
+      setLength('medium')
+      setContext('')
+      setError(null)
+      try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
 
   /** Persist field values to localStorage on change */
   React.useEffect(() => {
@@ -228,7 +244,10 @@ export function ComposeBasicMode({
           onChange={(e) => {
             setTopic(e.target.value)
             if (error) setError(null)
+            e.target.style.height = 'auto'
+            e.target.style.height = `${Math.max(100, e.target.scrollHeight)}px`
           }}
+          style={{ overflow: 'hidden' }}
           className="min-h-[100px] resize-none text-sm"
           disabled={isGenerating}
         />
@@ -243,7 +262,12 @@ export function ComposeBasicMode({
           id="basic-context"
           placeholder="e.g. 'Mention my experience at TechCorp, include a stat about remote work'"
           value={context}
-          onChange={(e) => setContext(e.target.value)}
+          onChange={(e) => {
+            setContext(e.target.value)
+            e.target.style.height = 'auto'
+            e.target.style.height = `${Math.max(48, e.target.scrollHeight)}px`
+          }}
+          style={{ overflow: 'hidden' }}
           className="min-h-[48px] resize-none text-sm"
           disabled={isGenerating}
         />

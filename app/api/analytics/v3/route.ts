@@ -283,21 +283,25 @@ export async function GET(request: Request) {
     }
 
     // 6. Compute summary statistics
-    // When we have enough data for deltas, use deltas for summary.
-    // Otherwise use absolute values from the snapshots.
+    // Use absolute values for total and average since delta-based calculations
+    // show misleading zeros when data arrives in batches rather than incrementally.
+    const absolute = buildTimeseries(snapshots, column, 'absolute')
     let total: number
     let average: number
 
-    if (snapshots.length >= 2) {
-      const deltas = buildTimeseries(snapshots, column, 'delta')
-      total = deltas.reduce((sum, p) => sum + p.value, 0)
-      average = deltas.length > 0
-        ? Math.round((total / deltas.length) * 100) / 100
-        : 0
+    // Latest absolute value = the real total
+    const latestAbsolute = snapshots.length > 0
+      ? Math.round(Number(snapshots[snapshots.length - 1][column] ?? 0) * 100) / 100
+      : 0
+
+    total = latestAbsolute
+
+    // Average based on absolute values across the period
+    if (absolute.length > 0) {
+      const absSum = absolute.reduce((sum, p) => sum + p.value, 0)
+      average = Math.round((absSum / absolute.length) * 100) / 100
     } else {
-      // Only 1 day — show the absolute value as total
-      total = current.length > 0 ? current[0].value : 0
-      average = total
+      average = 0
     }
 
     // % change vs comparison period
@@ -313,21 +317,13 @@ export async function GET(request: Request) {
       }
     }
 
-    // Latest absolute value (last snapshot in the current range)
-    const accumulativeTotal = snapshots.length > 0
-      ? Math.round(Number(snapshots[snapshots.length - 1][column] ?? 0) * 100) / 100
-      : 0
-
     const summary = {
       total: Math.round(total * 100) / 100,
       average,
       change,
       compCount,
-      accumulativeTotal,
+      accumulativeTotal: latestAbsolute,
     }
-
-    // Always include absolute timeseries for the data table
-    const absolute = buildTimeseries(snapshots, column, 'absolute')
 
     return NextResponse.json({ current, absolute, comparison, summary })
   } catch (err) {

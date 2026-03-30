@@ -73,7 +73,7 @@ function AnalyticsContent() {
       </div>
 
       {/* FE-001: Filter Bar */}
-      <AnalyticsFilterBar filters={filters} onFiltersChange={setFilters} />
+      <AnalyticsFilterBar filters={filters} onFiltersChange={setFilters} dataStartDate={absoluteData?.[0]?.date} />
 
       {/* FE-002: Summary Bar */}
       <AnalyticsSummaryBar
@@ -90,12 +90,12 @@ function AnalyticsContent() {
       >
         <motion.div variants={staggerItemVariants}>
           <AnalyticsTrendChart
-            data={data}
+            data={absoluteData}
             comparisonData={comparisonData}
             metric={filters.metric}
             compareActive={filters.compare}
             isLoading={isLoading}
-            multiData={multiData}
+            multiData={multiAbsoluteData}
           />
         </motion.div>
       </motion.div>

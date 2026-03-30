@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthContext } from '@/lib/auth/auth-provider'
 import type { TeamMemberStats, LeaderboardTimeRange } from '@/components/features/team-leaderboard'
@@ -71,7 +71,8 @@ export function useTeamLeaderboard(teamId?: string | null): UseTeamLeaderboardRe
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [timeRange, setTimeRange] = useState<LeaderboardTimeRange>('week')
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   /**
    * Fetch leaderboard data from database

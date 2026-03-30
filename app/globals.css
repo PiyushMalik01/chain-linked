@@ -316,6 +316,14 @@
     display: none;
   }
 
+  /* Thin scrollbar for contained areas */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    border-radius: 2px;
+  }
+
   /* Gradient backgrounds */
   .bg-gradient-primary {
     background: linear-gradient(135deg, oklch(0.47 0.13 230) 0%, oklch(0.40 0.12 230) 100%);

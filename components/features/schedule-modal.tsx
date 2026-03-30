@@ -51,8 +51,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { cn } from "@/lib/utils"
+import { cn, getInitials } from "@/lib/utils"
 import { toast } from "sonner"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 /**
  * Post preview data for the schedule modal.
@@ -62,6 +63,12 @@ export interface PostPreview {
   content: string
   /** Optional number of media attachments */
   mediaCount?: number
+  /** Optional user profile for LinkedIn-style preview */
+  userProfile?: {
+    name: string
+    headline: string
+    avatarUrl?: string
+  }
 }
 
 /**
@@ -120,16 +127,32 @@ const OPTIMAL_TIMES = [
 ]
 
 /**
+ * Cleans raw post content for preview display.
+ * Strips mention tokens, normalizes whitespace.
+ * @param content - Raw post content
+ * @returns Cleaned content string
+ */
+function cleanContentForPreview(content: string): string {
+  return content
+    // Strip mention tokens: @[Name](urn:li:...) → Name
+    .replace(/@\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Collapse multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
  * Truncates content to a specified length with ellipsis.
  * @param content - The content to truncate
  * @param maxLength - Maximum character length
  * @returns Truncated content with ellipsis if needed
  */
 function truncateContent(content: string, maxLength: number): string {
-  if (content.length <= maxLength) {
-    return content
+  const cleaned = cleanContentForPreview(content)
+  if (cleaned.length <= maxLength) {
+    return cleaned
   }
-  return `${content.slice(0, maxLength).trim()}...`
+  return `${cleaned.slice(0, maxLength).trim()}...`
 }
 
 /**
@@ -155,6 +178,52 @@ function to12Hour(hour: number): { hour: number; period: "AM" | "PM" } {
   if (hour === 12) return { hour: 12, period: "PM" }
   if (hour > 12) return { hour: hour - 12, period: "PM" }
   return { hour, period: "AM" }
+}
+
+/**
+ * Mini LinkedIn card post preview.
+ */
+function CollapsiblePostPreview({ postPreview }: { postPreview: PostPreview }) {
+  const profile = postPreview.userProfile
+
+  return (
+    <div className="rounded-lg border bg-white dark:bg-zinc-900 dark:border-zinc-700/60 shadow-sm overflow-hidden">
+      <div className="px-3 py-2.5 space-y-2.5">
+        {/* Author row */}
+        {profile && (
+          <div className="flex items-center gap-2.5">
+            <Avatar className="size-9 ring-1 ring-border/50">
+              {profile.avatarUrl && <AvatarImage src={profile.avatarUrl} alt={profile.name} />}
+              <AvatarFallback className="text-[10px] font-semibold bg-[#0A66C2]/10 text-[#0A66C2]">
+                {getInitials(profile.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold leading-tight truncate">{profile.name}</p>
+              <p className="text-[10px] text-muted-foreground leading-tight truncate">{profile.headline}</p>
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                <IconClock className="size-2.5" />
+                Scheduled
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="text-[13px] leading-relaxed whitespace-pre-wrap break-words line-clamp-5">
+          {truncateContent(postPreview.content, 250)}
+        </div>
+
+        {/* Attachments */}
+        {postPreview.mediaCount != null && postPreview.mediaCount > 0 && (
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-1.5 border-t border-border/50">
+            <IconCalendar className="size-3" />
+            <span>{postPreview.mediaCount} attachment{postPreview.mediaCount > 1 ? 's' : ''}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -397,22 +466,8 @@ export function ScheduleModal({
         </DialogHeader>
 
         <div className="space-y-6 py-4 overflow-y-auto flex-1 pr-2">
-          {/* Post Preview */}
-          {postPreview && (
-            <div className="rounded-md border bg-muted/50 p-3 space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">
-                Post Preview
-              </div>
-              <p className="text-sm">
-                {truncateContent(postPreview.content, 150)}
-              </p>
-              {postPreview.mediaCount && postPreview.mediaCount > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {postPreview.mediaCount} attachment{postPreview.mediaCount > 1 ? "s" : ""}
-                </p>
-              )}
-            </div>
-          )}
+          {/* Post Preview — collapsible mini LinkedIn card */}
+          {postPreview && <CollapsiblePostPreview postPreview={postPreview} />}
 
           {/* Date Picker */}
           <div className="space-y-2">

@@ -7,7 +7,7 @@
  * @module app/dashboard/team/activity/page
  */
 
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -84,7 +84,8 @@ function useAllTeamPosts(limit: number = 100) {
   const [authors, setAuthors] = useState<TeamAuthor[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   const fetchPosts = useCallback(async () => {
     if (authLoading) return

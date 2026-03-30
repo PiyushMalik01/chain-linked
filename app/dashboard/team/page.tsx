@@ -560,28 +560,30 @@ function TeamContent() {
 
         {/* Recent Team Posts Grid */}
         <div>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <h3 className="text-base font-semibold">Recent Team Activity</h3>
-            <div className="flex items-center gap-2">
-              <Select value={activityMemberFilter} onValueChange={setActivityMemberFilter}>
-                <SelectTrigger className="w-[160px] h-8 rounded-lg text-xs">
-                  <IconFilter className="size-3.5 mr-1.5 shrink-0" />
-                  <SelectValue placeholder="All Members" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Members</SelectItem>
-                  {postAuthors.map(name => (
-                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/dashboard/team/activity" className="gap-1.5">
-                  View All Activity
-                  <IconChevronRight className="size-3.5" />
-                </Link>
-              </Button>
-            </div>
+            {!postsLoading && posts.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Select value={activityMemberFilter} onValueChange={setActivityMemberFilter}>
+                  <SelectTrigger className="w-[160px] h-8 rounded-lg text-xs">
+                    <IconFilter className="size-3.5 mr-1.5 shrink-0" />
+                    <SelectValue placeholder="All Members" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Members</SelectItem>
+                    {postAuthors.map(name => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/dashboard/team/activity" className="gap-1.5">
+                    View All Activity
+                    <IconChevronRight className="size-3.5" />
+                  </Link>
+                </Button>
+              </div>
+            )}
           </div>
           <PostGrid
             posts={filteredPosts}

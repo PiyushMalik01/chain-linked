@@ -85,6 +85,8 @@ export interface AIInlinePanelProps {
   topicLabel?: string
   /** Hidden system context sent to API but not shown in UI */
   systemContext?: string
+  /** Increment to reset all fields (topic, tone, length, context) */
+  resetKey?: number
 }
 
 /**
@@ -141,14 +143,35 @@ export function AIInlinePanel({
   initialContext,
   topicLabel,
   systemContext,
+  resetKey,
 }: AIInlinePanelProps) {
   const [topic, setTopic] = React.useState(initialTopic ?? '')
   const [tone, setTone] = React.useState(initialTone ?? 'professional')
   const [length, setLength] = React.useState(initialLength ?? 'medium')
   const [context, setContext] = React.useState(initialContext ?? '')
+
+  // Reset all fields when resetKey changes
+  React.useEffect(() => {
+    if (resetKey !== undefined && resetKey > 0) {
+      setTopic(initialTopic ?? '')
+      setTone(initialTone ?? 'professional')
+      setLength(initialLength ?? 'medium')
+      setContext(initialContext ?? '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
   const [isGenerating, setIsGenerating] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const resetTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const topicRef = React.useRef<HTMLTextAreaElement>(null)
+  const contextRef = React.useRef<HTMLTextAreaElement>(null)
+
+  /** Auto-resize a textarea to fit its content */
+  const autoResize = React.useCallback((el: HTMLTextAreaElement | null, minHeight: number) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.max(minHeight, el.scrollHeight)}px`
+  }, [])
 
   // Cleanup timer on unmount
   React.useEffect(() => {
@@ -322,13 +345,16 @@ export function AIInlinePanel({
                   {topicLabel ?? 'Prompt for the topic'} <span className="text-destructive">*</span>
                 </Label>
                 <Textarea
+                  ref={topicRef}
                   id="ai-topic"
                   placeholder="e.g. 'Write a post about lessons from scaling a remote team to 50 people, include a personal story and actionable tips'"
                   value={topic}
                   onChange={(e) => {
                     setTopic(e.target.value)
                     if (error) setError(null)
+                    autoResize(e.target, 100)
                   }}
+                  style={{ overflow: 'hidden' }}
                   className="min-h-[100px] resize-none text-sm"
                   disabled={isGenerating}
                 />
@@ -388,10 +414,15 @@ export function AIInlinePanel({
                   Additional Context (optional)
                 </Label>
                 <Textarea
+                  ref={contextRef}
                   id="ai-context"
                   placeholder="e.g. 'Mention my experience at TechCorp, include a stat about remote work'"
                   value={context}
-                  onChange={(e) => setContext(e.target.value)}
+                  onChange={(e) => {
+                    setContext(e.target.value)
+                    autoResize(e.target, 48)
+                  }}
+                  style={{ overflow: 'hidden' }}
                   className="min-h-[48px] resize-none text-sm"
                   disabled={isGenerating}
                 />
