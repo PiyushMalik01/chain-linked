@@ -95,7 +95,9 @@ export async function POST(request: Request) {
   }
 
   // Normalize and strictly validate LinkedIn URL format
-  const normalizedUrl = linkedin_url.trim().replace(/\/+$/, '').toLowerCase()
+  // Strip query params and hash fragments before validation
+  const cleanUrl = linkedin_url.trim().split('?')[0].split('#')[0]
+  const normalizedUrl = cleanUrl.replace(/\/+$/, '').toLowerCase()
     .replace(/^https?:\/\/(www\.)?linkedin\.com/, 'https://www.linkedin.com')
   const linkedInUrlPattern = /^https?:\/\/(www\.)?linkedin\.com\/in\/[\w-]+$/
   if (!linkedInUrlPattern.test(normalizedUrl)) {

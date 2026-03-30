@@ -365,7 +365,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (fetchId === currentFetchId) {
             // Only cancel if this is still the active fetch
           }
-        }, 10000) // 10s timeout
+        }, 5000) // 5s timeout
 
         const profilePromise = fetchProfile(userId)
         const result = await Promise.race([
@@ -376,7 +376,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setTimeout(() => {
               abortController.signal.removeEventListener('abort', onAbort)
               resolve(null)
-            }, 10000)
+            }, 5000)
           }),
         ])
 

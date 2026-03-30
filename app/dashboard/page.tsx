@@ -440,7 +440,8 @@ function DashboardContent() {
 
 
   const router = useRouter()
-  const supabase = createClient()
+  const supabaseRef = React.useRef(createClient())
+  const supabase = supabaseRef.current
   const { posts: scheduledPosts, rawPosts: rawScheduledPosts, isLoading: scheduleLoading } =
     useScheduledPosts(30)
 
@@ -466,10 +467,9 @@ function DashboardContent() {
    */
   const [hasCreatedPost, setHasCreatedPost] = useState(false)
   const [hasScheduledContent, setHasScheduledContent] = useState(false)
-  const supabaseRef = React.useRef(supabase)
   useEffect(() => {
     if (!user?.id) return
-    const sb = supabaseRef.current
+    const sb = supabase
     Promise.all([
       sb.from('my_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
       sb.from('scheduled_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),

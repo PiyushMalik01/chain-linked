@@ -8,7 +8,6 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
-import { formatDistanceToNow } from "date-fns"
 import {
   IconThumbUp,
   IconMessageCircle,
@@ -20,6 +19,7 @@ import {
   IconFlame,
   IconUserPlus,
   IconUserCheck,
+  IconLoader2,
 } from "@tabler/icons-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -184,14 +184,26 @@ export function InspirationPostCard({
   onUnsave,
   onExpand,
   onFollow,
+  onUnfollow,
   className,
   compact = false,
 }: InspirationPostCardProps) {
   const [isFollowPending, setIsFollowPending] = React.useState(false)
 
-  const relativeTime = formatDistanceToNow(new Date(post.postedAt), {
-    addSuffix: true,
-  })
+  const relativeTime = React.useMemo(() => {
+    const date = new Date(post.postedAt)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffDays < 1) return 'today'
+    if (diffDays === 1) return '1d ago'
+    if (diffDays < 7) return `${diffDays}d ago`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
+    const years = Math.floor(diffDays / 365)
+    return `${years}y ago`
+  }, [post.postedAt])
 
   const categoryLabel = CATEGORY_LABELS[post.category] || post.category
   const categoryVariant = CATEGORY_VARIANTS[post.category] || "outline"
@@ -213,16 +225,25 @@ export function InspirationPostCard({
     onExpand?.(post)
   }, [onExpand, post])
 
-  /** Follow the author if URL is available */
-  const handleFollow = React.useCallback(async () => {
-    if (!post.authorUrl || !onFollow) return
+  /** Toggle follow/unfollow the author */
+  const handleFollowToggle = React.useCallback(async () => {
     setIsFollowPending(true)
     try {
-      await onFollow(post.authorUrl, post.author.name, post.author.headline, post.author.avatar)
+      if (isFollowingAuthor && onUnfollow && post.authorUrl) {
+        // Unfollow — pass the URL, the parent resolves the record ID
+        await onUnfollow(post.authorUrl)
+      } else if (onFollow) {
+        if (post.authorUrl) {
+          await onFollow(post.authorUrl, post.author.name, post.author.headline, post.author.avatar)
+        } else {
+          // No LinkedIn URL — open search
+          window.open(`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(post.author.name)}`, '_blank')
+        }
+      }
     } finally {
       setIsFollowPending(false)
     }
-  }, [post.authorUrl, post.author.name, post.author.headline, post.author.avatar, onFollow])
+  }, [isFollowingAuthor, post.authorUrl, post.author.name, post.author.headline, post.author.avatar, onFollow, onUnfollow])
 
   return (
     <motion.div
@@ -282,11 +303,11 @@ export function InspirationPostCard({
               </p>
               {/* Tag badges */}
               {post.tags && post.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {post.tags.slice(0, 3).map((tag) => (
+                <div className="flex flex-wrap gap-1 mt-1 overflow-hidden max-h-[20px]">
+                  {post.tags.slice(0, 2).map((tag) => (
                     <span
                       key={tag}
-                      className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
+                      className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground truncate max-w-[100px]"
                     >
                       {tag}
                     </span>
@@ -397,23 +418,25 @@ export function InspirationPostCard({
                 </Button>
               </motion.div>
 
-              {/* Follow author button - only shown if post has an authorUrl and onFollow is provided */}
-              {post.authorUrl && onFollow && (
+              {/* Follow author button */}
+              {onFollow && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <motion.div whileTap={{ scale: 0.95 }}>
                       <Button
                         variant={isFollowingAuthor ? "secondary" : "outline"}
                         size="sm"
-                        onClick={handleFollow}
-                        disabled={isFollowPending || isFollowingAuthor}
+                        onClick={handleFollowToggle}
+                        disabled={isFollowPending}
                         className={cn(
                           "shrink-0 border-border/50",
-                          !isFollowingAuthor && "hover:border-primary/30",
+                          isFollowingAuthor ? "hover:border-destructive/30 hover:bg-destructive/5" : "hover:border-primary/30",
                         )}
-                        aria-label={isFollowingAuthor ? "Following author" : "Follow author"}
+                        aria-label={isFollowingAuthor ? "Unfollow author" : "Follow author"}
                       >
-                        {isFollowingAuthor ? (
+                        {isFollowPending ? (
+                          <IconLoader2 className="size-3.5 animate-spin" />
+                        ) : isFollowingAuthor ? (
                           <IconUserCheck className="size-3.5 text-primary" />
                         ) : (
                           <IconUserPlus className="size-3.5" />
@@ -422,7 +445,7 @@ export function InspirationPostCard({
                     </motion.div>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{isFollowingAuthor ? "Following" : "Follow author"}</p>
+                    <p>{isFollowingAuthor ? `Unfollow ${post.author.name}` : `Follow ${post.author.name}`}</p>
                   </TooltipContent>
                 </Tooltip>
               )}

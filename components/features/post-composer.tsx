@@ -266,14 +266,19 @@ export function PostComposer({
   const { draft, setContent: setDraftContent, setScheduledFor, clearDraft, updateDraft } = useDraft()
   const { mode: composeMode, setMode: setComposeMode, theme: composeTheme } = useComposeMode()
 
-  const [content, setContent] = React.useState(() => draft.content || initialContent)
+  const [content, setContent] = React.useState(() => {
+    // When editing a scheduled post, always use initialContent (the scheduled post's content)
+    if (isEditingScheduledPost && initialContent) return initialContent
+    return draft.content || initialContent
+  })
   const [isPosting, setIsPosting] = React.useState(false)
   const [isScheduling, setIsScheduling] = React.useState(false)
   const [isSavingEdit, setIsSavingEdit] = React.useState(false)
   const [showScheduleModal, setShowScheduleModal] = React.useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = React.useState(false)
   const [showAIDialog, setShowAIDialog] = React.useState(false)
-  const [isEditing, setIsEditing] = React.useState(false)
+  const [isEditing, setIsEditing] = React.useState(!!isEditingScheduledPost)
+  const [aiResetKey, setAiResetKey] = React.useState(0)
   const [mediaFiles, setMediaFiles] = React.useState<MediaFile[]>(() => {
     // Restore media from draft context if available (for tab switch persistence)
     if (draft.mediaFiles && draft.mediaFiles.length > 0) {
@@ -383,6 +388,9 @@ export function PostComposer({
   const [draftSaved, setDraftSaved] = React.useState(false)
 
   // Auto-save: debounce content changes and persist to /api/drafts/auto-save
+  const savedDraftIdRef = React.useRef(draft.savedDraftId)
+  React.useEffect(() => { savedDraftIdRef.current = draft.savedDraftId }, [draft.savedDraftId])
+
   const autoSaveFn = React.useCallback(async (): Promise<boolean> => {
     const trimmed = content.trim()
     if (!trimmed) return false
@@ -399,21 +407,22 @@ export function PostComposer({
           tone: ctx?.tone || null,
           context: ctx?.context || null,
           wordCount,
-          draftId: draft.savedDraftId || undefined,
+          draftId: savedDraftIdRef.current || undefined,
           aiMetadata: ctx?.aiMetadata || null,
         }),
       })
       if (res.ok) {
         const data = await res.json()
         if (data.id) {
+          savedDraftIdRef.current = data.id
           updateDraft({ savedDraftId: data.id })
         }
         return true
       }
       const errData = await res.json().catch(() => null)
       console.warn('[AutoSave] Failed:', res.status, errData?.error || 'Unknown error')
-      // If the existing draftId is stale, clear it so the next save creates a new draft
-      if (res.status === 500 && draft.savedDraftId) {
+      if (res.status === 500 && savedDraftIdRef.current) {
+        savedDraftIdRef.current = undefined
         updateDraft({ savedDraftId: undefined })
       }
       return false
@@ -421,9 +430,30 @@ export function PostComposer({
       console.warn('[AutoSave] Network error:', err)
       return false
     }
-  }, [content, draft.savedDraftId, updateDraft])
+  }, [content, updateDraft])
 
-  const { isSaving, lastSaved, saveError } = useAutoSave(content, autoSaveFn, 2000)
+  // Disable auto-save when editing a scheduled post (uses its own save flow via onSaveEdit)
+  const { lastSaved, saveError } = useAutoSave(
+    content,
+    isEditingScheduledPost ? null : autoSaveFn,
+    2000
+  )
+
+  // Show save status as toast — keeps the card UI clean
+  const prevSaveErrorRef = React.useRef(false)
+  const prevLastSavedRef = React.useRef<Date | null>(null)
+  React.useEffect(() => {
+    if (saveError && !prevSaveErrorRef.current) {
+      toast.error("Auto-save failed", { description: "Your content is safe. Will retry on next change.", duration: 3000 })
+    }
+    prevSaveErrorRef.current = saveError
+  }, [saveError])
+  React.useEffect(() => {
+    if (lastSaved && lastSaved !== prevLastSavedRef.current && prevSaveErrorRef.current) {
+      toast.success("Draft saved", { duration: 2000 })
+    }
+    prevLastSavedRef.current = lastSaved
+  }, [lastSaved])
 
   // Click-outside detection for edit mode
   React.useEffect(() => {
@@ -507,10 +537,12 @@ export function PostComposer({
   }, [isEditing])
 
   // Sync content with draft context (when loaded from template, remix, or saved draft).
+  // Skip when editing a scheduled post — initialContent is the source of truth.
   // We include draft._loadId so that loading a new draft always triggers a sync,
   // even if the content string is identical to the current local state.
   // We intentionally exclude 'content' from deps to prevent infinite loops.
   React.useEffect(() => {
+    if (isEditingScheduledPost) return
     if (draft.content !== undefined && draft.content !== content) {
       setContent(draft.content)
     }
@@ -1130,60 +1162,9 @@ export function PostComposer({
             <ComposeGradientBackdrop mode={composeMode} />
 
             <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <CardTitle>AI Generation</CardTitle>
-                </div>
-                <div className="flex items-center gap-3">
-                  {/* Auto-save indicator */}
-                  {(isSaving || lastSaved || saveError) && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      {isSaving ? (
-                        <>
-                          <IconLoader2 className="size-3 animate-spin" />
-                          <span>Saving...</span>
-                        </>
-                      ) : saveError ? (
-                        <span className="text-destructive">Save failed</span>
-                      ) : lastSaved ? (
-                        <>
-                          <IconCheck className="size-3 text-green-500" />
-                          <span>Saved</span>
-                        </>
-                      ) : null}
-                    </div>
-                  )}
-                  {composeMode === 'advanced' ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        clearConvo()
-                        handleContentChange('')
-                        setIsEditing(false)
-                        setMediaFiles([])
-                      }}
-                      className="text-xs text-muted-foreground gap-1"
-                    >
-                      <IconX className="size-3" />
-                      New Chat
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        clearConvo()
-                        handleContentChange('')
-                        setIsEditing(false)
-                        setMediaFiles([])
-                      }}
-                      className="text-xs text-muted-foreground gap-1"
-                    >
-                      <IconX className="size-3" />
-                      Start Over
-                    </Button>
-                  )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base">AI Generation</CardTitle>
+                <div className="flex items-center gap-2">
                   <ComposeModeToggle mode={composeMode} onModeChange={(newMode) => {
                     if (content.trim() && newMode !== composeMode) {
                       toast.info("Your content has been preserved across the mode switch.", { duration: 3000 })
@@ -1192,10 +1173,25 @@ export function PostComposer({
                   }} />
                 </div>
               </div>
-              <CardDescription>
-                {composeMode === 'basic'
-                  ? 'Generate post content with AI assistance'
-                  : 'Chat with AI to craft your post'}
+              <CardDescription className="flex items-center justify-between">
+                <span>
+                  {composeMode === 'basic'
+                    ? 'Generate post content with AI assistance'
+                    : 'Chat with AI to craft your post'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearConvo()
+                    handleContentChange('')
+                    setIsEditing(false)
+                    setMediaFiles([])
+                    setAiResetKey((k) => k + 1)
+                  }}
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                >
+                  {composeMode === 'advanced' ? 'New Chat' : 'Start Over'}
+                </button>
               </CardDescription>
             </CardHeader>
 
@@ -1253,6 +1249,7 @@ export function PostComposer({
                   initialTone={remixMeta?.tone || aiSuggestion?.tone}
                   initialLength={remixMeta?.length || aiSuggestion?.length}
                   initialContext={remixMeta?.customInstructions || aiSuggestion?.context}
+                  resetKey={aiResetKey}
                 />
               </div>
               <div style={{ display: composeMode === 'advanced' ? undefined : 'none' }}>
@@ -1601,6 +1598,60 @@ export function PostComposer({
                   </AnimatePresence>
                 </div>
 
+                {/* Media Attachment Buttons — always visible, not gated by edit mode */}
+                {!isEditing && (
+                  <div className="flex items-center gap-1 border-t px-4 py-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Add image"
+                          onClick={() => {
+                            const input = document.createElement("input")
+                            input.type = "file"
+                            input.accept = "image/*"
+                            input.multiple = true
+                            input.onchange = (e) => {
+                              const files = (e.target as HTMLInputElement).files
+                              if (files) handleFileSelect(files, "image")
+                            }
+                            input.click()
+                          }}
+                        >
+                          <IconPhoto className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Add image</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Add document"
+                          onClick={() => {
+                            const input = document.createElement("input")
+                            input.type = "file"
+                            input.accept = ".pdf,.doc,.docx"
+                            input.onchange = (e) => {
+                              const files = (e.target as HTMLInputElement).files
+                              if (files) handleFileSelect(files, "document")
+                            }
+                            input.click()
+                          }}
+                        >
+                          <IconFile className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Add document</TooltipContent>
+                    </Tooltip>
+                    <span className="ml-auto text-[10px] text-muted-foreground">
+                      Double-click preview to edit text
+                    </span>
+                  </div>
+                )}
+
                 {/* Media Preview — LinkedIn-style */}
                 {mediaFiles.length > 0 && (() => {
                   const imageFiles = mediaFiles.filter((f) => f.type === "image")
@@ -1821,43 +1872,24 @@ export function PostComposer({
                 </div>
 
                 {/* LinkedIn Action Buttons */}
-                <div className="flex items-center justify-around border-t py-0.5 px-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground flex-1 gap-1.5 text-xs font-medium"
-                    disabled
-                  >
-                    <IconThumbUp className="size-4" />
-                    Like
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground flex-1 gap-1.5 text-xs font-medium"
-                    disabled
-                  >
-                    <IconMessageCircle className="size-4" />
-                    Comment
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground flex-1 gap-1.5 text-xs font-medium"
-                    disabled
-                  >
-                    <IconRepeat className="size-4" />
-                    Repost
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground flex-1 gap-1.5 text-xs font-medium"
-                    disabled
-                  >
-                    <IconSend className="size-4" />
-                    Send
-                  </Button>
+                <div className="flex items-center justify-around border-t py-0.5 px-1">
+                  {[
+                    { icon: IconThumbUp, label: "Like" },
+                    { icon: IconMessageCircle, label: "Comment" },
+                    { icon: IconRepeat, label: "Repost" },
+                    { icon: IconSend, label: "Send" },
+                  ].map(({ icon: Icon, label }) => (
+                    <Button
+                      key={label}
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground flex-1 gap-1 text-[11px] font-medium px-1"
+                      disabled
+                    >
+                      <Icon className="size-3.5 shrink-0" />
+                      <span className="hidden sm:inline">{label}</span>
+                    </Button>
+                  ))}
                 </div>
 
                 {/* Post Now — inside preview card */}
@@ -1950,12 +1982,12 @@ export function PostComposer({
             </CardContent>
 
             {/* Action Buttons */}
-            <CardFooter className="flex justify-between gap-2 border-t pt-4">
-              <div className="flex items-center gap-2">
+            <CardFooter className="flex flex-wrap justify-between gap-2 border-t pt-4">
+              <div className="flex items-center gap-2 shrink-0">
                 <PostActionsMenu content={content} variant="ghost" />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -2013,6 +2045,7 @@ export function PostComposer({
         postPreview={{
           content,
           mediaCount: mediaFiles.length,
+          userProfile,
         }}
         defaultDate={initialScheduleDate}
         isSubmitting={isScheduling}

@@ -550,7 +550,14 @@ function ViralPostsTab() {
           onRemix={handleRemix}
           isFollowing={isFollowing}
           onFollow={followInfluencer}
-          onUnfollow={unfollowInfluencer}
+          onUnfollow={async (urlOrId: string) => {
+            // If it's a URL, find the matching influencer record
+            const inf = influencers.find(
+              i => i.linkedin_url.split('?')[0].toLowerCase() === urlOrId.split('?')[0].toLowerCase()
+                || i.id === urlOrId
+            )
+            if (inf) await unfollowInfluencer(inf.id)
+          }}
           searchMeta={searchMeta}
         />
       </ErrorBoundary>

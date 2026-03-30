@@ -341,7 +341,7 @@ export function PostSeriesComposer({
 
           {/* Action Buttons — only shown when posts exist */}
           {posts.length > 0 && (
-            <CardFooter className="flex justify-between gap-2 border-t pt-4">
+            <CardFooter className="flex flex-wrap justify-between gap-2 border-t pt-4">
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"

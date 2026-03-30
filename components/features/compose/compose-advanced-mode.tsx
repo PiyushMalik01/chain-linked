@@ -22,6 +22,7 @@ import {
   IconPencil,
   IconRefresh,
   IconPlus,
+  IconX,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -85,7 +86,7 @@ export function ComposeAdvancedMode({
   const [hasGeneratedPost, setHasGeneratedPost] = React.useState(false)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
-  const customInputRef = React.useRef<HTMLInputElement>(null)
+  const customInputRef = React.useRef<HTMLTextAreaElement>(null)
 
   const transport = React.useMemo(
     () => new DefaultChatTransport({
@@ -114,10 +115,23 @@ export function ComposeAdvancedMode({
     status,
     error,
     setMessages,
+    stop,
   } = useChat({
     transport,
     messages: initialMessagesRef.current,
   })
+
+  /** Undo last user message and AI response */
+  const handleUndo = React.useCallback(() => {
+    if (messages.length <= 1) return
+    let lastUserIdx = -1
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { lastUserIdx = i; break }
+    }
+    if (lastUserIdx > 0) {
+      setMessages(messages.slice(0, lastUserIdx))
+    }
+  }, [messages, setMessages])
 
   /** Restore chat messages when persisted data loads asynchronously (e.g. route change) */
   const hasRestoredRef = React.useRef(
@@ -229,11 +243,11 @@ export function ComposeAdvancedMode({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-[400px]">
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 320px)', minHeight: '350px', maxHeight: '600px' }}>
       {/* Chat area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-3 pr-1 mb-3 max-h-[500px]"
+        className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pr-2 mb-2 scrollbar-thin"
       >
         {messages.map((message) => {
           if (message.role === 'user') {
@@ -360,21 +374,30 @@ export function ComposeAdvancedMode({
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.2 }}
                                 onSubmit={handleCustomSubmit}
-                                className="flex items-center gap-2 overflow-hidden"
+                                className="flex items-end gap-2"
                               >
-                                <input
+                                <textarea
                                   ref={customInputRef}
                                   value={customInputValue}
-                                  onChange={(e) => setCustomInputValue(e.target.value)}
-                                  placeholder="Type your answer..."
+                                  onChange={(e) => {
+                                    setCustomInputValue(e.target.value)
+                                    e.target.style.height = 'auto'
+                                    e.target.style.height = `${Math.min(e.target.scrollHeight, 80)}px`
+                                  }}
+                                  placeholder="Type your answer... (Shift+Enter for new line)"
                                   disabled={status !== 'ready'}
+                                  rows={1}
                                   className={cn(
-                                    "flex-1 rounded-full border border-destructive/30 bg-background px-3.5 py-2 text-sm",
+                                    "flex-1 rounded-2xl border border-destructive/30 bg-background px-3.5 py-2 text-sm resize-none",
                                     "placeholder:text-muted-foreground",
                                     "focus:outline-none focus:ring-2 focus:ring-destructive/20 focus:border-destructive/50",
                                     "disabled:opacity-50 disabled:cursor-not-allowed"
                                   )}
                                   onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault()
+                                      handleCustomSubmit(e as unknown as React.FormEvent)
+                                    }
                                     if (e.key === 'Escape') {
                                       setCustomInputId(null)
                                       setCustomInputValue('')
@@ -542,6 +565,34 @@ export function ComposeAdvancedMode({
           )}
         </AnimatePresence>
       </div>
+
+      {/* Chat controls — stop & undo */}
+      {(status !== 'ready' || messages.length > 1) && (
+        <div className="flex items-center gap-2 mb-2">
+          {status !== 'ready' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={stop}
+              className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
+            >
+              <IconX className="size-3" />
+              Stop
+            </Button>
+          )}
+          {messages.length > 1 && status === 'ready' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleUndo}
+              className="h-7 text-xs gap-1 text-muted-foreground"
+            >
+              <IconRefresh className="size-3" />
+              Undo
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Chat input — always visible so user can iterate after generation */}
       <form onSubmit={onSubmit} className="flex items-end gap-2">

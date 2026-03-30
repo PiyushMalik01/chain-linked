@@ -274,14 +274,14 @@ function DayCell({
                   <StatusIcon status={post.status} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[200px]">
-                <p className="text-xs font-medium capitalize mb-1">
+              <TooltipContent side="top" className="max-w-[220px] bg-popover text-popover-foreground border shadow-lg p-2.5">
+                <p className="text-xs font-semibold capitalize mb-1 text-foreground">
                   {post.status === 'pending' ? 'Scheduled' : post.status}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-foreground/80 leading-relaxed">
                   {truncateContent(post.content, 60)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-[11px] text-foreground/60 mt-1.5 font-medium">
                   {format(post.scheduledFor, "h:mm a")}
                 </p>
               </TooltipContent>

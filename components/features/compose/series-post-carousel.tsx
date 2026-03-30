@@ -461,6 +461,62 @@ export function SeriesPostCarousel({
             </div>
           )}
 
+          {/* Media Attachment Buttons — always visible when not editing */}
+          {!isEditing && (
+            <div className="flex items-center gap-1 border-t px-4 py-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    aria-label="Add image"
+                    onClick={() => {
+                      const input = document.createElement("input")
+                      input.type = "file"
+                      input.accept = "image/*"
+                      input.multiple = true
+                      input.onchange = (e) => {
+                        const files = (e.target as HTMLInputElement).files
+                        if (files) handleFileAttach(files, 'image')
+                      }
+                      input.click()
+                    }}
+                  >
+                    <IconPhoto className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Add image</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    aria-label="Add document"
+                    onClick={() => {
+                      const input = document.createElement("input")
+                      input.type = "file"
+                      input.accept = ".pdf,.doc,.docx"
+                      input.onchange = (e) => {
+                        const files = (e.target as HTMLInputElement).files
+                        if (files) handleFileAttach(files, 'document')
+                      }
+                      input.click()
+                    }}
+                  >
+                    <IconFile className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Add document</TooltipContent>
+              </Tooltip>
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                Double-click to edit text
+              </span>
+            </div>
+          )}
+
           {/* Media Preview — matches single post LinkedIn-style layout */}
           {currentMedia.length > 0 && (() => {
             const imageMedia = currentMedia.filter((m) => m.type === 'image')

@@ -85,6 +85,10 @@ export async function GET(request: Request) {
     .range(offset, offset + limit - 1)
 
   if (error) {
+    // PGRST116 = no rows found (common for newly followed influencers with no scraped posts yet)
+    if (error.code === 'PGRST116' || error.message?.includes('no rows')) {
+      return NextResponse.json({ posts: [], totalCount: 0 })
+    }
     console.error('Influencer posts fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch influencer posts' }, { status: 500 })
   }

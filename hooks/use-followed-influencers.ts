@@ -109,7 +109,7 @@ function extractLinkedInUsername(url: string): string | null {
  * @returns Normalized URL string
  */
 function normalizeLinkedInUrl(url: string): string {
-  return url.trim().toLowerCase().replace(/\/$/, '')
+  return url.trim().split('?')[0].split('#')[0].toLowerCase().replace(/\/$/, '')
 }
 
 /**

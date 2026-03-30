@@ -47,7 +47,8 @@ interface EditingPost {
  */
 function ComposeContent() {
   const { user, profile } = useAuthContext()
-  const supabase = createClient()
+  const supabaseRef = React.useRef(createClient())
+  const supabase = supabaseRef.current
   const searchParams = useSearchParams()
   const router = useRouter()
   const { confirm, ConfirmDialogComponent } = useConfirmDialog()

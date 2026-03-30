@@ -295,7 +295,13 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
         headline: post.author_headline || '',
         avatar: post.author_profile_picture || undefined,
       },
-      authorUrl: post.author_profile_url || undefined,
+      authorUrl: post.author_profile_url
+        || (post.author_username ? `https://www.linkedin.com/in/${post.author_username}` : undefined)
+        || (post.url ? (() => {
+          // Extract username from post URL: linkedin.com/posts/username_activity-...
+          const match = post.url.match(/linkedin\.com\/(?:posts|pulse)\/([a-zA-Z0-9_-]+?)(?:_|-activity)/)
+          return match ? `https://www.linkedin.com/in/${match[1]}` : undefined
+        })() : undefined),
       content: post.text || '',
       category: inferCategory(post),
       metrics: {
@@ -344,7 +350,18 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
           if (filterByInfluencerId) params.set('influencer_id', filterByInfluencerId)
           if (filters.category !== 'all') params.set('cluster', filters.category)
           const res = await fetch(`/api/influencers/posts?${params}`)
-          if (!res.ok) throw new Error('Failed to fetch influencer posts')
+          if (!res.ok) {
+            // Gracefully handle — newly followed influencers may not have posts yet
+            const errData = await res.json().catch(() => ({}))
+            if (res.status === 500) {
+              // No posts available yet — show empty state instead of error
+              setPosts(append ? prev => prev : [])
+              setPagination(prev => ({ ...prev, hasMore: false, isLoadingMore: false }))
+              setIsLoading(false)
+              return
+            }
+            throw new Error(errData.error || 'Failed to fetch influencer posts')
+          }
 
           const { posts: influencerPosts, totalCount } = await res.json()
 

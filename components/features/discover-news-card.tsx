@@ -214,13 +214,13 @@ function FeaturedNewsCard({
       </p>
 
       {/* Tags + Actions */}
-      <div className="flex items-center justify-between pt-1">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {article.relevanceTags.slice(0, 3).map((tag) => (
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="flex items-center gap-1 flex-wrap overflow-hidden max-h-[22px]">
+          {article.relevanceTags.slice(0, 2).map((tag) => (
             <Badge
               key={tag}
               variant="secondary"
-              className="text-[10px] px-1.5 py-0 h-4"
+              className="text-[9px] px-1.5 py-0 h-4 truncate max-w-[120px]"
             >
               {tag}
             </Badge>

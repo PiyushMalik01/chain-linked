@@ -108,11 +108,13 @@ export default function DashboardLayout({
   const { user, isLoading, isAuthenticated } = useAuthContext()
 
   const [ready, setReady] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
 
   useEffect(() => {
     if (isLoading) return
 
     if (!isAuthenticated || !user) {
+      setRedirecting(true)
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`)
       return
     }
@@ -121,13 +123,13 @@ export default function DashboardLayout({
     setReady(true)
   }, [isLoading, isAuthenticated, user, pathname, router])
 
-  // Only show the loading state before the first successful auth check.
-  // Once ready is true, never flash the loading screen again — this prevents
-  // the blank/black page on client-side navigation when isLoading briefly flickers.
-  if (!ready) {
+  // Show full loading only while redirecting to login (unauthenticated)
+  if (redirecting) {
     return <DashboardLoadingState />
   }
 
+  // Show the dashboard shell immediately — sidebar, header visible while content loads.
+  // This gives instant visual feedback instead of a blank spinner for 5-8 seconds.
   return (
     <DashboardProvider>
       <a
@@ -144,14 +146,21 @@ export default function DashboardLayout({
           } as React.CSSProperties
         }
       >
-        <DashboardTour />
+        {ready && <DashboardTour />}
         <AppSidebar variant="inset" />
         <SidebarInset>
           <SiteHeader />
-          <DataSyncBanner />
+          {ready && <DataSyncBanner />}
           <main id="main-content" className="flex flex-1 flex-col">
             <div className="@container/main flex flex-1 flex-col gap-2">
-              {children}
+              {ready ? children : (
+                <div className="flex flex-1 items-center justify-center py-20">
+                  <div className="flex flex-col items-center gap-3">
+                    <IconLoader2 className="h-6 w-6 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                  </div>
+                </div>
+              )}
             </div>
           </main>
         </SidebarInset>

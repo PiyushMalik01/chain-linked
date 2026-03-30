@@ -7,7 +7,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -68,7 +68,8 @@ export default function InviteAcceptPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [existingTeamName, setExistingTeamName] = useState<string | null>(null)
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   // Load invitation and check auth status
   useEffect(() => {
