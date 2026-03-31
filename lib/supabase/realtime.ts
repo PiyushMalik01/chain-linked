@@ -54,7 +54,9 @@ export function subscribeToTables(
   configs: SubscriptionConfig[],
   onData: () => void
 ): RealtimeChannel {
-  let channel = supabase.channel(channelName)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase's `.on()` overloads
+  // change the return type after the first call, making loops impossible without a cast.
+  let channel: any = supabase.channel(channelName)
 
   for (const config of configs) {
     channel = channel.on(
@@ -70,5 +72,5 @@ export function subscribeToTables(
   }
 
   channel.subscribe()
-  return channel
+  return channel as RealtimeChannel
 }
