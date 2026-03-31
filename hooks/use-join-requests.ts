@@ -7,7 +7,8 @@
  * @module hooks/use-join-requests
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 // ============================================================================
@@ -113,6 +114,7 @@ export function useJoinRequests(params?: { teamId?: string }): UseJoinRequestsRe
   const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const supabaseRef = useRef(createClient())
 
   /**
    * Fetch the current user's pending request and team's requests
@@ -148,6 +150,28 @@ export function useJoinRequests(params?: { teamId?: string }): UseJoinRequestsRe
   useEffect(() => {
     fetchRequests()
   }, [fetchRequests])
+
+  // Real-time subscription: auto-refetch when team_join_requests change
+  useEffect(() => {
+    if (!teamId) return
+
+    const supabase = supabaseRef.current
+    const channel = supabase
+      .channel(`join-requests-rt-${teamId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'team_join_requests',
+        filter: `team_id=eq.${teamId}`,
+      }, () => {
+        fetchRequests()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [teamId, fetchRequests])
 
   /**
    * Submit a join request
