@@ -622,8 +622,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(
-      { error: 'Failed to remix post. Please try again.' },
+      { error: `Failed to remix post: ${errorMessage}` },
       { status: 500 }
     )
   }
