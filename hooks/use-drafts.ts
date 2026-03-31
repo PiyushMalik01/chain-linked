@@ -9,6 +9,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { subscribeToTables } from '@/lib/supabase/realtime'
 import { toast } from 'sonner'
 
 /**
@@ -115,6 +116,7 @@ export function useDrafts(): UseDraftsReturn {
   const [drafts, setDrafts] = useState<SavedDraft[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
 
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
@@ -131,8 +133,10 @@ export function useDrafts(): UseDraftsReturn {
       if (!user) {
         setError('Not authenticated')
         setDrafts([])
+        setUserId(null)
         return
       }
+      setUserId(user.id)
 
       // Fetch drafts from generated_posts
       const { data, error: fetchError } = await supabase
@@ -299,6 +303,25 @@ export function useDrafts(): UseDraftsReturn {
   useEffect(() => {
     fetchDrafts()
   }, [fetchDrafts])
+
+  // Real-time subscriptions: auto-refetch when drafts or scheduled posts change
+  useEffect(() => {
+    if (!userId) return
+
+    const channel = subscribeToTables(
+      supabase,
+      `drafts-rt-${userId}`,
+      [
+        { table: 'generated_posts', filter: `user_id=eq.${userId}` },
+        { table: 'scheduled_posts', filter: `user_id=eq.${userId}` },
+      ],
+      () => { fetchDrafts() }
+    )
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, supabase, fetchDrafts])
 
   return {
     drafts,
