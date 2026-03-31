@@ -6,7 +6,8 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import type { TeamMemberRole } from '@/types/database'
 
 /**
@@ -107,6 +108,7 @@ export function useTeamInvitations(options: UseTeamInvitationsOptions): UseTeamI
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const supabaseRef = useRef(createClient())
 
   /**
    * Fetch invitations for the team
@@ -284,19 +286,26 @@ export function useTeamInvitations(options: UseTeamInvitationsOptions): UseTeamI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId])
 
-  // Refetch when window regains focus (catches accepted invitations)
+  // Real-time subscription: auto-refetch when team_invitations change
   useEffect(() => {
     if (!teamId) return
-    const handleFocus = () => { fetchInvitations() }
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [teamId, fetchInvitations])
 
-  // Poll every 30 seconds to catch status changes
-  useEffect(() => {
-    if (!teamId) return
-    const interval = setInterval(fetchInvitations, 30000)
-    return () => clearInterval(interval)
+    const supabase = supabaseRef.current
+    const channel = supabase
+      .channel(`team-invitations-rt-${teamId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'team_invitations',
+        filter: `team_id=eq.${teamId}`,
+      }, () => {
+        fetchInvitations()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [teamId, fetchInvitations])
 
   return {
