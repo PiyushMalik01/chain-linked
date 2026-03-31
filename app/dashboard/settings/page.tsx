@@ -51,6 +51,7 @@ import {
 import type { BrandKit as SavedBrandKit } from "@/types/brand-kit"
 import { trackSettingsChanged, trackLinkedInAction } from "@/lib/analytics"
 import { ApiKeySettings } from "@/components/features/api-key-settings"
+import { ChatGPTConnection } from "@/components/features/settings/chatgpt-connection"
 import { LinkedInStatusBadge } from "@/components/features/linkedin-status-badge"
 import { SettingsSkeleton } from "@/components/skeletons/page-skeletons"
 
@@ -1197,6 +1198,9 @@ function SettingsContent() {
     <div className="space-y-6">
       {/* API Keys */}
       <ApiKeySettings />
+
+      {/* ChatGPT OAuth Connection */}
+      <ChatGPTConnection />
 
       {/* Brand Kit */}
       {brandKitLoading ? (

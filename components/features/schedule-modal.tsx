@@ -181,10 +181,16 @@ function to12Hour(hour: number): { hour: number; period: "AM" | "PM" } {
 }
 
 /**
- * Mini LinkedIn card post preview.
+ * Mini LinkedIn card post preview with expand/collapse toggle.
+ * Shows first 4 lines by default; click "Show more" to reveal full content.
+ * @param props.postPreview - The post preview data to display
+ * @returns A collapsible LinkedIn-style card preview
  */
 function CollapsiblePostPreview({ postPreview }: { postPreview: PostPreview }) {
+  const [isExpanded, setIsExpanded] = React.useState(false)
   const profile = postPreview.userProfile
+  const cleanedContent = cleanContentForPreview(postPreview.content)
+  const isLongPost = cleanedContent.length > 200
 
   return (
     <div className="rounded-lg border bg-white dark:bg-zinc-900 dark:border-zinc-700/60 shadow-sm overflow-hidden">
@@ -209,10 +215,26 @@ function CollapsiblePostPreview({ postPreview }: { postPreview: PostPreview }) {
           </div>
         )}
 
-        {/* Content */}
-        <div className="text-[13px] leading-relaxed whitespace-pre-wrap break-words line-clamp-5">
-          {truncateContent(postPreview.content, 250)}
+        {/* Content — scrollable when expanded, clamped when collapsed */}
+        <div
+          className={cn(
+            "text-[13px] leading-relaxed whitespace-pre-wrap break-words",
+            isExpanded ? "max-h-[200px] overflow-y-auto scrollbar-thin" : "line-clamp-4"
+          )}
+        >
+          {cleanedContent}
         </div>
+
+        {/* Show more/less toggle */}
+        {isLongPost && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs font-medium text-[#0A66C2] hover:underline"
+          >
+            {isExpanded ? "Show less" : "Show more"}
+          </button>
+        )}
 
         {/* Attachments */}
         {postPreview.mediaCount != null && postPreview.mediaCount > 0 && (
