@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/server'
 import {
   pollDeviceToken,
   exchangeCodeForTokens,
+  exchangeTokenForApiKey,
   parseOpenAIAuthClaims,
 } from '@/lib/auth/openai-oauth'
 
@@ -102,18 +103,30 @@ export async function POST() {
       const accountId = (claims.chatgpt_account_id as string) || null
       const planType = (claims.chatgpt_plan_type as string) || null
 
+      // Exchange id_token for a real OpenAI API key (RFC 8693)
+      // This converts the OAuth token into a standard sk-... key
+      // that works with api.openai.com/v1/chat/completions
+      let openaiApiKey: string
+      try {
+        openaiApiKey = await exchangeTokenForApiKey(tokens.idToken)
+      } catch (exchangeError) {
+        console.error('[auth/openai/poll] API key exchange failed:', exchangeError)
+        // Fallback: use access_token directly (may work with Codex backend)
+        openaiApiKey = tokens.accessToken
+      }
+
       const tokenExpiresAt = new Date(
         Date.now() + tokens.expiresIn * 1000
       ).toISOString()
 
-      // Upsert connection with OAuth tokens
+      // Upsert connection with the exchanged API key
       const { error: upsertError } = await supabase
         .from('openai_connections')
         .upsert(
           {
             user_id: user.id,
             auth_method: 'oauth-device',
-            api_key: null, // api_key is only for manual entries; OAuth uses access_token
+            api_key: openaiApiKey, // The real OpenAI API key (from RFC 8693 exchange)
             access_token: tokens.accessToken,
             refresh_token: tokens.refreshToken,
             id_token: tokens.idToken,

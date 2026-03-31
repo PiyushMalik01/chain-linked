@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       )
     }
     const aiApiKey = resolved.apiKey
-    const isCodex = resolved.provider === 'codex'
+    const isOpenAIDirect = resolved.provider === 'openai-direct'
 
     // Build system prompt for selection editing
     let systemPrompt = `You are a precise text editor for LinkedIn posts. Your job is to edit the selected text according to the user's instruction.
@@ -114,19 +114,13 @@ ${ANTI_AI_PROMPT_CONSTRAINTS}`
     }
 
     const provider = createOpenAICompatible({
-      name: isCodex ? 'codex' : 'openrouter',
+      name: isOpenAIDirect ? 'openai' : 'openrouter',
       apiKey: aiApiKey,
-      baseURL: isCodex ? 'https://chatgpt.com/backend-api/codex/v1' : 'https://openrouter.ai/api/v1',
-      ...(isCodex && {
-        headers: {
-          'chatgpt-account-id': resolved.accountId || '',
-          'originator': 'codex_cli_rs',
-        },
-      }),
+      baseURL: isOpenAIDirect ? 'https://api.openai.com/v1' : 'https://openrouter.ai/api/v1',
     })
 
     const result = await generateText({
-      model: provider(isCodex ? 'gpt-5.4' : 'openai/gpt-5.4'),
+      model: provider(isOpenAIDirect ? 'gpt-4o' : 'openai/gpt-5.4'),
       system: systemPrompt,
       prompt: `## Full Post Content (for context)
 ${fullPostContent}

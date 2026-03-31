@@ -196,7 +196,7 @@ export async function POST(request: Request) {
       )
     }
     const aiApiKey = resolved.apiKey
-    const isCodex = resolved.provider === 'codex'
+    const isOpenAIDirect = resolved.provider === 'openai-direct'
 
     const userContext = await getUserContext(user.id, tone)
     let systemPrompt = buildComposeConversationPrompt(userContext, tone)
@@ -238,15 +238,9 @@ export async function POST(request: Request) {
     }
 
     const provider = createOpenAICompatible({
-      name: isCodex ? 'codex' : 'openrouter',
+      name: isOpenAIDirect ? 'openai' : 'openrouter',
       apiKey: aiApiKey,
-      baseURL: isCodex ? 'https://chatgpt.com/backend-api/codex/v1' : 'https://openrouter.ai/api/v1',
-      ...(isCodex && {
-        headers: {
-          'chatgpt-account-id': resolved.accountId || '',
-          'originator': 'codex_cli_rs',
-        },
-      }),
+      baseURL: isOpenAIDirect ? 'https://api.openai.com/v1' : 'https://openrouter.ai/api/v1',
     })
 
     const tools = {
@@ -278,7 +272,7 @@ export async function POST(request: Request) {
     const startTime = Date.now()
 
     const result = streamText({
-      model: provider(isCodex ? 'gpt-5.4' : 'openai/gpt-5.4'),
+      model: provider(isOpenAIDirect ? 'gpt-4o' : 'openai/gpt-5.4'),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       temperature: 0.8,

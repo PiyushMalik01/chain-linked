@@ -272,6 +272,43 @@ export async function refreshTokens(
 }
 
 // ---------------------------------------------------------------------------
+// Token exchange: id_token → OpenAI API key (RFC 8693)
+// ---------------------------------------------------------------------------
+
+/**
+ * Exchange an OAuth id_token for an actual OpenAI API key.
+ * Uses the RFC 8693 token-exchange grant type.
+ * This converts the OAuth credential into a standard sk-... API key
+ * that works with api.openai.com/v1/chat/completions.
+ *
+ * @param idToken - The id_token JWT from the code exchange.
+ * @returns The OpenAI API key string (sk-...).
+ */
+export async function exchangeTokenForApiKey(idToken: string): Promise<string> {
+  const body = new URLSearchParams({
+    grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+    subject_token: idToken,
+    subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+    requested_token: 'openai-api-key',
+    client_id: CODEX_CLIENT_ID,
+  })
+
+  const response = await fetch(OPENAI_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`API key exchange failed (${response.status}): ${errorText}`)
+  }
+
+  const data = await response.json()
+  return data.access_token
+}
+
+// ---------------------------------------------------------------------------
 // JWT claims parser (lightweight, no verification)
 // ---------------------------------------------------------------------------
 
