@@ -1908,6 +1908,96 @@ export type Database = {
         }
         Relationships: []
       }
+      openai_connections: {
+        Row: {
+          id: string
+          user_id: string
+          auth_method: string
+          api_key: string | null
+          access_token: string | null
+          refresh_token: string | null
+          id_token: string | null
+          token_expires_at: string | null
+          email: string | null
+          account_id: string | null
+          plan_type: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          auth_method?: string
+          api_key?: string | null
+          access_token?: string | null
+          refresh_token?: string | null
+          id_token?: string | null
+          token_expires_at?: string | null
+          email?: string | null
+          account_id?: string | null
+          plan_type?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          auth_method?: string
+          api_key?: string | null
+          access_token?: string | null
+          refresh_token?: string | null
+          id_token?: string | null
+          token_expires_at?: string | null
+          email?: string | null
+          account_id?: string | null
+          plan_type?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      openai_device_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          device_auth_id: string
+          user_code: string
+          code_verifier: string | null
+          verification_url: string
+          expires_at: string
+          poll_interval: number
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          device_auth_id: string
+          user_code: string
+          code_verifier?: string | null
+          verification_url: string
+          expires_at: string
+          poll_interval?: number
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          device_auth_id?: string
+          user_code?: string
+          code_verifier?: string | null
+          verification_url?: string
+          expires_at?: string
+          poll_interval?: number
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       post_analytics: {
         Row: {
           activity_urn: string | null
