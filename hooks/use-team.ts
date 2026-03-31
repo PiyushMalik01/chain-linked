@@ -7,6 +7,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import type { Team, TeamMemberRole } from '@/types/database'
 
 /**
@@ -106,6 +107,7 @@ export function useTeam(): UseTeamReturn {
   // Ref to avoid stale closure in fetchTeams when checking currentTeam
   const currentTeamRef = useRef(currentTeam)
   currentTeamRef.current = currentTeam
+  const supabaseRef = useRef(createClient())
 
   /**
    * Fetch user's teams from API
@@ -336,6 +338,29 @@ export function useTeam(): UseTeamReturn {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTeam?.id])
+
+  // Real-time subscription: auto-refetch members when team_members change
+  useEffect(() => {
+    const teamId = currentTeam?.id
+    if (!teamId) return
+
+    const supabase = supabaseRef.current
+    const channel = supabase
+      .channel(`team-members-rt-${teamId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'team_members',
+        filter: `team_id=eq.${teamId}`,
+      }, () => {
+        fetchMembers(teamId)
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [currentTeam?.id, fetchMembers])
 
   return {
     teams,
