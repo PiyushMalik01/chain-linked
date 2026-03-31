@@ -468,6 +468,8 @@ export function PostComposer({
         target.closest('[data-radix-menu-content]') ||
         target.closest('[role="dialog"]')
       ) return
+      // Don't exit if clicking buttons/actions inside the same card (Save Draft, Schedule, etc.)
+      if (target.closest('button') || target.closest('[role="button"]')) return
       if (editingZoneRef.current && !editingZoneRef.current.contains(target)) {
         setMentionOpen(false)
         setIsEditing(false)

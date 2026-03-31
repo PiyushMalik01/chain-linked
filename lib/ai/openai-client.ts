@@ -106,9 +106,13 @@ export class OpenAIError extends Error {
  * const client = createOpenAIClient({ apiKey: 'sk-or-v1-...' })
  */
 export function createOpenAIClient(config: OpenAIClientConfig): OpenAI {
+  // Auto-detect: if key starts with sk- it's a direct OpenAI key, use OpenAI API directly
+  const isDirectOpenAIKey = config.apiKey?.startsWith('sk-') && !config.apiKey?.startsWith('sk-or-')
+  const resolvedBaseURL = config.baseURL ?? (isDirectOpenAIKey ? 'https://api.openai.com/v1' : OPENROUTER_BASE_URL)
+
   const client = new OpenAI({
     apiKey: config.apiKey,
-    baseURL: config.baseURL ?? OPENROUTER_BASE_URL,
+    baseURL: resolvedBaseURL,
     timeout: config.timeout ?? 30000,
     maxRetries: config.maxRetries ?? 2,
     defaultHeaders: {
@@ -173,8 +177,22 @@ export async function chatCompletion(
   } = request
 
   try {
+    // If using direct OpenAI API, convert OpenRouter model paths to OpenAI model names
+    const isDirectOpenAI = (client as unknown as { baseURL?: string }).baseURL?.includes('api.openai.com')
+    let resolvedModel = model
+    if (isDirectOpenAI && model.startsWith('openai/')) {
+      // Map OpenRouter paths to OpenAI model names
+      const modelMap: Record<string, string> = {
+        'openai/gpt-5.4': 'gpt-4o',
+        'openai/gpt-4o': 'gpt-4o',
+        'openai/gpt-4o-mini': 'gpt-4o-mini',
+        'openai/gpt-4-turbo': 'gpt-4-turbo',
+      }
+      resolvedModel = modelMap[model] || model.replace('openai/', '')
+    }
+
     const completion = await client.chat.completions.create({
-      model,
+      model: resolvedModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },

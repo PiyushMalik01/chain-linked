@@ -239,7 +239,12 @@ export function RemixDialog({
       onClose()
     } catch (err) {
       console.error('Remix error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to remix post. Please try again.')
+      const msg = err instanceof Error ? err.message : 'Failed to remix post.'
+      if (msg.includes('API key') || msg.includes('api_key') || msg.includes('Invalid')) {
+        setError('AI service unavailable. Please check your API key in Settings or try again later.')
+      } else {
+        setError(msg)
+      }
       setIsRemixing(false)
     }
   }

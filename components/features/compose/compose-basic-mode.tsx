@@ -153,10 +153,8 @@ export function ComposeBasicMode({
       return
     }
 
-    if (!hasApiKey) {
-      setError('API key required. Add it in Settings.')
-      return
-    }
+    // API key check removed — server falls back to OPENROUTER_API_KEY env var
+    // if user doesn't have their own key configured
 
     setIsGenerating(true)
     setError(null)
