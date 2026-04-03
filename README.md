@@ -612,7 +612,7 @@ ChainLinked is designed for deployment on **Vercel**.
 - **Node.js Version**: 20.x
 - Set all environment variables from `.env.example` in the Vercel dashboard
 - Configure the Inngest Vercel integration for automatic webhook registration
-- Set up Vercel Cron for the `CRON_SECRET`-protected endpoints
+- Set up Vercel Cron for the `CRON_SECRET` protected endpoints
 
 ### Inngest Production Setup
 
