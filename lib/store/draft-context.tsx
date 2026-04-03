@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { DraftState as DbDraftState } from "@/types/draft-state"
 
 /**
  * Represents a media file attached to a draft
@@ -108,7 +109,7 @@ interface DraftContextValue {
   /** Load content for remixing, optionally with AI suggestion context and remix settings */
   loadForRemix: (postId: string, content: string, authorName?: string, aiSuggestion?: AISuggestion, remixMeta?: RemixMeta) => void
   /** Load a saved draft from the drafts list, fully replacing current state */
-  loadSavedDraft: (draftId: string, content: string, options?: { topic?: string | null; tone?: string | null; additionalContext?: string | null }) => void
+  loadSavedDraft: (draftId: string, content: string, options?: { topic?: string | null; tone?: string | null; additionalContext?: string | null; draftState?: DbDraftState | null }) => void
   /** Clear the entire draft */
   clearDraft: () => void
   /** Check if draft has unsaved content */
@@ -282,19 +283,44 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const loadIdCounter = React.useRef(0)
 
   const loadSavedDraft = React.useCallback(
-    (draftId: string, content: string, options?: { topic?: string | null; tone?: string | null; additionalContext?: string | null }) => {
+    (draftId: string, content: string, options?: { topic?: string | null; tone?: string | null; additionalContext?: string | null; draftState?: DbDraftState | null }) => {
       loadIdCounter.current += 1
+      const ds = options?.draftState
+
+      // Restore scheduled date from compose draft state
+      const scheduledFor = ds?.type === 'compose' && ds.scheduledFor
+        ? new Date(ds.scheduledFor)
+        : undefined
+
+      // Restore remix metadata from remix draft state
+      const remixMetaFromState: RemixMeta | undefined =
+        ds?.type === 'remix'
+          ? {
+              tone: ds.remixTone || '',
+              length: ds.remixLength || '',
+              customInstructions: ds.customInstructions || '',
+              originalContent: ds.originalContentPreview || '',
+            }
+          : undefined
+
+      // Store font style in localStorage for the composer to restore
+      if (ds?.type === 'compose' && ds.fontStyle) {
+        try { localStorage.setItem('chainlinked-draft-font-style', ds.fontStyle) } catch { /* ignore */ }
+      } else {
+        try { localStorage.removeItem('chainlinked-draft-font-style') } catch { /* ignore */ }
+      }
+
       setDraft({
         content,
         mediaFiles: [],
-        scheduledFor: undefined,
+        scheduledFor,
         templateId: undefined,
-        sourcePostId: draftId,
-        sourceAuthor: undefined,
+        sourcePostId: ds?.type === 'remix' ? ds.sourcePostId || draftId : draftId,
+        sourceAuthor: ds?.type === 'remix' ? ds.sourceAuthor : undefined,
         aiSuggestion: options?.topic
           ? { topic: options.topic, tone: options.tone || '', context: options.additionalContext || '' }
           : undefined,
-        remixMeta: undefined,
+        remixMeta: remixMetaFromState,
         savedDraftId: draftId,
         lastModified: Date.now(),
         _loadId: loadIdCounter.current,

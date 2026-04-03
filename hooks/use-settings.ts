@@ -149,7 +149,7 @@ export function useSettings(): UseSettingsReturn {
       // Fetch user profile from profiles table (include linkedin_connected_at for OAuth status)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, avatar_url, linkedin_connected_at')
+        .select('id, full_name, email, avatar_url, linkedin_avatar_url, linkedin_connected_at')
         .eq('id', authUser.id)
         .single()
 
@@ -162,7 +162,7 @@ export function useSettings(): UseSettingsReturn {
         setUser({
           name: profileData.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
           email: profileData.email || authUser.email || '',
-          avatarUrl: profileData.avatar_url || undefined,
+          avatarUrl: profileData.linkedin_avatar_url || profileData.avatar_url || undefined,
           linkedinProfileUrl: undefined, // Not stored in profiles table
         })
       } else {

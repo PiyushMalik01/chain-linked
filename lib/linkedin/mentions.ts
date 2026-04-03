@@ -27,9 +27,9 @@ export interface ParsedMention {
 }
 
 /**
- * UGC API mention attribute
+ * UGC API mention attribute for a person
  */
-export interface MentionAttribute {
+export interface MemberMentionAttribute {
   start: number
   length: number
   value: {
@@ -38,6 +38,24 @@ export interface MentionAttribute {
     }
   }
 }
+
+/**
+ * UGC API mention attribute for a company/organization
+ */
+export interface CompanyMentionAttribute {
+  start: number
+  length: number
+  value: {
+    'com.linkedin.common.CompanyAttributedEntity': {
+      company: string
+    }
+  }
+}
+
+/**
+ * UGC API mention attribute (person or company)
+ */
+export type MentionAttribute = MemberMentionAttribute | CompanyMentionAttribute
 
 /**
  * Parse all mention tokens from text
@@ -104,15 +122,28 @@ export function buildUgcMentionAttributes(text: string): {
       mention.name +
       plainText.slice(adjustedStart + token.length)
 
-    attributes.push({
-      start: adjustedStart,
-      length: mention.name.length,
-      value: {
-        'com.linkedin.common.MemberAttributedEntity': {
-          member: mention.urn,
+    // Use CompanyAttributedEntity for organization URNs, MemberAttributedEntity for persons
+    if (mention.urn.includes('urn:li:organization:')) {
+      attributes.push({
+        start: adjustedStart,
+        length: mention.name.length,
+        value: {
+          'com.linkedin.common.CompanyAttributedEntity': {
+            company: mention.urn,
+          },
         },
-      },
-    })
+      })
+    } else {
+      attributes.push({
+        start: adjustedStart,
+        length: mention.name.length,
+        value: {
+          'com.linkedin.common.MemberAttributedEntity': {
+            member: mention.urn,
+          },
+        },
+      })
+    }
 
     // Update offset: token is longer than name
     offset += token.length - mention.name.length

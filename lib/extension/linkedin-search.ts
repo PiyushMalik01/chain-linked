@@ -14,14 +14,16 @@
 export interface ExtensionMentionResult {
   /** Display name */
   name: string
-  /** LinkedIn URN (urn:li:person:xxx) */
+  /** LinkedIn URN (urn:li:person:xxx or urn:li:organization:xxx) */
   urn: string
-  /** Professional headline */
+  /** Professional headline (person) or tagline/industry (company) */
   headline: string | null
-  /** Profile picture URL */
+  /** Profile picture or company logo URL */
   avatarUrl: string | null
-  /** Public profile identifier */
+  /** Public profile identifier (person) or universal name slug (company) */
   publicIdentifier: string | null
+  /** Entity type — person or company/page */
+  type?: 'person' | 'company'
 }
 
 /** Counter for unique request IDs */

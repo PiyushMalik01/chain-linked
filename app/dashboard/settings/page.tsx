@@ -975,11 +975,15 @@ function SettingsContent() {
               id="profile-email"
               type="email"
               value={profileEmail}
-              onChange={(e) => setProfileEmail(e.target.value)}
+              readOnly
+              disabled
               placeholder="Enter your email"
-              className="pl-10"
+              className="pl-10 bg-muted cursor-not-allowed"
             />
           </div>
+          <p className="text-xs text-muted-foreground">
+            Your email address cannot be changed here.
+          </p>
         </div>
 
         {/* Save */}
@@ -1366,63 +1370,71 @@ function SettingsContent() {
                   )}
                 </div>
                 <div className="flex-1 space-y-3">
-                  {/* File upload */}
-                  <div>
-                    <input
-                      ref={logoFileRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoFileSelect}
-                      className="hidden"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => logoFileRef.current?.click()}
-                      disabled={logoUploading}
-                    >
-                      {logoUploading ? (
-                        <IconLoader2 className="size-4 animate-spin" />
-                      ) : (
-                        <IconUpload className="size-4" />
+                  {canManageBrandKit ? (
+                    <>
+                      {/* File upload */}
+                      <div>
+                        <input
+                          ref={logoFileRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoFileSelect}
+                          className="hidden"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => logoFileRef.current?.click()}
+                          disabled={logoUploading}
+                        >
+                          {logoUploading ? (
+                            <IconLoader2 className="size-4 animate-spin" />
+                          ) : (
+                            <IconUpload className="size-4" />
+                          )}
+                          Upload Logo
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          PNG, SVG, or JPG (max 2MB)
+                        </p>
+                      </div>
+                      {/* URL input */}
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Or paste a logo URL..."
+                          value={logoUrlInput}
+                          onChange={(e) => setLogoUrlInput(e.target.value)}
+                          className="text-sm"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleLogoUrlApply}
+                          disabled={!logoUrlInput.trim()}
+                        >
+                          Apply
+                        </Button>
+                      </div>
+                      {/* Remove logo */}
+                      {brandKit.logoUrl && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground"
+                          onClick={() => {
+                            setBrandKit((prev) => ({ ...prev, logoUrl: "" }))
+                            setLogoUrlInput("")
+                          }}
+                        >
+                          <IconTrash className="size-4" />
+                          Remove Logo
+                        </Button>
                       )}
-                      Upload Logo
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      PNG, SVG, or JPG (max 2MB)
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground pt-2">
+                      Only team admins and owners can change the logo.
                     </p>
-                  </div>
-                  {/* URL input */}
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Or paste a logo URL..."
-                      value={logoUrlInput}
-                      onChange={(e) => setLogoUrlInput(e.target.value)}
-                      className="text-sm"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleLogoUrlApply}
-                      disabled={!logoUrlInput.trim()}
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                  {/* Remove logo — only admins/owners can remove the team logo */}
-                  {brandKit.logoUrl && canManageBrandKit && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground"
-                      onClick={() => {
-                        setBrandKit((prev) => ({ ...prev, logoUrl: "" }))
-                        setLogoUrlInput("")
-                      }}
-                    >
-                      <IconTrash className="size-4" />
-                      Remove Logo
-                    </Button>
                   )}
                 </div>
               </div>

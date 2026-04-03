@@ -141,9 +141,9 @@ export interface LinkedInAuthor {
 }
 
 /**
- * UGC mention attribute for tagging people in posts
+ * UGC mention attribute for tagging a person in posts
  */
-export interface LinkedInMentionAttribute {
+export interface LinkedInMemberMentionAttribute {
   start: number
   length: number
   value: {
@@ -152,6 +152,24 @@ export interface LinkedInMentionAttribute {
     }
   }
 }
+
+/**
+ * UGC mention attribute for tagging a company/organization in posts
+ */
+export interface LinkedInCompanyMentionAttribute {
+  start: number
+  length: number
+  value: {
+    'com.linkedin.common.CompanyAttributedEntity': {
+      company: string
+    }
+  }
+}
+
+/**
+ * UGC mention attribute (person or company)
+ */
+export type LinkedInMentionAttribute = LinkedInMemberMentionAttribute | LinkedInCompanyMentionAttribute
 
 /**
  * LinkedIn share commentary (text content with optional mention attributes)

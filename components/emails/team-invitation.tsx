@@ -22,7 +22,7 @@ import {
   headerStyle,
   headerHeading,
   headerSubtext,
-  GRADIENT_TEAM,
+  GRADIENT_BRAND,
   content,
   card,
   buttons,
@@ -97,7 +97,7 @@ export function TeamInvitationEmail({
       <Body style={layout.main}>
         <Container style={layout.container}>
           {/* Gradient header */}
-          <Section style={headerStyle(GRADIENT_TEAM)}>
+          <Section style={headerStyle(GRADIENT_BRAND)}>
             {companyLogoUrl ? (
               <Img
                 src={companyLogoUrl}
@@ -216,15 +216,15 @@ const teamLogoText = {
 }
 
 const roleCard = {
-  backgroundColor: '#F5F3FF',
+  backgroundColor: colors.infoBg,
   borderRadius: '12px',
   padding: '20px 24px',
   margin: '24px 0',
-  border: '1px solid #DDD6FE',
+  border: `1px solid ${colors.infoBorder}`,
 }
 
 const roleBadge = {
-  color: '#7C3AED',
+  color: colors.brand,
   fontSize: '13px',
   fontWeight: '700' as const,
   textTransform: 'uppercase' as const,
@@ -233,7 +233,7 @@ const roleBadge = {
 }
 
 const acceptButton = {
-  backgroundColor: '#7C3AED',
+  backgroundColor: colors.brand,
   borderRadius: '10px',
   color: '#FFFFFF',
   fontSize: '15px',

@@ -1362,6 +1362,7 @@ async function handleMentionSearch(query: string): Promise<{
     headline: string | null;
     avatarUrl: string | null;
     publicIdentifier: string | null;
+    type: 'person' | 'company';
   }>;
   error?: string;
 }> {
@@ -1411,10 +1412,11 @@ async function handleMentionSearch(query: string): Promise<{
     let response: Response | null = null;
 
     // Strategy 1: typeahead/hitsV2 — newer version of the deprecated typeahead/hits
+    // Request both PEOPLE and COMPANY results for blended mention search
     response = await tryVoyagerFetch(
       'https://www.linkedin.com/voyager/api/typeahead/hitsV2' +
         `?q=blended&query=${encodedQuery}` +
-        '&count=10&type=PEOPLE',
+        '&count=10&types=List(PEOPLE,COMPANY)',
       headers,
       'typeahead/hitsV2',
     );
@@ -1425,7 +1427,7 @@ async function handleMentionSearch(query: string): Promise<{
       for (const queryId of SEARCH_QUERY_IDS) {
         response = await tryVoyagerFetch(
           'https://www.linkedin.com/voyager/api/graphql' +
-            `?variables=(start:0,origin:SWITCH_SEARCH_VERTICAL,query:(keywords:${encodedQuery},flagshipSearchIntent:SEARCH_SRP,queryParameters:List((key:resultType,value:List(PEOPLE))),includeFiltersInResponse:false))` +
+            `?variables=(start:0,origin:SWITCH_SEARCH_VERTICAL,query:(keywords:${encodedQuery},flagshipSearchIntent:SEARCH_SRP,queryParameters:List((key:resultType,value:List(PEOPLE,COMPANY))),includeFiltersInResponse:false))` +
             `&queryId=${queryId}`,
           headers,
           `graphql(${queryId.split('.')[1]?.substring(0, 8)}...)`,
@@ -1439,7 +1441,7 @@ async function handleMentionSearch(query: string): Promise<{
       response = await tryVoyagerFetch(
         'https://www.linkedin.com/voyager/api/search/dash/clusters' +
           `?q=all&query=(keywords:${encodedQuery},flagshipSearchIntent:SEARCH_SRP,` +
-          'queryParameters:List((key:resultType,value:List(PEOPLE))))' +
+          'queryParameters:List((key:resultType,value:List(PEOPLE,COMPANY))))' +
           '&count=10&start=0&origin=GLOBAL_SEARCH_HEADER',
         headers,
         'search/dash/clusters',
@@ -1450,7 +1452,7 @@ async function handleMentionSearch(query: string): Promise<{
     if (!response) {
       response = await tryVoyagerFetch(
         'https://www.linkedin.com/voyager/api/typeahead/hits' +
-          `?q=blended&query=${encodedQuery}&type=PEOPLE`,
+          `?q=blended&query=${encodedQuery}&types=List(PEOPLE,COMPANY)`,
         headers,
         'typeahead/hits (legacy)',
       );
@@ -1472,9 +1474,71 @@ async function handleMentionSearch(query: string): Promise<{
       headline: string | null;
       avatarUrl: string | null;
       publicIdentifier: string | null;
+      type: 'person' | 'company';
     };
     const results: MentionResult[] = [];
     const seen = new Set<string>();
+
+    /**
+     * Helper: Detect whether an entity is a company based on URN or $type
+     */
+    function isCompanyEntity(entityUrn?: string, $type?: string): boolean {
+      if (entityUrn && (entityUrn.includes('urn:li:company:') || entityUrn.includes('urn:li:organization:') || entityUrn.includes('urn:li:fsd_company:'))) return true;
+      if ($type && ($type.includes('Company') || $type.includes('Organization'))) return true;
+      return false;
+    }
+
+    /**
+     * Helper: Extract a clean company URN from various LinkedIn URN formats.
+     * Handles: urn:li:company:X, urn:li:organization:X, urn:li:fsd_company:X,
+     * urn:li:fs_entityResultViewModel:(urn:li:fsd_company:X,...)
+     */
+    function toCompanyUrn(rawUrn: string): string {
+      const companyMatch = rawUrn.match(/urn:li:(?:fsd_company|company|organization):([^,)]+)/);
+      if (companyMatch) return `urn:li:organization:${companyMatch[1]}`;
+      const id = rawUrn.split(':').pop() || rawUrn;
+      return `urn:li:organization:${id}`;
+    }
+
+    /**
+     * Helper: Extract company logo URL from Voyager logo or logoV2 object
+     */
+    function buildCompanyLogo(logo: Record<string, unknown> | undefined): string | null {
+      if (!logo) return null;
+      // Try vectorImage path (logoV2 format)
+      const vectorImage = (logo.image?.valueOf() as Record<string, unknown>)?.['com.linkedin.common.VectorImage'] as Record<string, unknown> | undefined
+        || logo['com.linkedin.common.VectorImage'] as Record<string, unknown> | undefined
+        || logo.vectorImage as Record<string, unknown> | undefined;
+      if (vectorImage?.rootUrl) {
+        const arts = (vectorImage.artifacts || []) as Array<Record<string, unknown>>;
+        if (arts.length > 0) {
+          const art = arts.find(a => (a.width as number) === 100) || arts[0];
+          if (art?.fileIdentifyingUrlPathSegment) {
+            return `${vectorImage.rootUrl}${art.fileIdentifyingUrlPathSegment}`;
+          }
+        }
+      }
+      // Try rootUrl + artifacts directly (legacy format)
+      if (logo.rootUrl && (logo.artifacts as unknown[])) {
+        const arts = (logo.artifacts || []) as Array<Record<string, unknown>>;
+        if (arts.length > 0) {
+          const art = arts.find(a => (a.width as number) === 100) || arts[0];
+          if (art?.fileIdentifyingUrlPathSegment) {
+            return `${logo.rootUrl}${art.fileIdentifyingUrlPathSegment}`;
+          }
+        }
+      }
+      return null;
+    }
+
+    /**
+     * Helper: Extract public slug (universalName) from a company navigation URL
+     */
+    function extractCompanySlug(navUrl: string | undefined): string | null {
+      if (!navUrl) return null;
+      const match = navUrl.match(/\/company\/([^/?]+)/);
+      return match ? match[1] : null;
+    }
 
     /**
      * Helper: Build avatar URL from Voyager picture object (legacy MiniProfile format)
@@ -1567,26 +1631,32 @@ async function handleMentionSearch(query: string): Promise<{
     // ─── Strategy 1: Parse EntityResultViewModel objects from included[] ───
     // GraphQL search responses put these in the included array. They have
     // title.text (full name), primarySubtitle.text (headline), image, navigationUrl
+    // Both person and company results use this same $type — differentiate by URN
     for (const item of included) {
       if (item.$type === 'com.linkedin.voyager.dash.search.EntityResultViewModel') {
         const name = extractText(item.title);
         const entityUrn = item.entityUrn as string | undefined;
         if (!name || !entityUrn) continue;
 
+        const isCompany = isCompanyEntity(entityUrn);
         addResult({
           name,
-          urn: toPersonUrn(entityUrn),
+          urn: isCompany ? toCompanyUrn(entityUrn) : toPersonUrn(entityUrn),
           headline: extractText(item.primarySubtitle) || null,
           avatarUrl: extractGraphqlAvatar(item.image as Record<string, unknown> | undefined),
-          publicIdentifier: extractPublicId(item.navigationUrl as string | undefined),
+          publicIdentifier: isCompany
+            ? extractCompanySlug(item.navigationUrl as string | undefined)
+            : extractPublicId(item.navigationUrl as string | undefined),
+          type: isCompany ? 'company' : 'person',
         });
       }
     }
 
-    // ─── Strategy 2: Parse legacy MiniProfile objects from included[] ───
+    // ─── Strategy 2: Parse legacy MiniProfile + MiniCompany objects from included[] ───
     // Older REST endpoints (typeahead/hits, search/blended) return these
     if (results.length === 0) {
       for (const item of included) {
+        // Person results: MiniProfile
         if (
           item.$type === 'com.linkedin.voyager.identity.shared.MiniProfile' &&
           item.firstName && item.entityUrn
@@ -1598,6 +1668,25 @@ async function handleMentionSearch(query: string): Promise<{
             headline: mp.occupation || null,
             avatarUrl: buildAvatar(mp.picture),
             publicIdentifier: mp.publicIdentifier || null,
+            type: 'person',
+          });
+        }
+        // Company results: Company or MiniCompany objects
+        if (
+          (item.$type?.includes('Company') || item.$type?.includes('Organization')) &&
+          item.name && item.entityUrn &&
+          isCompanyEntity(item.entityUrn as string, item.$type as string)
+        ) {
+          const companyName = item.name as string;
+          const entityUrn = item.entityUrn as string;
+          addResult({
+            name: companyName,
+            urn: toCompanyUrn(entityUrn),
+            headline: (item.tagline || item.industry || null) as string | null,
+            avatarUrl: buildCompanyLogo(item.logo as Record<string, unknown> | undefined)
+              || buildCompanyLogo(item.logoV2 as Record<string, unknown> | undefined),
+            publicIdentifier: (item.universalName as string) || null,
+            type: 'company',
           });
         }
       }
@@ -1639,12 +1728,16 @@ async function handleMentionSearch(query: string): Promise<{
             const entityUrn = entityResult.entityUrn as string | undefined;
             if (!name || !entityUrn) continue;
 
+            const isCompany = isCompanyEntity(entityUrn);
             addResult({
               name,
-              urn: toPersonUrn(entityUrn),
+              urn: isCompany ? toCompanyUrn(entityUrn) : toPersonUrn(entityUrn),
               headline: extractText(entityResult.primarySubtitle) || null,
               avatarUrl: extractGraphqlAvatar(entityResult.image as Record<string, unknown> | undefined),
-              publicIdentifier: extractPublicId(entityResult.navigationUrl as string | undefined),
+              publicIdentifier: isCompany
+                ? extractCompanySlug(entityResult.navigationUrl as string | undefined)
+                : extractPublicId(entityResult.navigationUrl as string | undefined),
+              type: isCompany ? 'company' : 'person',
             });
           }
         }
@@ -1659,7 +1752,8 @@ async function handleMentionSearch(query: string): Promise<{
       console.log(`[MentionSearch] Parsing typeahead elements: ${elements.length} items`);
       for (const el of elements) {
         const hitInfo = (el.hitInfo || el) as Record<string, unknown>;
-        const mp = (hitInfo.miniProfile || hitInfo.member || hitInfo) as VoyagerMiniProfile;
+        // Check for person results (miniProfile / member)
+        const mp = (hitInfo.miniProfile || hitInfo.member) as VoyagerMiniProfile | undefined;
         if (mp?.firstName && mp?.entityUrn) {
           addResult({
             name: [mp.firstName, mp.lastName].filter(Boolean).join(' '),
@@ -1667,15 +1761,31 @@ async function handleMentionSearch(query: string): Promise<{
             headline: mp.occupation || null,
             avatarUrl: buildAvatar(mp.picture),
             publicIdentifier: mp.publicIdentifier || null,
+            type: 'person',
+          });
+          continue;
+        }
+        // Check for company results (miniCompany / company)
+        const co = (hitInfo.miniCompany || hitInfo.company || hitInfo) as Record<string, unknown>;
+        if (co?.name && co?.entityUrn && isCompanyEntity(co.entityUrn as string, co.$type as string | undefined)) {
+          addResult({
+            name: co.name as string,
+            urn: toCompanyUrn(co.entityUrn as string),
+            headline: (co.tagline || co.industry || null) as string | null,
+            avatarUrl: buildCompanyLogo(co.logo as Record<string, unknown> | undefined)
+              || buildCompanyLogo(co.logoV2 as Record<string, unknown> | undefined),
+            publicIdentifier: (co.universalName as string) || null,
+            type: 'company',
           });
         }
       }
     }
 
-    // ─── Strategy 5: Broadest fallback — any included item with firstName ───
+    // ─── Strategy 5: Broadest fallback — any included item with firstName or company name ───
     if (results.length === 0 && included.length > 0) {
-      console.log(`[MentionSearch] Broadest fallback: scanning for any firstName+entityUrn`);
+      console.log(`[MentionSearch] Broadest fallback: scanning for any firstName+entityUrn or company`);
       for (const item of included) {
+        // Person fallback
         if (item.firstName && item.entityUrn) {
           const mp = item as unknown as VoyagerMiniProfile;
           addResult({
@@ -1684,6 +1794,19 @@ async function handleMentionSearch(query: string): Promise<{
             headline: mp.occupation || null,
             avatarUrl: buildAvatar(mp.picture),
             publicIdentifier: mp.publicIdentifier || null,
+            type: 'person',
+          });
+        }
+        // Company fallback
+        if (item.name && item.entityUrn && isCompanyEntity(item.entityUrn as string, item.$type as string | undefined)) {
+          addResult({
+            name: item.name as string,
+            urn: toCompanyUrn(item.entityUrn as string),
+            headline: (item.tagline || item.industry || null) as string | null,
+            avatarUrl: buildCompanyLogo(item.logo as Record<string, unknown> | undefined)
+              || buildCompanyLogo(item.logoV2 as Record<string, unknown> | undefined),
+            publicIdentifier: (item.universalName as string) || null,
+            type: 'company',
           });
         }
       }

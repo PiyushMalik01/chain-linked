@@ -153,7 +153,7 @@ function PropertySection({
  */
 interface PropertyPanelProps {
   selectedElement: CanvasElement | null;
-  currentSlide: CanvasSlide;
+  currentSlide: CanvasSlide | undefined;
   templateColors: string[];
   onElementUpdate: (updates: Partial<CanvasElement>) => void;
   onSlideBackgroundChange: (color: string) => void;
@@ -279,7 +279,7 @@ export function PropertyPanel({
                   icon={<IconPalette className="h-3 w-3" />}
                 >
                   <EnhancedColorPicker
-                    color={currentSlide.backgroundColor}
+                    color={currentSlide?.backgroundColor ?? '#FFFFFF'}
                     onChange={onSlideBackgroundChange}
                     templateColors={templateColors}
                   />

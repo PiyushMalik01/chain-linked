@@ -42,6 +42,7 @@ import { BrandKitPreview } from "@/components/features/brand-kit-preview"
 import type { BrandKitPreviewData } from "@/components/features/brand-kit-preview"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { useTeam } from "@/hooks/use-team"
 
 /* ------------------------------------------------------------------ */
 /*                         TYPE DEFINITIONS                          */
@@ -345,6 +346,8 @@ function parseCompanyInfo(text: string): { valueProposition: string; summary: st
  * @returns Company context editor JSX
  */
 export function CompanyContextEditor({ onClose, className }: CompanyContextEditorProps) {
+  const { currentUserRole } = useTeam()
+  const canManageLogo = currentUserRole === "owner" || currentUserRole === "admin"
   const [analysis, setAnalysis] = useState<CompanyAnalysis>(EMPTY_ANALYSIS)
   const [companyName, setCompanyName] = useState("")
   const [loading, setLoading] = useState(true)

@@ -1149,6 +1149,7 @@ export type Database = {
           updated_at: string
           user_id: string
           word_count: number | null
+          draft_state: Json | null
         }
         Insert: {
           completion_tokens?: number | null
@@ -1175,6 +1176,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           word_count?: number | null
+          draft_state?: Json | null
         }
         Update: {
           completion_tokens?: number | null
@@ -1201,6 +1203,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           word_count?: number | null
+          draft_state?: Json | null
         }
         Relationships: [
           {

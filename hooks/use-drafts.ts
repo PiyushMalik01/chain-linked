@@ -11,6 +11,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { subscribeToTables } from '@/lib/supabase/realtime'
 import { toast } from 'sonner'
+import { parseDraftState, type DraftState } from '@/types/draft-state'
 
 /**
  * The source from which a draft originated
@@ -45,6 +46,8 @@ export interface SavedDraft {
   createdAt: string
   /** When the draft was last updated */
   updatedAt: string
+  /** Type-specific draft state (carousel, series, compose, remix, swipe) */
+  draftState: DraftState | null
 }
 
 /**
@@ -141,7 +144,7 @@ export function useDrafts(): UseDraftsReturn {
       // Fetch drafts from generated_posts
       const { data, error: fetchError } = await supabase
         .from('generated_posts')
-        .select('id, content, post_type, source, discover_post_id, research_session_id, hook, cta, source_snippet, created_at, updated_at')
+        .select('id, content, post_type, source, discover_post_id, research_session_id, hook, cta, source_snippet, draft_state, created_at, updated_at')
         .eq('user_id', user.id)
         .eq('status', 'draft')
         .order('updated_at', { ascending: false })
@@ -163,6 +166,7 @@ export function useDrafts(): UseDraftsReturn {
         additionalContext: row.source_snippet || null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        draftState: parseDraftState(row.draft_state),
       }))
 
       // Also fetch scheduled posts as a "scheduled" draft source
@@ -186,6 +190,7 @@ export function useDrafts(): UseDraftsReturn {
         additionalContext: row.scheduled_for,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        draftState: null,
       }))
 
       setDrafts([...unified, ...scheduledDrafts])

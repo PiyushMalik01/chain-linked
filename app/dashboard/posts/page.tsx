@@ -52,6 +52,10 @@ import {
   staggerContainerVariants,
   staggerItemVariants,
 } from "@/lib/animations"
+import {
+  getPostActivityType,
+  getActivityBadgeProps,
+} from "@/components/features/my-recent-posts"
 
 // ============================================================================
 // Types
@@ -462,7 +466,25 @@ function PostCard({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold truncate leading-tight">{authorName}</p>
+            {(() => {
+              const activityType = getPostActivityType(post)
+              const badge = getActivityBadgeProps(activityType)
+              return (
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold truncate leading-tight">{authorName}</p>
+                  <Badge
+                    variant={activityType === "created" ? "outline" : "secondary"}
+                    className={cn(
+                      "text-[10px] px-1.5 py-0 gap-0.5 shrink-0",
+                      activityType !== "created" && badge.dialogClassName
+                    )}
+                  >
+                    <badge.Icon className="size-2.5" />
+                    {badge.label}
+                  </Badge>
+                </div>
+              )
+            })()}
             {authorHeadline && (
               <p className="text-xs text-muted-foreground truncate mt-0.5">{authorHeadline}</p>
             )}

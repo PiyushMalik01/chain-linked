@@ -85,6 +85,7 @@ import { ComposeAdvancedMode } from "./compose/compose-advanced-mode"
 import { EditWithAIPopup } from "./compose/edit-with-ai-popup"
 import { InlineDiffView } from "./compose/inline-diff-view"
 import { ErrorBoundary } from "@/components/error-boundary"
+import type { ComposeDraftState, RemixDraftState } from "@/types/draft-state"
 
 /**
  * Props for the PostComposer component
@@ -297,7 +298,18 @@ export function PostComposer({
   const hasApiKey = apiKeyStatus?.hasKey ?? false
   const [selectedGoal, setSelectedGoal] = React.useState<GoalCategory | undefined>(undefined)
   const [selectedFormat, setSelectedFormat] = React.useState<PostTypeId | undefined>(undefined)
-  const [activeFontStyle, setActiveFontStyle] = React.useState<UnicodeFontStyle>('normal')
+  const [activeFontStyle, setActiveFontStyle] = React.useState<UnicodeFontStyle>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('chainlinked-draft-font-style')
+        if (saved) {
+          localStorage.removeItem('chainlinked-draft-font-style')
+          return saved as UnicodeFontStyle
+        }
+      } catch { /* ignore */ }
+    }
+    return 'normal'
+  })
   const [carouselSlideImages, setCarouselSlideImages] = React.useState<string[]>([])
   const [savedHashtags, setSavedHashtags] = React.useState<string[]>([])
 
@@ -397,6 +409,32 @@ export function PostComposer({
     try {
       const ctx = generationContextRef.current
       const wordCount = trimmed.split(/\s+/).filter(Boolean).length
+      // Build type-specific draft state for persistence
+      let draftState: ComposeDraftState | RemixDraftState
+      if (remixMeta) {
+        draftState = {
+          type: 'remix',
+          sourcePostId: draft.sourcePostId || undefined,
+          sourceAuthor: draft.sourceAuthor || undefined,
+          remixTone: remixMeta.tone,
+          remixLength: remixMeta.length,
+          customInstructions: remixMeta.customInstructions || undefined,
+          originalContentPreview: remixMeta.originalContent?.slice(0, 200),
+        } satisfies RemixDraftState
+      } else {
+        draftState = {
+          type: 'compose',
+          fontStyle: activeFontStyle !== 'normal' ? activeFontStyle : undefined,
+          scheduledFor: draft.scheduledFor?.toISOString(),
+          generationContext: ctx ? {
+            topic: ctx.topic || undefined,
+            tone: ctx.tone || undefined,
+            length: ctx.length || undefined,
+          } : undefined,
+          conversationId: persistedConvoId || undefined,
+        } satisfies ComposeDraftState
+      }
+
       const res = await fetch('/api/drafts/auto-save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -409,6 +447,7 @@ export function PostComposer({
           wordCount,
           draftId: savedDraftIdRef.current || undefined,
           aiMetadata: ctx?.aiMetadata || null,
+          draftState,
         }),
       })
       if (res.ok) {
@@ -430,7 +469,7 @@ export function PostComposer({
       console.warn('[AutoSave] Network error:', err)
       return false
     }
-  }, [content, updateDraft])
+  }, [content, updateDraft, activeFontStyle, draft.scheduledFor, draft.sourcePostId, draft.sourceAuthor, persistedConvoId, remixMeta])
 
   // Disable auto-save when editing a scheduled post (uses its own save flow via onSaveEdit)
   const { lastSaved, saveError } = useAutoSave(
@@ -1119,6 +1158,28 @@ export function PostComposer({
 
     try {
       const wordCount = content.trim().split(/\s+/).filter(Boolean).length
+
+      // Build draft state for manual save (same logic as auto-save)
+      let manualDraftState: ComposeDraftState | RemixDraftState
+      if (remixMeta) {
+        manualDraftState = {
+          type: 'remix',
+          sourcePostId: draft.sourcePostId || undefined,
+          sourceAuthor: draft.sourceAuthor || undefined,
+          remixTone: remixMeta.tone,
+          remixLength: remixMeta.length,
+          customInstructions: remixMeta.customInstructions || undefined,
+          originalContentPreview: remixMeta.originalContent?.slice(0, 200),
+        } satisfies RemixDraftState
+      } else {
+        manualDraftState = {
+          type: 'compose',
+          fontStyle: activeFontStyle !== 'normal' ? activeFontStyle : undefined,
+          scheduledFor: draft.scheduledFor?.toISOString(),
+          conversationId: persistedConvoId || undefined,
+        } satisfies ComposeDraftState
+      }
+
       const res = await fetch('/api/drafts/auto-save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1127,6 +1188,7 @@ export function PostComposer({
           postType: 'general',
           wordCount,
           draftId: draft.savedDraftId || undefined,
+          draftState: manualDraftState,
         }),
       })
 

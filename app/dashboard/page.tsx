@@ -696,15 +696,21 @@ function DashboardContent() {
             {/* Extension login status badge — only trust live PING status */}
             <div className={cn(
               "shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-              extensionStatus?.platformLoggedIn
-                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+              extensionInstalled !== true
+                ? "bg-muted text-muted-foreground"
+                : extensionStatus?.platformLoggedIn
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
             )}>
               <span className={cn(
                 "size-1.5 rounded-full",
-                extensionStatus?.platformLoggedIn ? "bg-emerald-500" : "bg-amber-500"
+                extensionInstalled !== true
+                  ? "bg-muted-foreground"
+                  : extensionStatus?.platformLoggedIn ? "bg-emerald-500" : "bg-amber-500"
               )} />
-              {extensionStatus?.platformLoggedIn ? "Extension active" : "Extension offline"}
+              {extensionInstalled !== true
+                ? "No extension"
+                : extensionStatus?.platformLoggedIn ? "Extension active" : "Extension offline"}
             </div>
           </div>
         </div>

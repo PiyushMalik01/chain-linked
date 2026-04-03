@@ -133,6 +133,62 @@ function formatTableDate(dateStr: string): string {
 }
 
 /**
+ * Get the ISO week key for a given date string (YYYY-Www)
+ * @param dateStr - ISO date string (YYYY-MM-DD)
+ * @returns Week key like "2026-W14"
+ */
+function getISOWeekKey(dateStr: string): string {
+  const date = new Date(dateStr)
+  const day = date.getDay()
+  // Adjust to Monday-based week: move to nearest Thursday to get correct ISO week
+  const thursday = new Date(date)
+  thursday.setDate(date.getDate() - ((day + 6) % 7) + 3)
+  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
+  const weekNumber = 1 + Math.round(((thursday.getTime() - firstThursday.getTime()) / 86400000 - 3 + ((firstThursday.getDay() + 6) % 7)) / 7)
+  return `${thursday.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`
+}
+
+/**
+ * Get the month key for a given date string (YYYY-MM)
+ * @param dateStr - ISO date string (YYYY-MM-DD)
+ * @returns Month key like "2026-04"
+ */
+function getMonthKey(dateStr: string): string {
+  return dateStr.slice(0, 7)
+}
+
+/**
+ * Aggregate daily data points by the given granularity
+ * @param points - Daily data points
+ * @param granularity - "daily" | "weekly" | "monthly"
+ * @returns Aggregated data points
+ */
+function aggregateByGranularity(
+  points: AnalyticsDataPoint[],
+  granularity: string
+): AnalyticsDataPoint[] {
+  if (granularity === 'daily' || !points.length) return points
+
+  const keyFn = granularity === 'weekly' ? getISOWeekKey : getMonthKey
+  const buckets = new Map<string, { sum: number; firstDate: string }>()
+
+  for (const pt of points) {
+    const key = keyFn(pt.date)
+    const bucket = buckets.get(key)
+    if (bucket) {
+      bucket.sum += pt.value
+      if (pt.date < bucket.firstDate) bucket.firstDate = pt.date
+    } else {
+      buckets.set(key, { sum: pt.value, firstDate: pt.date })
+    }
+  }
+
+  return Array.from(buckets.values())
+    .sort((a, b) => a.firstDate.localeCompare(b.firstDate))
+    .map(b => ({ date: b.firstDate, value: b.sum }))
+}
+
+/**
  * Format a numeric value for display
  * @param value - The number to format
  * @param isRate - Whether this is a rate/percentage metric
@@ -353,13 +409,19 @@ export function AnalyticsDataTable({
   const isRate = metric === "engagements_rate"
   const isAllMode = metric === "all" && multiData
 
-  // Build multi-column data for "all" mode
+  // Build multi-column data for "all" mode with granularity aggregation
   const multiTableData: MultiRowData[] = useMemo(() => {
     if (!isAllMode) return []
 
+    // Aggregate each metric series by granularity first
+    const aggregatedMulti: Record<string, AnalyticsDataPoint[]> = {}
+    for (const m of ALL_MODE_METRICS) {
+      aggregatedMulti[m] = aggregateByGranularity(multiData[m] ?? [], granularity)
+    }
+
     const dateMap = new Map<string, MultiRowData>()
     for (const m of ALL_MODE_METRICS) {
-      for (const pt of multiData[m] ?? []) {
+      for (const pt of aggregatedMulti[m]) {
         if (!dateMap.has(pt.date)) {
           dateMap.set(pt.date, {
             date: formatTableDate(pt.date),
@@ -386,17 +448,19 @@ export function AnalyticsDataTable({
     }
 
     return Array.from(dateMap.values()).sort((a, b) => b.rawDate.localeCompare(a.rawDate))
-  }, [isAllMode, multiData])
+  }, [isAllMode, multiData, granularity])
 
-  // Build single-column data
+  // Build single-column data with granularity aggregation
   const singleTableData: SingleRowData[] = useMemo(
-    () =>
-      data.map((d) => ({
+    () => {
+      const aggregated = aggregateByGranularity(data, granularity)
+      return aggregated.map((d) => ({
         date: formatTableDate(d.date),
         rawDate: d.date,
         value: d.value,
-      })),
-    [data]
+      }))
+    },
+    [data, granularity]
   )
 
   // Multi-column definitions for "all" mode

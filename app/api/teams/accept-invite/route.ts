@@ -11,6 +11,7 @@ import { sendEmail } from '@/lib/email/resend'
 import { WelcomeToTeamEmail } from '@/components/emails/welcome-to-team'
 import { MemberJoinedTeamEmail } from '@/components/emails/member-joined-team'
 import { copyTeamContextToMember } from '@/lib/team/copy-context'
+import { getLogoDevUrl } from '@/lib/logo-dev'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
@@ -246,7 +247,7 @@ export async function POST(request: Request) {
             memberEmail: user.email || '',
             teamName: team?.name || 'the team',
             companyName: company?.name,
-            companyLogoUrl: company?.logo_url || team?.logo_url || undefined,
+            companyLogoUrl: company?.logo_url || team?.logo_url || getLogoDevUrl({ companyName: company?.name || team?.name, size: 48 }) || undefined,
             role: invitation.role as 'admin' | 'member',
             dashboardUrl,
           }),
@@ -284,7 +285,7 @@ export async function POST(request: Request) {
               memberEmail: user.email || '',
               teamName: team?.name || 'the team',
               companyName: company?.name,
-              companyLogoUrl: company?.logo_url || team?.logo_url || undefined,
+              companyLogoUrl: company?.logo_url || team?.logo_url || getLogoDevUrl({ companyName: company?.name || team?.name, size: 48 }) || undefined,
               role: invitation.role as 'admin' | 'member',
               dashboardUrl,
             }),

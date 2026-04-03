@@ -22,6 +22,7 @@ import {
   exportCarouselToPDF,
   downloadPDF,
 } from '@/lib/pdf-export'
+import type { CarouselDraftState } from '@/types/draft-state'
 
 /**
  * Props for initializing the carousel hook
@@ -131,6 +132,8 @@ export function useCarousel(props: UseCarouselProps = {}): UseCarouselReturn {
   const [brandKitApplied, setBrandKitApplied] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  /** Tracks the draft row ID so subsequent saves update in place */
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(null)
 
   // Computed
   const currentSlide = slides[currentSlideIndex]
@@ -290,7 +293,9 @@ export function useCarousel(props: UseCarouselProps = {}): UseCarouselReturn {
   }, [slides, brandKit, brandKitApplied, selectedTemplate])
 
   /**
-   * Save carousel as draft
+   * Save carousel as draft via the auto-save API
+   * Persists the carousel content to the generated_posts table with source 'carousel'.
+   * Falls back to the previous draft ID when updating in place.
    */
   const saveDraft = useCallback(async () => {
     if (slides.length === 0) {
@@ -300,22 +305,45 @@ export function useCarousel(props: UseCarouselProps = {}): UseCarouselReturn {
 
     setIsSaving(true)
     try {
-      // TODO: Implement Supabase save when carousel_drafts table is available
-      // For now, save to localStorage as a fallback
-      const draft = {
-        id: `draft-${Date.now()}`,
-        slides,
-        template: selectedTemplate,
-        brandKitApplied,
-        brandKit,
-        savedAt: new Date().toISOString(),
+      // Build a plain-text representation of the carousel slides for the draft content
+      const content = slides
+        .map((slide, i) => `[Slide ${i + 1} - ${slide.type}] ${slide.content}`)
+        .join('\n\n')
+
+      // Build type-specific draft state for full editor restoration
+      const draftState: CarouselDraftState = {
+        type: 'carousel' as const,
+        slides: slides.map((s) => ({ id: s.id, content: s.content, type: s.type })),
+        templateName: selectedTemplate,
+        brandKitApplied: brandKitApplied,
+        brandColors: brandKit.primaryColor ? [brandKit.primaryColor, brandKit.secondaryColor].filter(Boolean) as string[] : undefined,
+        fonts: brandKit.fontFamily ? [brandKit.fontFamily] : undefined,
+        currentSlideIndex,
+        slideCount: slides.length,
       }
 
-      const existingDrafts = JSON.parse(
-        localStorage.getItem('carousel-drafts') ?? '[]'
-      )
-      existingDrafts.push(draft)
-      localStorage.setItem('carousel-drafts', JSON.stringify(existingDrafts))
+      const response = await fetch('/api/drafts/auto-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content,
+          postType: 'carousel',
+          source: 'carousel',
+          topic: `Carousel: ${selectedTemplate} template, ${slides.length} slides`,
+          draftId: savedDraftId ?? undefined,
+          draftState,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to save draft')
+      }
+
+      const data = await response.json()
+      if (data.id) {
+        setSavedDraftId(data.id)
+      }
 
       toast.success('Draft saved successfully!')
     } catch (error) {
@@ -324,7 +352,7 @@ export function useCarousel(props: UseCarouselProps = {}): UseCarouselReturn {
     } finally {
       setIsSaving(false)
     }
-  }, [slides, selectedTemplate, brandKitApplied, brandKit])
+  }, [slides, selectedTemplate, savedDraftId, brandKitApplied, brandKit, currentSlideIndex])
 
   /**
    * Reset carousel to initial state

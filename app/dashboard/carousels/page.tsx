@@ -6,6 +6,7 @@
  * @module app/dashboard/carousels/page
  */
 
+import { useSearchParams } from 'next/navigation';
 import { PageContent } from "@/components/shared/page-content";
 import { CanvasEditor } from '@/components/features/canvas-editor';
 import { CarouselsSkeleton } from '@/components/skeletons/page-skeletons';
@@ -14,11 +15,13 @@ import { usePageMeta } from '@/lib/dashboard-context';
 
 /**
  * Carousels page content component with full-height canvas editor
+ * @param props - Component props
+ * @param props.draftId - Optional draft ID to restore from API
  */
-function CarouselsContent() {
+function CarouselsContent({ draftId }: { draftId?: string }) {
   return (
     <PageContent className="h-[calc(100vh-var(--header-height))] gap-0 p-0 md:gap-0 md:p-0">
-      <CanvasEditor />
+      <CanvasEditor draftId={draftId} />
     </PageContent>
   );
 }
@@ -29,7 +32,9 @@ function CarouselsContent() {
  */
 export default function CarouselsPage() {
   usePageMeta({ title: "Carousels" });
+  const searchParams = useSearchParams();
+  const draftId = searchParams.get('draft') ?? undefined;
   const isLoading = usePageLoading(1000);
 
-  return isLoading ? <CarouselsSkeleton /> : <CarouselsContent />;
+  return isLoading ? <CarouselsSkeleton /> : <CarouselsContent draftId={draftId} />;
 }

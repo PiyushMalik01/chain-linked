@@ -104,7 +104,9 @@ export function AnalyticsSummaryBar({ summary, metric, period, isLoading }: Anal
 
   const TrendIcon = isNeutral ? IconMinus : isPositive ? IconTrendingUp : IconTrendingDown
 
-  // Period total = sum of deltas for the selected time range (impressions gained, etc.)
+  // Show sum-of-deltas for the selected period (impressions gained in that window).
+  // accumulativeTotal is the lifetime cumulative value and should NOT be used as
+  // the main display number — it doesn't change with the period filter.
   const totalValue = summary.total
   const periodName = PERIOD_LABELS[period] || period
   const totalLabel = isRate
@@ -159,7 +161,7 @@ export function AnalyticsSummaryBar({ summary, metric, period, isLoading }: Anal
               <TooltipContent>
                 {isRate
                   ? "Average engagement rate for the selected period"
-                  : `Total ${label.toLowerCase()} gained during the selected period (not lifetime cumulative)`}
+                  : `Total ${label.toLowerCase()} gained during the selected period`}
               </TooltipContent>
             </Tooltip>
 

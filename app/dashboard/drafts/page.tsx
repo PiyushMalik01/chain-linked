@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { RemixPostButton } from "@/components/features/remix-post-button"
+import { isCarouselDraftState } from "@/types/draft-state"
 
 // ============================================================================
 // Source Color System
@@ -470,11 +471,13 @@ function DraftRow({
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick() } }}
       className={cn(
-        "w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg border",
+        "w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer",
         "bg-gradient-to-r",
         style.gradient,
         "hover:shadow-sm transition-all",
@@ -542,7 +545,7 @@ function DraftRow({
           />
         </div>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -908,18 +911,69 @@ function DraftsContent() {
   const handleEdit = React.useCallback(
     (d: SavedDraft) => {
       // Carousel drafts: restore slide data and navigate to carousel editor
-      if (d.source === "carousel" && d.additionalContext) {
-        try {
-          const slides = JSON.parse(d.additionalContext)
-          if (Array.isArray(slides) && slides.length > 0) {
-            localStorage.setItem("chainlinked-carousel-draft", d.additionalContext)
+      if (d.source === "carousel") {
+        console.debug(
+          "[handleEdit] carousel draft:",
+          "id:", d.id,
+          "hasDraftState:", !!d.draftState,
+          "isCarousel:", d.draftState ? isCarouselDraftState(d.draftState) : false,
+          "additionalContextLen:", d.additionalContext?.length ?? 0,
+        )
+
+        // Always clear stale localStorage before writing new data
+        localStorage.removeItem("chainlinked-carousel-draft")
+        localStorage.removeItem("chainlinked-carousel-draft-state")
+        localStorage.removeItem("chainlinked-carousel-template")
+
+        // Prefer the structured draftState if available
+        if (d.draftState && isCarouselDraftState(d.draftState)) {
+          try {
+            const slidesJson = JSON.stringify(d.draftState.slides)
+            // Write slide data for the editor to hydrate from
+            localStorage.setItem("chainlinked-carousel-draft", slidesJson)
+            // Write full state (template, caption, index) for richer restoration
+            localStorage.setItem(
+              "chainlinked-carousel-draft-state",
+              JSON.stringify(d.draftState)
+            )
+            console.debug(
+              "[handleEdit] wrote draftState slides to localStorage, len:", slidesJson.length,
+              "slideCount:", Array.isArray(d.draftState.slides) ? d.draftState.slides.length : 0,
+            )
             toast.success("Carousel loaded into editor")
-            router.push("/dashboard/carousels")
+            router.push(`/dashboard/carousels?draft=${d.id}`)
             return
+          } catch (err) {
+            console.warn("[handleEdit] draftState serialization failed, falling through:", err)
+            // Fall through to additionalContext parsing
           }
-        } catch {
-          // Fall through to compose if slide data is invalid
         }
+
+        // Fallback: legacy path using additionalContext (slide JSON only)
+        if (d.additionalContext) {
+          try {
+            const slides = JSON.parse(d.additionalContext)
+            if (Array.isArray(slides) && slides.length > 0) {
+              localStorage.setItem("chainlinked-carousel-draft", d.additionalContext)
+              console.debug(
+                "[handleEdit] wrote additionalContext slides to localStorage, len:", d.additionalContext.length,
+                "slideCount:", slides.length,
+              )
+              toast.success("Carousel loaded into editor")
+              router.push(`/dashboard/carousels?draft=${d.id}`)
+              return
+            }
+          } catch {
+            // Fall through to compose if slide data is invalid
+          }
+        }
+
+        // Last resort: navigate to carousel editor with only the draft ID
+        // so the API fallback in useCanvasEditor can fetch the data
+        console.warn("[handleEdit] no slide data available locally, relying on API fallback")
+        toast.success("Loading carousel from server...")
+        router.push(`/dashboard/carousels?draft=${d.id}`)
+        return
       }
 
       // Scheduled drafts: navigate to compose in edit mode
@@ -934,18 +988,33 @@ function DraftsContent() {
         return
       }
 
-      // Series drafts: restore series data and navigate to series tab
-      if (d.source === "series" && d.additionalContext) {
-        try {
-          const seriesData = JSON.parse(d.additionalContext)
-          if (seriesData?.type === "series" && Array.isArray(seriesData.posts)) {
-            localStorage.setItem("chainlinked-series-draft", d.additionalContext)
-            toast.success("Series loaded into editor")
-            router.push("/dashboard/compose?tab=series")
-            return
+      // Series drafts: prefer draftState, fall back to additionalContext
+      if (d.source === "series") {
+        if (d.draftState?.type === "series") {
+          const seriesPayload = JSON.stringify({
+            type: 'series',
+            posts: d.draftState.posts,
+          })
+          localStorage.setItem("chainlinked-series-draft", seriesPayload)
+          if (d.draftState.currentPostIndex !== undefined) {
+            localStorage.setItem("chainlinked-series-draft-index", String(d.draftState.currentPostIndex))
           }
-        } catch {
-          // Fall through to single post compose
+          toast.success("Series loaded into editor")
+          router.push("/dashboard/compose?tab=series")
+          return
+        }
+        if (d.additionalContext) {
+          try {
+            const seriesData = JSON.parse(d.additionalContext)
+            if (seriesData?.type === "series" && Array.isArray(seriesData.posts)) {
+              localStorage.setItem("chainlinked-series-draft", d.additionalContext)
+              toast.success("Series loaded into editor")
+              router.push("/dashboard/compose?tab=series")
+              return
+            }
+          } catch {
+            // Fall through to single post compose
+          }
         }
       }
 
@@ -953,6 +1022,7 @@ function DraftsContent() {
         topic: d.topic,
         tone: d.tone,
         additionalContext: d.additionalContext,
+        draftState: d.draftState,
       })
       toast.success("Draft loaded into composer")
       router.push(`/dashboard/compose?draftId=${d.id}`)

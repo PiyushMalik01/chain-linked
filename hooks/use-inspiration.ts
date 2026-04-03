@@ -288,20 +288,25 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
       .filter(Boolean)
       .join(' ') || 'Unknown Author'
 
+    // LinkedIn CDN signed URLs expire. Use unavatar.io with the author's
+    // LinkedIn username for reliable, always-fresh profile pictures.
+    const username = post.author_username
+      || (post.url?.match(/linkedin\.com\/(?:posts|pulse)\/([a-zA-Z0-9_-]+?)(?:_|-activity)/)?.[1])
+      || (post.author_profile_url?.match(/linkedin\.com\/in\/([^/?]+)/)?.[1])
+    const avatar = username
+      ? `https://unavatar.io/linkedin/${username}?fallback=false`
+      : undefined
+
     return {
       id: post.id,
       author: {
         name: authorName,
         headline: post.author_headline || '',
-        avatar: post.author_profile_picture || undefined,
+        avatar,
       },
       authorUrl: post.author_profile_url
         || (post.author_username ? `https://www.linkedin.com/in/${post.author_username}` : undefined)
-        || (post.url ? (() => {
-          // Extract username from post URL: linkedin.com/posts/username_activity-...
-          const match = post.url.match(/linkedin\.com\/(?:posts|pulse)\/([a-zA-Z0-9_-]+?)(?:_|-activity)/)
-          return match ? `https://www.linkedin.com/in/${match[1]}` : undefined
-        })() : undefined),
+        || (username ? `https://www.linkedin.com/in/${username}` : undefined),
       content: post.text || '',
       category: inferCategory(post),
       metrics: {
@@ -343,72 +348,72 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
       }
       setError(null)
 
-      // Handle "Following" filter - fetch from influencer posts API
+      // Handle "Following" filter — fetch from influencer posts API.
+      // When a specific influencer is selected (filterByInfluencerId), we fetch
+      // their Apify-scraped posts but DON'T return early — we continue to also
+      // query linkedin_research_posts for that author's viral posts and merge.
+      let followedPosts: InspirationPost[] = []
       if (filters.followingOnly) {
         try {
           const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
           if (filterByInfluencerId) params.set('influencer_id', filterByInfluencerId)
           if (filters.category !== 'all') params.set('cluster', filters.category)
           const res = await fetch(`/api/influencers/posts?${params}`)
-          if (!res.ok) {
-            // Gracefully handle — newly followed influencers may not have posts yet
-            const errData = await res.json().catch(() => ({}))
-            if (res.status === 500) {
-              // No posts available yet — show empty state instead of error
-              setPosts(append ? prev => prev : [])
-              setPagination(prev => ({ ...prev, hasMore: false, isLoadingMore: false }))
-              setIsLoading(false)
-              return
-            }
-            throw new Error(errData.error || 'Failed to fetch influencer posts')
+          if (res.ok) {
+            const { posts: influencerPosts } = await res.json()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            followedPosts = (influencerPosts || []).map((post: any) => {
+              // Use unavatar.io for reliable avatars instead of expired LinkedIn CDN URLs
+              const linkedinUrl = post.followed_influencers?.linkedin_url || ''
+              const uname = post.followed_influencers?.linkedin_username
+                || linkedinUrl.match(/linkedin\.com\/in\/([^/?]+)/)?.[1]
+              const followedAvatar = uname
+                ? `https://unavatar.io/linkedin/${uname}?fallback=false`
+                : (post.followed_influencers?.author_profile_picture || undefined)
+              return {
+                id: post.id,
+                author: {
+                  name: post.followed_influencers?.author_name || 'Unknown',
+                  headline: post.followed_influencers?.author_headline || '',
+                  avatar: followedAvatar,
+                },
+                authorUrl: post.followed_influencers?.linkedin_url || undefined,
+                content: post.content || '',
+                category: post.primary_cluster?.toLowerCase() || 'general',
+                tags: post.tags || [],
+                primaryCluster: post.primary_cluster || null,
+                metrics: {
+                  reactions: post.likes_count || 0,
+                  comments: post.comments_count || 0,
+                  reposts: post.reposts_count || 0,
+                },
+                postedAt: post.posted_at || new Date().toISOString(),
+              }
+            })
           }
+        } catch (err) {
+          console.warn('Influencer posts fetch warning:', err)
+        }
 
-          const { posts: influencerPosts, totalCount } = await res.json()
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const transformed: InspirationPost[] = (influencerPosts || []).map((post: any) => ({
-            id: post.id,
-            author: {
-              name: post.followed_influencers?.author_name || 'Unknown',
-              headline: post.followed_influencers?.author_headline || '',
-              avatar: post.followed_influencers?.author_profile_picture || undefined,
-            },
-            authorUrl: post.followed_influencers?.linkedin_url || undefined,
-            content: post.content || '',
-            category: post.primary_cluster?.toLowerCase() || 'general',
-            tags: post.tags || [],
-            primaryCluster: post.primary_cluster || null,
-            metrics: {
-              reactions: post.likes_count || 0,
-              comments: post.comments_count || 0,
-              reposts: post.reposts_count || 0,
-            },
-            postedAt: post.posted_at || new Date().toISOString(),
-          }))
-
+        // If no specific influencer is selected, just show the followed posts
+        if (!filterByInfluencerId) {
           if (append) {
-            setPosts(prev => [...prev, ...transformed])
+            setPosts(prev => [...prev, ...followedPosts])
           } else {
-            setPosts(transformed)
+            setPosts(followedPosts)
             setSuggestions([])
             setRawPosts([])
           }
-
           setPagination({
             page,
-            totalCount,
-            hasMore: (page + 1) * PAGE_SIZE < totalCount,
+            totalCount: followedPosts.length,
+            hasMore: false,
             isLoadingMore: false,
           })
-
-          setIsLoading(false)
-          return
-        } catch (err) {
-          console.error('Influencer posts fetch error:', err)
-          setError('Failed to fetch influencer posts')
           setIsLoading(false)
           return
         }
+        // If a specific influencer IS selected, continue to also fetch viral posts below
       }
 
       // Build query - now using linkedin_research_posts table with viral content
@@ -416,6 +421,27 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
       let query = (supabase as any)
         .from('linkedin_research_posts')
         .select('id, activity_urn, text, url, post_type, posted_date, author_first_name, author_last_name, author_headline, author_username, author_profile_url, author_profile_picture, total_reactions, likes, comments, reposts, created_at', { count: 'exact' })
+
+      // When a specific influencer is selected, filter viral posts by their author name
+      if (filterByInfluencerId) {
+        const { data: influencer } = await supabase
+          .from('followed_influencers')
+          .select('author_name, linkedin_username')
+          .eq('id', filterByInfluencerId)
+          .maybeSingle()
+        if (influencer?.author_name) {
+          // Split "First Last" and filter by both name parts
+          const nameParts = influencer.author_name.trim().split(/\s+/)
+          if (nameParts.length >= 2) {
+            query = query.ilike('author_first_name', `%${nameParts[0]}%`)
+            query = query.ilike('author_last_name', `%${nameParts[nameParts.length - 1]}%`)
+          } else {
+            query = query.or(`author_first_name.ilike.%${nameParts[0]}%,author_last_name.ilike.%${nameParts[0]}%`)
+          }
+        } else if (influencer?.linkedin_username) {
+          query = query.ilike('author_username', `%${influencer.linkedin_username}%`)
+        }
+      }
 
       // Apply search filter
       if (filters.searchQuery.trim()) {
@@ -451,11 +477,14 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
 
       const { data: postsData, error: fetchError, count } = await query
 
-      // If table doesn't exist or error, return empty state
+      // If table doesn't exist, range exceeded, or other error — return empty/followed posts
       if (fetchError) {
-        console.warn('Inspiration fetch warning:', fetchError.message)
+        // PGRST103 = Range Not Satisfiable (offset beyond data) — not a real error
+        const isRangeError = fetchError.code === 'PGRST103' || fetchError.message?.includes('Range')
+        if (!isRangeError) console.warn('Inspiration fetch warning:', fetchError.message)
         if (!append) {
-          setPosts([])
+          // If we have followed posts from Apify, show those instead of empty
+          setPosts(followedPosts.length > 0 ? followedPosts : [])
           setSuggestions([])
           setRawPosts([])
         }
@@ -469,8 +498,14 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
       }
 
       if (!postsData || postsData.length === 0) {
-        // No data - return empty state
-        if (!append) {
+        // No viral posts — but if we have followed posts, show those
+        if (followedPosts.length > 0) {
+          if (!append) {
+            setPosts(followedPosts)
+            setSuggestions([])
+            setRawPosts([])
+          }
+        } else if (!append) {
           setPosts([])
           setSuggestions([])
           setRawPosts([])
@@ -500,11 +535,20 @@ export function useInspiration(initialLimit = PAGE_SIZE, filterByInfluencerId?: 
 
       const transformedSuggestions = typedPosts.slice(0, 10).map(transformToSuggestion)
 
+      // Merge followed posts (from Apify) with viral posts, deduplicating by content
+      let mergedPosts = nicheFilteredPosts
+      if (followedPosts.length > 0) {
+        const existingContent = new Set(nicheFilteredPosts.map(p => p.content.slice(0, 100)))
+        const uniqueFollowed = followedPosts.filter(p => !existingContent.has(p.content.slice(0, 100)))
+        mergedPosts = [...nicheFilteredPosts, ...uniqueFollowed]
+          .sort((a, b) => (b.metrics.reactions || 0) - (a.metrics.reactions || 0))
+      }
+
       if (append) {
-        setPosts(prev => [...prev, ...nicheFilteredPosts])
+        setPosts(prev => [...prev, ...mergedPosts])
         setRawPosts(prev => [...prev, ...typedPosts])
       } else {
-        setPosts(nicheFilteredPosts)
+        setPosts(mergedPosts)
         setSuggestions(transformedSuggestions)
         setRawPosts(typedPosts)
       }

@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] - 2026-04-03
+
+### Added
+- **Draft state persistence**: New `draft_state` JSONB column in `generated_posts` for type-specific draft metadata (carousel slides/template, series state, remix context, compose font/schedule)
+- **Draft state types**: `types/draft-state.ts` with discriminated union types (`CarouselDraftState`, `SeriesDraftState`, `ComposeDraftState`, `RemixDraftState`, `SwipeDraftState`) and type guards
+- **Post Scheduled email template**: `components/emails/post-scheduled.tsx` — React Email template for scheduled post notifications with schedule details card, post preview, and engagement tip
+- **Multi-step AI loader**: Aceternity multi-step-loader in compose basic mode — animated step-through ("Understanding your topic...", "Crafting the perfect hook...", etc.) during AI generation
+- **Recent posts badges**: Created/Reposted/Liked badges on post cards and detail dialog using activity URN inference
+- **Company/page @mention tagging**: Extension now searches for both people AND companies in mention autocomplete; company results show building icon, rounded-square avatar, and blue "Company" subtitle
+- **Extension post pagination**: `fetchAllMyPosts()` paginates through ALL historical posts (up to 2,000) with 2-second inter-page delays, replacing the previous 100-post-per-sync limit
+- **Logo.dev fallback in invite emails**: Team invitation emails now auto-fetch company logos via logo.dev when no custom logo is uploaded
+- **Single draft GET API**: New `GET /api/drafts/[id]` endpoint for fetching a single draft by ID (used by carousel restore fallback)
+- **Sync metadata realtime**: `use-analytics` hook subscribes to `sync_metadata` table changes for instant banner updates on extension sync
+
+### Fixed
+- **"Last synced 1 min ago" without extension**: Dashboard sync banner now queries `sync_metadata` (extension-only) instead of `daily_account_snapshots.updated_at` (Inngest pipeline). Excludes `analytics_pipeline` entries
+- **Extension status badge**: Now shows 3 states — "No extension" (muted) / "Extension offline" (amber) / "Extension active" (green) instead of binary active/offline
+- **Analytics summary shows period gains**: Summary bar displays `summary.total` (impressions gained in selected period) instead of `summary.accumulativeTotal` (lifetime cumulative)
+- **Data table granularity toggle**: Daily/Weekly/Monthly toggle now actually works — added `aggregateByGranularity()` with ISO week and month grouping
+- **"This Week" calendar alignment**: Leaderboard uses Monday-start calendar week instead of rolling 7-day window
+- **Week-over-week dashboard metrics**: Dashboard cards show total period growth % for < 14 days of data, WoW comparison for 14+ days. Eliminates misleading 100%/-100% from day-over-day noise
+- **Profile pictures in inspiration feed**: LinkedIn CDN signed URLs expire (403). Switched to unavatar.io for reliable, always-fresh profile photos using LinkedIn usernames with `?fallback=false`
+- **Avatar component**: Skips expired LinkedIn CDN URLs, uses standard Radix flow for fresh URLs (user's own LinkedIn avatar works normally)
+- **User menu avatar priority**: Top-right avatar now checks `linkedin_profile.profile_picture_url` → `linkedin_avatar_url` → `avatar_url` → auth metadata
+- **Settings profile avatar**: Settings page avatar prioritizes LinkedIn avatar via `linkedin_avatar_url` in Supabase query
+- **Carousel draft loading blank screen**: 5 bugs fixed — hydration always fetches from API when draftId present; duplicate detection preserves `draft_state`; stale template cleared from localStorage; carousel drafts always navigate to editor; `visibilitychange` listener for SPA navigation saves
+- **Carousel property panel crash**: `currentSlide?.backgroundColor` with optional chaining prevents crash when slides array is empty during tab transitions
+- **Influencer posts 500 error**: Gracefully handles Supabase range errors (PGRST103) and empty result sets instead of returning 500
+- **Inspiration following filter**: Clicking a followed person now shows BOTH their viral posts (from `linkedin_research_posts`) AND Apify-scraped posts (from `influencer_posts`), merged and deduplicated
+- **Influencer toggle**: Click to select → filter to their posts. Click again → deselect, show all posts. `followingOnly` auto-disabled on deselect
+- **Email field read-only**: Settings profile email input is now disabled with `readOnly`, `bg-muted`, and helper text
+- **Brand kit logo permissions**: Non-admin/non-owner team members cannot change the company logo; upload controls hidden with explanatory message
+- **Nested button hydration error**: Drafts page `DraftRow` changed from `<button>` to `<div role="button">` to prevent nested button DOM violation
+- **Invite email blue theme**: Team invitation email uses `GRADIENT_BRAND` (LinkedIn blue) instead of `GRADIENT_TEAM` (purple); role card and accept button use brand blue
+- **Template re-save duplicates**: Carousel template save now tracks `savedTemplateId` and shows "Update Existing" vs "Save as New" dialog on re-save
+
+### Changed
+- **Carousel save draft**: Persists to database via `/api/drafts/auto-save` with `source: 'carousel'` and `draft_state` containing full slide/template/brand data (previously localStorage-only)
+- **Draft state for all types**: Carousel, series, compose, and remix drafts now save structured `draft_state` JSONB with type-specific metadata for perfect restoration
+- **Proxy image headers**: LinkedIn CDN proxy sends proper `User-Agent`, `Referer`, `Origin`, and `sec-fetch-*` headers
+- **Content cleanup**: 221 posts removed across all inspiration tables (political, spam, job postings, event promos, duplicates, scraped website articles)
+
+---
+
 ## [Unreleased] - 2026-03-28
 
 ### Added

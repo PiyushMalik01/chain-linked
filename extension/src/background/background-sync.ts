@@ -26,6 +26,7 @@ import {
   getLinkedInAuth,
   isLinkedInAuthenticated,
   fetchEndpoint,
+  fetchAllMyPosts,
   fetchCurrentUserProfile,
   fetchPostDetailedAnalytics,
   ENDPOINTS_REQUIRING_PROFILE_URN,
@@ -594,7 +595,10 @@ async function executeSyncCycle(): Promise<SyncHistoryEntry> {
     await sleep(delay);
 
     try {
-      const result = await fetchEndpoint(endpoint, profileUrn, publicIdentifier);
+      // Use paginated fetch for myPosts to capture ALL historical posts
+      const result = endpoint === 'myPosts' && profileUrn
+        ? await fetchAllMyPosts(profileUrn)
+        : await fetchEndpoint(endpoint, profileUrn, publicIdentifier);
 
       if (result.success && result.data) {
         // Process and store the fetched data

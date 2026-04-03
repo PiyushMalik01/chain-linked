@@ -20,9 +20,11 @@ import type {
   CANVAS_DIMENSIONS,
   MAX_SLIDES,
 } from '@/types/canvas-editor';
+import { isCarouselDraftState } from '@/types/draft-state';
 
 const STORAGE_KEY = 'chainlinked-carousel-draft';
 const TEMPLATE_STORAGE_KEY = 'chainlinked-carousel-template';
+const DRAFT_STATE_STORAGE_KEY = 'chainlinked-carousel-draft-state';
 const MAX_HISTORY = 50;
 
 /**
@@ -316,10 +318,19 @@ function canvasEditorReducer(
 }
 
 /**
+ * Options for the useCanvasEditor hook
+ */
+interface UseCanvasEditorOptions {
+  /** Optional draft ID to fetch carousel data from the API as a fallback */
+  draftId?: string;
+}
+
+/**
  * Custom hook for managing canvas editor state
+ * @param options - Optional configuration including a draft ID for API fallback
  * @returns Editor state and action methods
  */
-export function useCanvasEditor() {
+export function useCanvasEditor(options?: UseCanvasEditorOptions) {
   const [state, dispatch] = useReducer(canvasEditorReducer, initialState);
 
   // History for undo/redo
@@ -370,18 +381,38 @@ export function useCanvasEditor() {
    * Load from localStorage on mount (slides + template).
    * Must run BEFORE the save effects to prevent the initial empty state
    * from overwriting persisted data.
+   * Falls back to fetching from the API if a draftId is provided and
+   * localStorage doesn't contain valid slide data.
    */
   useEffect(() => {
+    let loadedFromStorage = false;
+    /** Number of elements found across all restored slides (for debug logging) */
+    let restoredElementCount = 0;
+
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
+      console.debug('[canvas-hydrate] localStorage raw length:', saved?.length ?? 0);
       if (saved) {
         const slides = JSON.parse(saved) as CanvasSlide[];
         if (Array.isArray(slides) && slides.length > 0) {
+          // Validate that at least one slide has elements — a draft with slides
+          // but zero elements across every slide is a stale placeholder that
+          // should be replaced by the authoritative API data.
+          restoredElementCount = slides.reduce(
+            (sum, s) => sum + (Array.isArray(s.elements) ? s.elements.length : 0),
+            0,
+          );
           const sanitized = slides.map((s) => ({
             ...s,
             elements: Array.isArray(s.elements) ? s.elements : [],
           }));
           dispatch({ type: 'SET_SLIDES', payload: sanitized });
+          loadedFromStorage = restoredElementCount > 0;
+          console.debug(
+            '[canvas-hydrate] localStorage slides:', slides.length,
+            'elements:', restoredElementCount,
+            'accepted:', loadedFromStorage,
+          );
         }
       }
 
@@ -392,11 +423,109 @@ export function useCanvasEditor() {
           dispatch({ type: 'SET_TEMPLATE', payload: template });
         }
       }
+
+      // Restore full draft state (template, caption, slide index) if available
+      const savedDraftState = localStorage.getItem(DRAFT_STATE_STORAGE_KEY);
+      if (savedDraftState) {
+        try {
+          const parsed = JSON.parse(savedDraftState);
+          if (isCarouselDraftState(parsed)) {
+            // Restore current slide index if valid
+            if (typeof parsed.currentSlideIndex === 'number' && parsed.currentSlideIndex >= 0) {
+              dispatch({ type: 'SET_CURRENT_SLIDE', payload: parsed.currentSlideIndex });
+            }
+          }
+        } catch {
+          // Ignore parse errors for draft state
+        }
+        // Clean up draft state key after consuming it to avoid stale restores
+        localStorage.removeItem(DRAFT_STATE_STORAGE_KEY);
+      }
     } catch (e) {
-      console.warn('Failed to load carousel draft from localStorage');
+      console.warn('Failed to load carousel draft from localStorage', e);
     }
+
     // Mark as hydrated after loading — now saves are safe
     hydratedRef.current = true;
+
+    // Fetch from the API when a draftId is provided.  This always runs when
+    // localStorage was empty or had no real elements (loadedFromStorage=false).
+    // It also runs as an async *validation* when localStorage DID load —
+    // the API response is the authoritative source.  This guards against
+    // stale / wrong carousel data lingering in localStorage.
+    if (options?.draftId) {
+      console.debug('[canvas-hydrate] fetching draft from API, id:', options.draftId, 'localLoaded:', loadedFromStorage);
+      fetch(`/api/drafts/${options.draftId}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data) {
+            console.warn('[canvas-hydrate] API returned no data for draft', options.draftId);
+            return;
+          }
+
+          /**
+           * Helper: apply sanitized slides to editor state + localStorage
+           */
+          const applySlides = (slides: CanvasSlide[], source: string) => {
+            const sanitized = slides.map((s: CanvasSlide) => ({
+              ...s,
+              elements: Array.isArray(s.elements) ? s.elements : [],
+            }));
+            const apiElementCount = sanitized.reduce(
+              (sum, s) => sum + s.elements.length, 0,
+            );
+            console.debug(
+              `[canvas-hydrate] API (${source}) slides:`, sanitized.length,
+              'elements:', apiElementCount,
+            );
+            // Always apply if localStorage was empty / had no elements,
+            // or if the API has richer data than what localStorage provided.
+            if (!loadedFromStorage || apiElementCount > restoredElementCount) {
+              dispatch({ type: 'SET_SLIDES', payload: sanitized });
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+              console.debug(`[canvas-hydrate] applied API data (${source}), overriding localStorage`);
+            } else {
+              console.debug(`[canvas-hydrate] localStorage data is richer, keeping it`);
+            }
+          };
+
+          // Prefer structured draft_state if available
+          if (data.draft_state && isCarouselDraftState(data.draft_state)) {
+            const ds = data.draft_state;
+            try {
+              const slides = ds.slides as CanvasSlide[];
+              if (Array.isArray(slides) && slides.length > 0) {
+                applySlides(slides, 'draft_state');
+              }
+            } catch {
+              console.warn('[canvas-hydrate] Failed to parse slides from draft_state');
+            }
+            // Restore slide index
+            if (typeof ds.currentSlideIndex === 'number' && ds.currentSlideIndex >= 0) {
+              dispatch({ type: 'SET_CURRENT_SLIDE', payload: ds.currentSlideIndex });
+            }
+            return;
+          }
+
+          // Legacy fallback: use source_snippet
+          if (!data.source_snippet) {
+            console.warn('[canvas-hydrate] API draft has no draft_state or source_snippet');
+            return;
+          }
+          try {
+            const slides = JSON.parse(data.source_snippet) as CanvasSlide[];
+            if (Array.isArray(slides) && slides.length > 0) {
+              applySlides(slides, 'source_snippet');
+            }
+          } catch {
+            console.warn('[canvas-hydrate] Failed to parse slide data from source_snippet');
+          }
+        })
+        .catch((err) => {
+          console.warn('[canvas-hydrate] Failed to fetch draft from API', err);
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -662,6 +791,7 @@ export function useCanvasEditor() {
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(TEMPLATE_STORAGE_KEY);
+      localStorage.removeItem(DRAFT_STATE_STORAGE_KEY);
     } catch (e) {
       console.warn('Failed to clear carousel draft');
     }

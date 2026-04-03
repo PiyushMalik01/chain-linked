@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { scorePostBackground } from '@/lib/ai/score-post'
 import type { Database } from '@/types/database'
 
 /** Convenience alias for the generated_posts Insert type */
@@ -45,6 +46,8 @@ interface AutoSaveDraftRequest {
   } | null
   /** Compose conversation ID (FK to compose_conversations) */
   conversationId?: string | null
+  /** Type-specific draft state (carousel slides, series posts, etc.) */
+  draftState?: Record<string, unknown> | null
 }
 
 /**
@@ -87,7 +90,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { content, postType, source, topic, tone, context, wordCount, draftId, aiMetadata, conversationId } = body
+    const { content, postType, source, topic, tone, context, wordCount, draftId, aiMetadata, conversationId, draftState } = body
+
+    if (source === 'carousel') {
+      console.log(
+        '[auto-save] carousel draft received:',
+        'contentLen:', content?.length,
+        'contextLen:', context?.length ?? 0,
+        'hasDraftState:', !!draftState,
+        'draftId:', draftId ?? 'none',
+      )
+    }
 
     // Validate content
     if (!content || content.trim().length === 0) {
@@ -111,6 +124,7 @@ export async function POST(request: NextRequest) {
           source_snippet: context || null,
           word_count: computedWordCount,
           updated_at: new Date().toISOString(),
+          draft_state: (body.draftState as Database['public']['Tables']['generated_posts']['Update']['draft_state']) ?? undefined,
         }
 
       // Include AI metadata fields if provided (only on first save, avoid overwriting)
@@ -152,10 +166,14 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (existingDraft && existingDraft.length > 0) {
-      // Update the timestamp so it surfaces as recently edited
+      // Update the timestamp, slide data, and draft state so the row stays current
+      const dupeUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (context) dupeUpdate.source_snippet = context
+      if (source) dupeUpdate.source = source
+      if (draftState) dupeUpdate.draft_state = draftState
       await supabase
         .from('generated_posts')
-        .update({ updated_at: new Date().toISOString() })
+        .update(dupeUpdate)
         .eq('id', existingDraft[0].id)
 
       return NextResponse.json({
@@ -176,6 +194,7 @@ export async function POST(request: NextRequest) {
       source_snippet: context || null,
       word_count: computedWordCount,
       status: 'draft',
+      draft_state: (body.draftState as Database['public']['Tables']['generated_posts']['Insert']['draft_state']) ?? null,
     }
 
     // Include AI metadata fields if provided
@@ -201,6 +220,11 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to save draft' },
         { status: 500 }
       )
+    }
+
+    // Fire-and-forget: persist rule-based score
+    if (data?.id) {
+      scorePostBackground(data.id, trimmedContent).catch(() => {})
     }
 
     return NextResponse.json({

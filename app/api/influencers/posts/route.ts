@@ -80,21 +80,22 @@ export async function GET(request: Request) {
     }
   }
 
-  const { data: posts, error, count } = await query
-    .order('posted_at', { ascending: false, nullsFirst: false })
-    .range(offset, offset + limit - 1)
+  try {
+    const { data: posts, error, count: totalCount } = await query
+      .order('posted_at', { ascending: false, nullsFirst: false })
+      .range(offset, offset + limit - 1)
 
-  if (error) {
-    // PGRST116 = no rows found (common for newly followed influencers with no scraped posts yet)
-    if (error.code === 'PGRST116' || error.message?.includes('no rows')) {
-      return NextResponse.json({ posts: [], totalCount: 0 })
+    if (error) {
+      // Any range, no-rows, or relation errors — return empty gracefully
+      return NextResponse.json({ posts: [], totalCount: totalCount || 0 })
     }
-    console.error('Influencer posts fetch error:', error)
-    return NextResponse.json({ error: 'Failed to fetch influencer posts' }, { status: 500 })
-  }
 
-  return NextResponse.json({
-    posts: posts || [],
-    totalCount: count || 0,
-  })
+    return NextResponse.json({
+      posts: posts || [],
+      totalCount: totalCount || 0,
+    })
+  } catch {
+    // Catch any unexpected errors (network, timeout, etc.)
+    return NextResponse.json({ posts: [], totalCount: 0 })
+  }
 }

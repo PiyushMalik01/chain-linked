@@ -41,7 +41,8 @@ function getStartDate(range: LeaderboardTimeRange): string {
   switch (range) {
     case 'week':
       const weekStart = new Date(now)
-      weekStart.setDate(now.getDate() - 7)
+      weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+      weekStart.setHours(0, 0, 0, 0)
       return weekStart.toISOString()
     case 'month':
       const monthStart = new Date(now)
@@ -173,7 +174,9 @@ export function useTeamLeaderboard(teamId?: string | null): UseTeamLeaderboardRe
       // Calculate stats from posts — engagement metrics scoped to same time range as post count
       if (allPostsData) {
         const now = new Date()
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const weekAgo = new Date(now)
+        weekAgo.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+        weekAgo.setHours(0, 0, 0, 0)
         const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
         allPostsData.forEach(post => {

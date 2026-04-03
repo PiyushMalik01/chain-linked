@@ -51,7 +51,10 @@ export function UserMenu() {
   }
 
   const displayName = profile?.name || user.user_metadata?.full_name || user.email
-  const avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url
+  const avatarUrl = profile?.linkedin_profile?.profile_picture_url
+    || profile?.linkedin_avatar_url
+    || profile?.avatar_url
+    || user.user_metadata?.avatar_url
   const isDark = mounted && theme === 'dark'
 
   return (

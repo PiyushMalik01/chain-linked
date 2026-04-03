@@ -39,6 +39,7 @@ import { showSuccess } from "@/lib/toast-utils"
 import { ComposeSeriesMode } from "./compose-series-mode"
 import { SeriesPostCarousel } from "./series-post-carousel"
 import type { SeriesPost } from "@/types/compose"
+import type { SeriesDraftState } from "@/types/draft-state"
 import type { UIMessage } from "ai"
 
 /**
@@ -83,7 +84,18 @@ export function PostSeriesComposer({
     }
     return []
   })
-  const [currentPostIndex, setCurrentPostIndex] = React.useState(0)
+  const [currentPostIndex, setCurrentPostIndex] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const idx = localStorage.getItem('chainlinked-series-draft-index')
+        if (idx !== null) {
+          localStorage.removeItem('chainlinked-series-draft-index')
+          return parseInt(idx, 10) || 0
+        }
+      } catch { /* ignore */ }
+    }
+    return 0
+  })
   const { status: apiKeyStatus } = useApiKeys()
   const hasApiKey = hasApiKeyProp ?? (apiKeyStatus?.hasKey ?? false)
 
@@ -218,6 +230,21 @@ export function PostSeriesComposer({
         })),
       })
 
+      // Extract series topic from the first post subtopic or conversation context
+      const seriesTopic = posts[0]?.subtopic || undefined
+
+      const draftState: SeriesDraftState = {
+        type: 'series',
+        posts: posts.map(p => ({
+          subtopic: p.subtopic,
+          summary: p.summary,
+          post: p.post,
+        })),
+        currentPostIndex,
+        seriesTopic,
+        conversationId: conversationId || undefined,
+      }
+
       const res = await fetch('/api/drafts/auto-save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,6 +253,7 @@ export function PostSeriesComposer({
           postType: 'series',
           source: 'series',
           context: seriesData,
+          draftState,
         }),
       })
 
@@ -237,7 +265,7 @@ export function PostSeriesComposer({
     } finally {
       setIsSavingDraft(false)
     }
-  }, [posts])
+  }, [posts, currentPostIndex, conversationId])
 
   /**
    * Copy current post and open LinkedIn

@@ -162,13 +162,13 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
 
       // Run queries in parallel — use daily_account_snapshots as primary source
       const [snapshotsResult, profileResult, capturedTodayResult, syncResult] = await Promise.all([
-        // Latest 2 daily_account_snapshots for day-over-day comparison
+        // Latest 14 daily_account_snapshots for week-over-week comparison
         supabase
           .from('daily_account_snapshots')
           .select('date, total_impressions, total_reactions, total_comments, total_reposts, total_saves, total_sends, total_engagements, followers, connections, profile_views, search_appearances, post_count')
           .eq('user_id', targetUserId)
           .order('date', { ascending: false })
-          .limit(2),
+          .limit(14),
         supabase
           .from('linkedin_profiles')
           .select('followers_count, connections_count')
@@ -183,25 +183,29 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
         ]).then(results => ({
           count: results.reduce((sum, r) => sum + (r.count ?? 0), 0),
         })),
-        // Latest sync timestamp
+        // Latest sync timestamp — use sync_metadata (written by the extension
+        // via /api/sync) instead of daily_account_snapshots.updated_at which is
+        // updated every 5 min by the Inngest pipeline regardless of extension activity.
+        // Exclude 'analytics_pipeline' entries which are written by the Inngest cron.
         supabase
-          .from('daily_account_snapshots')
-          .select('updated_at')
+          .from('sync_metadata')
+          .select('last_synced_at')
           .eq('user_id', targetUserId)
-          .order('date', { ascending: false })
+          .neq('table_name', 'analytics_pipeline')
+          .order('last_synced_at', { ascending: false })
           .limit(1),
       ])
 
-      // Build today's capture info
+      // Build today's capture info — lastSynced comes from sync_metadata
+      // (only written by extension sync), not the Inngest pipeline
       const capturedTodayCount = capturedTodayResult.count ?? 0
       const lastSyncRow = syncResult.data?.[0]
-      const lastSyncedAt = lastSyncRow?.updated_at ?? null
-      const hasTodaySync = lastSyncedAt ? new Date(lastSyncedAt).toISOString().startsWith(todayStr) : false
+      const lastSyncedAt = lastSyncRow?.last_synced_at ?? null
       setTodayCapture({
         apiCalls: capturedTodayCount,
         feedPosts: 0,
         lastSynced: lastSyncedAt,
-        hasData: capturedTodayCount > 0 || hasTodaySync,
+        hasData: capturedTodayCount > 0,
       })
 
       // Use daily_account_snapshots as the single source of truth
@@ -224,43 +228,72 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
       }
 
       const latest = snapshots[0] // most recent snapshot (ordered desc)
-      const previous = snapshots.length >= 2 ? snapshots[1] : null
+      const totalDays = snapshots.length
 
-      // Compute % change between latest and previous snapshot
-      const computeChange = (curr: number, prev: number): number => {
-        if (prev === 0 && curr === 0) return 0
-        if (prev === 0) return curr > 0 ? 100 : 0
-        return Math.round(((curr - prev) / prev) * 10000) / 100
+      // ── Week-over-Week comparison ──
+      // Split snapshots into current week (last 7 days) and previous week (days 8-14).
+      // Sum daily deltas within each week, then compute % change.
+      const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date)) // oldest first
+
+      /**
+       * Sum the daily deltas (difference between consecutive days) for a slice of sorted snapshots.
+       * Returns gains for impressions, engagements, followers, profile_views.
+       */
+      const sumDeltas = (slice: typeof sorted) => {
+        let imp = 0, eng = 0, foll = 0, pv = 0
+        for (let i = 1; i < slice.length; i++) {
+          imp += Math.max(0, slice[i].total_impressions - slice[i - 1].total_impressions)
+          eng += Math.max(0, slice[i].total_engagements - slice[i - 1].total_engagements)
+          foll += slice[i].followers - slice[i - 1].followers
+          pv += slice[i].profile_views - slice[i - 1].profile_views
+        }
+        return { imp, eng, foll, pv }
       }
 
+      // Split: current week = last 7 entries, previous week = entries 8-14
+      const thisWeekSlice = sorted.slice(Math.max(0, sorted.length - 7))
+      const prevWeekSlice = sorted.length > 7 ? sorted.slice(0, sorted.length - 7 + 1) : [] // +1 for overlap day to compute first delta
+
+      const thisWeek = sumDeltas(thisWeekSlice)
+      const prevWeek = prevWeekSlice.length >= 2 ? sumDeltas(prevWeekSlice) : null
+
+      // Compute % change: (thisWeek - prevWeek) / prevWeek * 100
+      const computeWoW = (curr: number, prev: number | null): number => {
+        if (prev === null || prev === 0) return 0 // No prior week data → show 0 (not misleading %)
+        return Math.round(((curr - prev) / Math.abs(prev)) * 10000) / 100
+      }
+
+      // Absolute values from latest snapshot
       const impressions = latest.total_impressions
       const engagements = latest.total_engagements
       const engagementRate = impressions > 0 ? (engagements / impressions) * 100 : 0
 
-      // Change values: compare daily deltas (new activity today vs yesterday)
-      // Using cumulative totals would show near-zero changes since the base is large
-      const thirdDay = snapshots.length >= 3 ? snapshots[2] : null
+      let impChange = 0, engChange = 0, follChange = 0, pvChange = 0
 
-      // Daily delta = difference between consecutive snapshots
-      const todayImp = previous ? latest.total_impressions - previous.total_impressions : latest.total_impressions
-      const yesterdayImp = previous && thirdDay ? previous.total_impressions - thirdDay.total_impressions : 0
-      const todayEng = previous ? latest.total_engagements - previous.total_engagements : latest.total_engagements
-      const yesterdayEng = previous && thirdDay ? previous.total_engagements - thirdDay.total_engagements : 0
-      const todayFoll = previous ? latest.followers - previous.followers : 0
-      const yesterdayFoll = previous && thirdDay ? previous.followers - thirdDay.followers : 0
-      const todayPV = previous ? latest.profile_views - previous.profile_views : latest.profile_views
-      const yesterdayPV = previous && thirdDay ? previous.profile_views - thirdDay.profile_views : 0
+      if (totalDays >= 14 && prevWeek) {
+        // ── 14+ days: Week-over-Week comparison ──
+        impChange = computeWoW(thisWeek.imp, prevWeek.imp)
+        engChange = computeWoW(thisWeek.eng, prevWeek.eng)
+        follChange = computeWoW(thisWeek.foll, prevWeek.foll)
+        pvChange = computeWoW(thisWeek.pv, prevWeek.pv)
+        setPeriodLabel('vs last week')
+      } else if (totalDays >= 2) {
+        // ── 2-13 days: Show total period growth ──
+        // Compare latest snapshot vs earliest snapshot: "how much did you grow
+        // over all available data?" — simple, stable, never misleading.
+        const earliest = sorted[0]
+        const computeGrowth = (latest_val: number, earliest_val: number): number => {
+          if (earliest_val === 0 && latest_val === 0) return 0
+          if (earliest_val === 0) return 0 // Can't compute % from zero base
+          return Math.round(((latest_val - earliest_val) / earliest_val) * 10000) / 100
+        }
 
-      const impChange = previous ? computeChange(todayImp, yesterdayImp) : 0
-      const engChange = previous ? computeChange(todayEng, yesterdayEng) : 0
-      const follChange = previous ? computeChange(todayFoll, yesterdayFoll) : 0
-      const pvChange = previous ? computeChange(todayPV, yesterdayPV) : 0
+        impChange = computeGrowth(latest.total_impressions, earliest.total_impressions)
+        engChange = computeGrowth(latest.total_engagements, earliest.total_engagements)
+        follChange = computeGrowth(latest.followers, earliest.followers)
+        pvChange = computeGrowth(latest.profile_views, earliest.profile_views)
 
-      // Period label
-      if (previous) {
-        const prevDate = new Date(previous.date + 'T00:00:00')
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        setPeriodLabel(`vs ${monthNames[prevDate.getMonth()]} ${prevDate.getDate()}`)
+        setPeriodLabel(`last ${totalDays} days`)
       } else {
         setPeriodLabel('first sync')
       }
@@ -351,6 +384,14 @@ export function useAnalytics(userId?: string): UseAnalyticsReturn {
         event: '*',
         schema: 'public',
         table: 'linkedin_profiles',
+        filter: `user_id=eq.${targetUserId}`,
+      }, () => {
+        fetchAnalytics()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'sync_metadata',
         filter: `user_id=eq.${targetUserId}`,
       }, () => {
         fetchAnalytics()

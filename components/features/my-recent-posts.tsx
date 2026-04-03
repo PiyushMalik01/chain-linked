@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { motion } from "framer-motion"
 import { createClient } from "@/lib/supabase/client"
-import { formatMetricNumber, getInitials } from "@/lib/utils"
+import { cn, formatMetricNumber, getInitials } from "@/lib/utils"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -53,7 +53,59 @@ export interface MyRecentPost {
   impressions: number | null
   posted_at: string | null
   created_at: string | null
-  is_repost: boolean | null
+}
+
+/**
+ * Possible activity types for a post
+ */
+export type PostActivityType = "created" | "reposted" | "liked"
+
+/**
+ * Determines the activity type of a post based on available fields
+ * @param post - The post to classify
+ * @returns The activity type: "created", "reposted", or "liked"
+ */
+export function getPostActivityType(post: {
+  content?: string | null
+  activity_urn?: string | null
+}): PostActivityType {
+  // Check content for repost markers set by the extension
+  if (post.content?.startsWith("[Repost]")) return "reposted"
+  // Check activity URN for share indicators (LinkedIn uses different URN types)
+  if (post.activity_urn?.includes('share')) return "reposted"
+  return "created"
+}
+
+/**
+ * Returns badge styling and label for a given activity type
+ * @param activityType - The post activity type
+ * @returns Object containing icon, label, and CSS classes for the badge
+ */
+export function getActivityBadgeProps(activityType: PostActivityType) {
+  switch (activityType) {
+    case "reposted":
+      return {
+        Icon: IconRepeat,
+        label: "Reposted",
+        cardClassName: "bg-emerald-500/90 text-white border-0",
+        dialogClassName: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      }
+    case "liked":
+      return {
+        Icon: IconThumbUp,
+        label: "Liked",
+        cardClassName: "bg-amber-500/90 text-white border-0",
+        dialogClassName: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      }
+    case "created":
+    default:
+      return {
+        Icon: IconPencil,
+        label: "Created",
+        cardClassName: "bg-primary/90 text-primary-foreground border-0",
+        dialogClassName: "",
+      }
+  }
 }
 
 /**
@@ -103,7 +155,7 @@ export function useMyRecentPosts(userId: string | undefined, limit = 9) {
       setIsLoading(true)
       const { data, error } = await supabaseRef.current
         .from("my_posts")
-        .select("id, content, media_type, media_urls, reactions, comments, reposts, impressions, posted_at, created_at, is_repost" as never)
+        .select("id, content, media_type, media_urls, reactions, comments, reposts, impressions, posted_at, created_at, activity_urn")
         .eq("user_id", userId)
         .order("posted_at", { ascending: false })
         .limit(limit)
@@ -190,19 +242,18 @@ function PostGridCard({
             </div>
           )}
           {/* Post type badge */}
-          <div className="absolute top-1.5 left-1.5">
-            {post.is_repost ? (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5 bg-amber-500/90 text-white border-0">
-                <IconRepeat className="size-2.5" />
-                Reposted
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5 bg-primary/90 text-primary-foreground border-0">
-                <IconPencil className="size-2.5" />
-                Created
-              </Badge>
-            )}
-          </div>
+          {(() => {
+            const activityType = getPostActivityType(post)
+            const badge = getActivityBadgeProps(activityType)
+            return (
+              <div className="absolute top-1.5 left-1.5">
+                <Badge variant="secondary" className={cn("text-[10px] px-1.5 py-0 gap-0.5", badge.cardClassName)}>
+                  <badge.Icon className="size-2.5" />
+                  {badge.label}
+                </Badge>
+              </div>
+            )
+          })()}
           {post.media_type && imageUrl && (
             <div className="absolute top-1.5 right-1.5 rounded bg-black/60 p-0.5">
               <IconPhoto className="size-3 text-white" />
@@ -299,20 +350,25 @@ function LinkedInPostDialog({
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold truncate">{authorName}</p>
-                {post.is_repost ? (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5 shrink-0">
-                    <IconRepeat className="size-2.5" />
-                    Reposted
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-0.5 shrink-0">
-                    <IconPencil className="size-2.5" />
-                    Created
-                  </Badge>
-                )}
-              </div>
+              {(() => {
+                const activityType = getPostActivityType(post)
+                const badge = getActivityBadgeProps(activityType)
+                return (
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold truncate">{authorName}</p>
+                    <Badge
+                      variant={activityType === "created" ? "outline" : "secondary"}
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 gap-0.5 shrink-0",
+                        activityType !== "created" && badge.dialogClassName
+                      )}
+                    >
+                      <badge.Icon className="size-2.5" />
+                      {badge.label}
+                    </Badge>
+                  </div>
+                )
+              })()}
               <p className="text-xs text-muted-foreground">
                 {relativeTime(post.posted_at)}
               </p>

@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email/resend'
 import { TeamInvitationEmail } from '@/components/emails/team-invitation'
+import { getLogoDevUrl } from '@/lib/logo-dev'
 import { format } from 'date-fns'
 
 /**
@@ -295,7 +296,7 @@ export async function POST(request: Request, context: RouteContext) {
             inviterEmail,
             teamName: team.name,
             companyName: company?.name,
-            companyLogoUrl: company?.logo_url || team.logo_url || undefined,
+            companyLogoUrl: company?.logo_url || team.logo_url || getLogoDevUrl({ companyName: company?.name || team.name, size: 48 }) || undefined,
             role: role as 'admin' | 'member',
             inviteLink,
             expiresAt: format(expiresAt, 'MMMM d, yyyy'),

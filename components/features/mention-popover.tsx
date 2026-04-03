@@ -1,31 +1,34 @@
 /**
  * Mention Popover Component
- * @description Floating autocomplete dropdown for @mentioning people in the post composer.
- * Appears when user types "@" and filters as they continue typing.
- * Supports keyboard navigation (up/down/enter/escape).
+ * @description Floating autocomplete dropdown for @mentioning people and companies
+ * in the post composer. Appears when user types "@" and filters as they continue
+ * typing. Supports keyboard navigation (up/down/enter/escape).
+ * Company results are visually distinguished with a building icon and rounded-square avatar.
  * @module components/features/mention-popover
  */
 
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { IconLoader2, IconAt } from '@tabler/icons-react'
+import { IconLoader2, IconAt, IconBuilding, IconUser } from '@tabler/icons-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { searchLinkedInViaExtension } from '@/lib/extension/linkedin-search'
 
 /**
- * Mentionable person from the search API
+ * Mentionable person or company from the search API
  */
 export interface MentionSuggestion {
   /** Display name */
   name: string
-  /** LinkedIn URN */
+  /** LinkedIn URN (urn:li:person:xxx or urn:li:organization:xxx) */
   urn: string
-  /** Professional headline */
+  /** Professional headline (person) or tagline/industry (company) */
   headline: string | null
-  /** Profile picture URL */
+  /** Profile picture or company logo URL */
   avatarUrl: string | null
+  /** Entity type — person or company/page */
+  type?: 'person' | 'company'
 }
 
 /**
@@ -47,8 +50,8 @@ interface MentionPopoverProps {
 /**
  * Mention Popover
  *
- * Floating dropdown showing matching people for @mention autocomplete.
- * Searches via extension first (all LinkedIn users), falls back to local connections API.
+ * Floating dropdown showing matching people and companies for @mention autocomplete.
+ * Searches via extension first (all LinkedIn users and pages), falls back to local connections API.
  *
  * @param props - Component props
  * @returns Mention popover JSX
@@ -188,7 +191,7 @@ export function MentionPopover({
       <div className="max-h-52 overflow-y-auto">
         {!query ? (
           <div className="py-5 text-center text-sm text-muted-foreground">
-            Start typing to search LinkedIn users
+            Start typing to search people &amp; companies
           </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center gap-2 py-5 text-muted-foreground">
@@ -197,7 +200,7 @@ export function MentionPopover({
           </div>
         ) : suggestions.length === 0 ? (
           <div className="py-5 text-center text-sm text-muted-foreground">
-            No people found for &quot;{query}&quot;
+            No people or companies found for &quot;{query}&quot;
           </div>
         ) : (
           suggestions.map((suggestion, index) => (
@@ -213,28 +216,51 @@ export function MentionPopover({
               onClick={() => onSelect(suggestion)}
               onMouseEnter={() => setActiveIndex(index)}
             >
-              <Avatar className="size-8 shrink-0">
+              <Avatar className={cn(
+                "size-8 shrink-0",
+                suggestion.type === 'company' && "rounded-md"
+              )}>
                 {suggestion.avatarUrl && (
                   <AvatarImage src={suggestion.avatarUrl} alt={suggestion.name} />
                 )}
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                  {suggestion.name
-                    .split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)}
+                <AvatarFallback className={cn(
+                  "text-xs font-semibold",
+                  suggestion.type === 'company'
+                    ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-md"
+                    : "bg-primary/10 text-primary"
+                )}>
+                  {suggestion.type === 'company' ? (
+                    <IconBuilding className="size-4" />
+                  ) : (
+                    suggestion.name
+                      .split(' ')
+                      .map(n => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2)
+                  )}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium leading-tight truncate">
-                  {suggestion.name}
-                </p>
-                {suggestion.headline && (
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium leading-tight truncate">
+                    {suggestion.name}
+                  </p>
+                  {suggestion.type === 'company' ? (
+                    <IconBuilding className="size-3 shrink-0 text-blue-500" />
+                  ) : (
+                    <IconUser className="size-3 shrink-0 text-muted-foreground/50" />
+                  )}
+                </div>
+                {suggestion.headline ? (
                   <p className="text-xs text-muted-foreground leading-tight truncate mt-0.5">
                     {suggestion.headline}
                   </p>
-                )}
+                ) : suggestion.type === 'company' ? (
+                  <p className="text-xs text-blue-500/70 leading-tight mt-0.5">
+                    Company
+                  </p>
+                ) : null}
               </div>
             </button>
           ))

@@ -431,10 +431,12 @@ function ViralPostsTab() {
   const [isRemixOpen, setIsRemixOpen] = React.useState(false)
   const [postToRemix, setPostToRemix] = React.useState<InspirationPost | null>(null)
 
-  // Auto-enable followingOnly when an influencer is selected
+  // Toggle followingOnly filter when an influencer is selected/deselected
   React.useEffect(() => {
     if (selectedInfluencerId) {
       setFilters({ followingOnly: true })
+    } else {
+      setFilters({ followingOnly: false })
     }
   }, [selectedInfluencerId, setFilters])
 
@@ -500,7 +502,7 @@ function ViralPostsTab() {
         isLoading={isInfluencersLoading}
         onFollow={followInfluencer}
         onUnfollow={unfollowInfluencer}
-        onSelectInfluencer={setSelectedInfluencerId}
+        onSelectInfluencer={(id) => setSelectedInfluencerId(prev => prev === id ? null : id)}
         selectedInfluencerId={selectedInfluencerId}
         onMarkAsSeen={markAsSeen}
         onFetchLatest={fetchLatestPosts}

@@ -10,6 +10,7 @@
 
 import * as React from "react"
 import { IconSparkles, IconLoader2, IconX } from "@tabler/icons-react"
+import { MultiStepLoader } from "@/components/ui/multi-step-loader"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -104,6 +105,18 @@ export function ComposeBasicMode({
   const [context, setContext] = React.useState(initialContext ?? persisted?.context ?? '')
   const [isGenerating, setIsGenerating] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+
+  /** Animated loading steps shown during AI generation */
+  const generationSteps = React.useMemo(() => [
+    { text: "Understanding your topic..." },
+    { text: "Analyzing LinkedIn trends..." },
+    { text: "Crafting the perfect hook..." },
+    { text: "Structuring your narrative..." },
+    { text: "Adding engaging elements..." },
+    { text: "Polishing your writing..." },
+    { text: "Optimizing for engagement..." },
+    { text: "Almost there..." },
+  ], [])
 
   const topicRef = React.useRef<HTMLTextAreaElement>(null)
   const contextRef = React.useRef<HTMLTextAreaElement>(null)
@@ -295,6 +308,14 @@ export function ComposeBasicMode({
           <span>{error}</span>
         </div>
       )}
+
+      {/* AI generation progress overlay */}
+      <MultiStepLoader
+        loadingStates={generationSteps}
+        loading={isGenerating}
+        duration={2500}
+        loop={false}
+      />
 
       {/* Generate button */}
       <Button

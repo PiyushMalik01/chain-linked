@@ -132,11 +132,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Fetch the image
+    // Fetch the image — LinkedIn CDN requires proper browser-like headers
     const imageResponse = await fetch(url, {
       headers: {
-        'Accept': 'image/*',
+        'Accept': 'image/webp,image/avif,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Referer': 'https://www.linkedin.com/',
+        'Origin': 'https://www.linkedin.com',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'sec-fetch-dest': 'image',
+        'sec-fetch-mode': 'no-cors',
+        'sec-fetch-site': 'cross-site',
       },
+      redirect: 'follow',
     })
 
     if (!imageResponse.ok) {

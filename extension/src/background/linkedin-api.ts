@@ -51,7 +51,7 @@ const ENDPOINT_PATHS: Record<SyncEndpointType, string> = {
   myPosts:
     '/voyager/api/graphql' +
     '?includeWebMetadata=true' +
-    '&variables=(count:100,start:0,profileUrn:{profileUrn})' +
+    '&variables=(count:100,start:{start},profileUrn:{profileUrn})' +
     '&queryId=voyagerFeedDashProfileUpdates.4af00b28d60ed0f1488018948daad822',
 
   profileViews: '/voyager/api/identity/wvmpCards',
@@ -215,6 +215,7 @@ export function getEndpointUrl(
   type: SyncEndpointType,
   profileUrn?: string,
   publicIdentifier?: string,
+  start?: number,
 ): string {
   let path = ENDPOINT_PATHS[type];
 
@@ -225,6 +226,9 @@ export function getEndpointUrl(
   if (publicIdentifier) {
     path = path.replace('{publicIdentifier}', encodeURIComponent(publicIdentifier));
   }
+
+  // Replace pagination offset (defaults to 0 for first page)
+  path = path.replace('{start}', String(start ?? 0));
 
   // Validate that no unsubstituted placeholders remain
   if (path.includes('{profileUrn}') || path.includes('{publicIdentifier}')) {
@@ -490,6 +494,90 @@ export async function fetchCurrentUserProfile(): Promise<VoyagerFetchResult> {
   }
 
   return voyagerFetch(`${LINKEDIN_BASE_URL}/voyager/api/me`, auth);
+}
+
+// ---------------------------------------------------------------------------
+// Paginated Posts Fetch
+// ---------------------------------------------------------------------------
+
+/** Maximum pages to fetch to avoid infinite loops */
+const MAX_POST_PAGES = 20;
+
+/** Delay between paginated requests (ms) to avoid rate limiting */
+const PAGINATION_DELAY_MS = 2000;
+
+/**
+ * Fetch ALL of the user's posts by paginating through the myPosts endpoint.
+ * LinkedIn returns up to 100 posts per page. This function keeps fetching
+ * until an empty page is returned or the max page limit is reached.
+ *
+ * @param profileUrn - The user's LinkedIn profile URN
+ * @returns A {@link VoyagerFetchResult} with all pages merged into one data object
+ */
+export async function fetchAllMyPosts(
+  profileUrn: string,
+): Promise<VoyagerFetchResult> {
+  console.log(`${LOG_PREFIX} fetchAllMyPosts: starting paginated fetch for ${profileUrn}`);
+
+  const auth = await getLinkedInAuth();
+  if (!auth) {
+    return { success: false, error: 'Not authenticated to LinkedIn.' };
+  }
+
+  const allIncluded: unknown[] = [];
+  const allElements: unknown[] = [];
+  let totalFetched = 0;
+
+  for (let page = 0; page < MAX_POST_PAGES; page++) {
+    const start = page * 100;
+    const url = getEndpointUrl('myPosts', profileUrn, undefined, start);
+
+    console.log(`${LOG_PREFIX} fetchAllMyPosts: page ${page + 1}, start=${start}`);
+
+    const result = await voyagerFetch(url, auth);
+
+    if (!result.success || !result.data) {
+      if (page === 0) {
+        return result; // First page failed — propagate error
+      }
+      break; // Later pages failing — return what we have
+    }
+
+    const raw = result.data as Record<string, unknown>;
+    const included = Array.isArray(raw.included) ? raw.included : [];
+    const elements = Array.isArray((raw.data as Record<string, unknown>)?.elements)
+      ? ((raw.data as Record<string, unknown>).elements as unknown[])
+      : [];
+
+    allIncluded.push(...included);
+    allElements.push(...elements);
+    totalFetched += included.length;
+
+    console.log(`${LOG_PREFIX} fetchAllMyPosts: page ${page + 1} returned ${included.length} items (total: ${totalFetched})`);
+
+    // If fewer items than requested, we've reached the last page
+    if (elements.length === 0 || included.length < 100) {
+      console.log(`${LOG_PREFIX} fetchAllMyPosts: last page reached (included=${included.length}, elements=${elements.length})`);
+      break;
+    }
+
+    // Rate limit delay between pages
+    if (page < MAX_POST_PAGES - 1) {
+      await new Promise(resolve => setTimeout(resolve, PAGINATION_DELAY_MS));
+    }
+  }
+
+  console.log(`${LOG_PREFIX} fetchAllMyPosts: complete — ${totalFetched} total items across all pages`);
+
+  // Merge all pages into a single response that processMyPostsData can handle
+  return {
+    success: true,
+    data: {
+      included: allIncluded,
+      data: { elements: allElements },
+    },
+    status: 200,
+  };
 }
 
 // ---------------------------------------------------------------------------

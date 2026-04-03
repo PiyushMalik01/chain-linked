@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
 import type { CanvasTemplate, CanvasSlide, ExportOptions, LeftPanelTab } from '@/types/canvas-editor';
 import type { ShapeElementConfig } from '@/types/graphics-library';
 import type { CanvasStageRef } from './canvas-stage';
+import type { CarouselDraftState } from '@/types/draft-state';
 
 // Dynamic import for Konva (client-side only)
 const CanvasStage = dynamic(
@@ -74,6 +75,8 @@ interface CanvasEditorProps {
   initialTemplate?: CanvasTemplate;
   onSave?: (slides: CanvasTemplate['defaultSlides']) => void;
   className?: string;
+  /** Optional draft ID to restore carousel data from the API as a fallback */
+  draftId?: string;
 }
 
 /**
@@ -85,11 +88,14 @@ export function CanvasEditor({
   initialTemplate,
   onSave,
   className,
+  draftId,
 }: CanvasEditorProps) {
   const stageRef = useRef<CanvasStageRef>(null);
   const [activeLeftTab, setActiveLeftTab] = useState<LeftPanelTab | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(() => {
     if (initialTemplate) return false;
+    // Don't show template modal if we have a draft ID (will be fetched from API)
+    if (draftId) return false;
     // Don't show template modal if there's an existing draft in localStorage
     try {
       const saved = localStorage.getItem('chainlinked-carousel-draft');
@@ -107,10 +113,17 @@ export function CanvasEditor({
   const [exportProgress, setExportProgress] = useState(0);
   const [generatedCaption, setGeneratedCaption] = useState<string | undefined>(undefined);
   const [aiGenerationState, setAiGenerationState] = useState<AiGenerationState>(DEFAULT_AI_GENERATION_STATE);
+  /** Tracks the ID of the last-saved template to allow updating instead of duplicating */
+  const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
+  /** Holds form data while the re-save choice dialog is open */
+  const [pendingSaveData, setPendingSaveData] = useState<{ name: string; description?: string; category: string } | null>(null);
+  /** Whether the "Update existing or Save as new" dialog is open */
+  const [showResaveDialog, setShowResaveDialog] = useState(false);
 
   // Carousel template persistence
   const {
     saveTemplate,
+    updateTemplate,
     isSaving: isSavingTemplate,
     savedTemplates: savedCarouselTemplates,
     fetchTemplates: fetchCarouselTemplates,
@@ -150,7 +163,7 @@ export function CanvasEditor({
     return Array.from(customs);
   }, [dbCategories, savedCarouselTemplates]);
 
-  // Canvas editor state
+  // Canvas editor state (pass draftId for API fallback when localStorage is empty)
   const {
     slides,
     currentSlideIndex,
@@ -182,7 +195,7 @@ export function CanvasEditor({
     canUndo,
     canRedo,
     resetEditor,
-  } = useCanvasEditor();
+  } = useCanvasEditor({ draftId });
 
   // Apply initial template
   useEffect(() => {
@@ -225,8 +238,10 @@ export function CanvasEditor({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, deleteElement, selectElement, selectedElementId]);
 
-  // Track saved draft ID for carousel auto-save deduplication
-  const carouselDraftIdRef = useRef<string | null>(null);
+  // Track saved draft ID for carousel auto-save deduplication.
+  // Initialize from the draftId prop so that edits to an existing draft
+  // update the same row instead of creating duplicates.
+  const carouselDraftIdRef = useRef<string | null>(draftId ?? null);
 
   /**
    * Build the carousel auto-save payload
@@ -270,28 +285,89 @@ export function CanvasEditor({
       slideJson = localStorage.getItem('chainlinked-carousel-draft') || undefined;
     }
 
-    return {
+    // Build type-specific draft state for full editor restoration
+    let draftState: CarouselDraftState | undefined;
+    try {
+      const cleanSlides = slides.map((slide) => ({
+        id: slide.id,
+        backgroundColor: slide.backgroundColor,
+        elements: (slide.elements || []).map((el) => {
+          const clean: Record<string, unknown> = {};
+          for (const key of Object.keys(el)) {
+            if (['id','type','x','y','width','height','rotation','text','fontSize','fontFamily',
+                 'fontWeight','fontStyle','fill','align','lineHeight','letterSpacing','textDecoration',
+                 'stroke','strokeWidth','opacity','cornerRadius','shapeType','src','alt','scaleX','scaleY'
+            ].includes(key)) {
+              clean[key] = el[key as keyof typeof el];
+            }
+          }
+          return clean;
+        }),
+      }));
+      draftState = {
+        type: 'carousel' as const,
+        slides: cleanSlides,
+        templateId: template?.id,
+        templateName: template?.name,
+        brandKitApplied: !!template?.brandColors?.length,
+        brandColors: template?.brandColors,
+        fonts: template?.fonts,
+        generatedCaption: generatedCaption,
+        currentSlideIndex,
+        slideCount: slides.length,
+      };
+    } catch {
+      // If serialization fails, leave draftState undefined
+    }
+
+    const payload = {
       content: combinedText,
       postType: 'carousel',
       source: 'carousel',
       context: slideJson,
       draftId: carouselDraftIdRef.current || undefined,
+      draftState,
     };
-  }, [slides]);
+
+    console.debug(
+      '[carousel-save] payload built:',
+      'slides:', slides.length,
+      'textLen:', combinedText.length,
+      'contextLen:', slideJson?.length ?? 0,
+      'hasDraftState:', !!draftState,
+      'draftId:', carouselDraftIdRef.current,
+    );
+
+    return payload;
+  }, [slides, template, generatedCaption, currentSlideIndex]);
 
   /**
-   * Auto-save carousel draft to Supabase on page leave
-   * Uses navigator.sendBeacon for reliable saves during unload
+   * Auto-save carousel draft to Supabase on page leave.
+   * Uses navigator.sendBeacon for reliable saves during unload.
+   * Also listens to visibilitychange (hidden) which fires more reliably
+   * than beforeunload on mobile and during SPA navigations.
    */
   useEffect(() => {
     const saveCarouselDraft = () => {
       const payload = buildCarouselSavePayload();
       if (!payload) return;
-      navigator.sendBeacon('/api/drafts/auto-save', JSON.stringify(payload));
+      const body = JSON.stringify(payload);
+      console.debug('[carousel-save] sendBeacon firing, bodyLen:', body.length);
+      navigator.sendBeacon('/api/drafts/auto-save', body);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveCarouselDraft();
+      }
     };
 
     window.addEventListener('beforeunload', saveCarouselDraft);
-    return () => window.removeEventListener('beforeunload', saveCarouselDraft);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', saveCarouselDraft);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [buildCarouselSavePayload]);
 
   /**
@@ -552,9 +628,26 @@ export function CanvasEditor({
   }, [resetEditor]);
 
   /**
-   * Handle saving the current carousel as a reusable template
+   * Persist a custom category if it is not a built-in one
+   * @param category - The category name to persist
    */
-  const handleSaveTemplate = useCallback(
+  const persistCustomCategory = useCallback(
+    (category: string) => {
+      const builtIn = new Set(['professional', 'creative', 'minimal', 'bold', 'custom', 'brand']);
+      if (!builtIn.has(category.toLowerCase())) {
+        createDbCategory(category).catch(() => {
+          // Silently ignore — category may already exist (upsert)
+        });
+      }
+    },
+    [createDbCategory]
+  );
+
+  /**
+   * Create a brand-new template from the current slides
+   * @param data - Template form data (name, description, category)
+   */
+  const createNewTemplate = useCallback(
     async (data: { name: string; description?: string; category: string }) => {
       const fonts = template?.fonts || [];
       const brandColors = template?.brandColors || [];
@@ -569,22 +662,86 @@ export function CanvasEditor({
       });
 
       if (result) {
-        // Persist custom category to template_categories table so it appears in the category list
-        const builtIn = new Set(['professional', 'creative', 'minimal', 'bold', 'custom', 'brand']);
-        if (!builtIn.has(data.category.toLowerCase())) {
-          createDbCategory(data.category).catch(() => {
-            // Silently ignore — category may already exist (upsert)
-          });
-        }
-
+        setSavedTemplateId(result.id);
+        persistCustomCategory(data.category);
         toast.success('Template saved successfully');
         setShowSaveTemplateDialog(false);
       } else {
         toast.error('Failed to save template');
       }
     },
-    [slides, template, saveTemplate, createDbCategory]
+    [slides, template, saveTemplate, persistCustomCategory]
   );
+
+  /**
+   * Update the previously-saved template with the current slides
+   * @param data - Template form data (name, description, category)
+   */
+  const updateExistingTemplate = useCallback(
+    async (data: { name: string; description?: string; category: string }) => {
+      if (!savedTemplateId) return;
+
+      const fonts = template?.fonts || [];
+      const brandColors = template?.brandColors || [];
+
+      const success = await updateTemplate(savedTemplateId, {
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        slides,
+        brandColors,
+        fonts,
+      });
+
+      if (success) {
+        persistCustomCategory(data.category);
+        toast.success('Template updated successfully');
+        setShowSaveTemplateDialog(false);
+      } else {
+        toast.error('Failed to update template');
+      }
+    },
+    [savedTemplateId, slides, template, updateTemplate, persistCustomCategory]
+  );
+
+  /**
+   * Handle saving the current carousel as a reusable template.
+   * If the template was previously saved, shows a dialog asking
+   * whether to update the existing template or save as new.
+   */
+  const handleSaveTemplate = useCallback(
+    async (data: { name: string; description?: string; category: string }) => {
+      if (savedTemplateId) {
+        // Template was saved before — ask the user what to do
+        setPendingSaveData(data);
+        setShowResaveDialog(true);
+      } else {
+        // First save — just create a new template
+        await createNewTemplate(data);
+      }
+    },
+    [savedTemplateId, createNewTemplate]
+  );
+
+  /**
+   * Handle the re-save choice: update the existing template
+   */
+  const handleResaveUpdate = useCallback(async () => {
+    if (!pendingSaveData) return;
+    setShowResaveDialog(false);
+    await updateExistingTemplate(pendingSaveData);
+    setPendingSaveData(null);
+  }, [pendingSaveData, updateExistingTemplate]);
+
+  /**
+   * Handle the re-save choice: save as a new template
+   */
+  const handleResaveNew = useCallback(async () => {
+    if (!pendingSaveData) return;
+    setShowResaveDialog(false);
+    await createNewTemplate(pendingSaveData);
+    setPendingSaveData(null);
+  }, [pendingSaveData, createNewTemplate]);
 
   /**
    * Handle "Post" button: open the PostToLinkedInDialog
@@ -732,6 +889,33 @@ export function CanvasEditor({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmReset}>Reset</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Re-save choice dialog: Update existing or Save as new */}
+      <AlertDialog open={showResaveDialog} onOpenChange={setShowResaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Template already saved</AlertDialogTitle>
+            <AlertDialogDescription>
+              You previously saved this template. Would you like to update the
+              existing template or create a new one?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setPendingSaveData(null); }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="border border-input bg-background text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
+              onClick={handleResaveNew}
+            >
+              Save as New
+            </AlertDialogAction>
+            <AlertDialogAction onClick={handleResaveUpdate}>
+              Update Existing
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
