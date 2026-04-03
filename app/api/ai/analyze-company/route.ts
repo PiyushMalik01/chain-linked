@@ -14,6 +14,7 @@ import {
   getErrorMessage,
   DEFAULT_MODEL,
 } from "@/lib/ai/openai-client"
+import { PromptService, PromptType } from '@/lib/prompts'
 
 /**
  * Request body for company analysis
@@ -171,6 +172,22 @@ Return the analysis as valid JSON only.`
         maxTokens: 2000,
       })
     }
+
+    // Log usage (non-blocking)
+    const estimatedCost = ((response.promptTokens ?? 0) * 0.0025 + (response.completionTokens ?? 0) * 0.015) / 1000
+    PromptService.logUsage({
+      promptType: PromptType.BASE_RULES,
+      promptVersion: 1,
+      userId: user.id,
+      feature: 'analyze-company',
+      inputTokens: response.promptTokens,
+      outputTokens: response.completionTokens,
+      totalTokens: response.totalTokens,
+      model: response.model,
+      success: true,
+      estimatedCost,
+      metadata: { provider: resolved?.provider === 'openai-oauth' ? 'openai-oauth' : 'openrouter' },
+    }).catch(() => {})
 
     // Parse JSON response
     let analysisData: CompanyAnalysisResult

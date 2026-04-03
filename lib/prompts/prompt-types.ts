@@ -214,7 +214,7 @@ export interface PromptUsageLogRow {
 /**
  * Features that use the prompt system
  */
-export type PromptFeature = 'remix' | 'compose' | 'carousel' | 'playground'
+export type PromptFeature = 'remix' | 'compose' | 'carousel' | 'playground' | 'edit-selection' | 'carousel-caption' | 'analyze-company' | 'compose-series' | 'pipeline'
 
 /**
  * Test result from playground experimentation
@@ -500,6 +500,6 @@ export function isValidPromptType(value: unknown): value is PromptType {
 export function isValidPromptFeature(value: unknown): value is PromptFeature {
   return (
     typeof value === 'string' &&
-    ['remix', 'compose', 'carousel', 'playground'].includes(value)
+    ['remix', 'compose', 'carousel', 'playground', 'edit-selection', 'carousel-caption', 'analyze-company', 'compose-series', 'pipeline'].includes(value)
   )
 }

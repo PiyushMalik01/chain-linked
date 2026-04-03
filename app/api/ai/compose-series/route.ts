@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { resolveApiKey } from '@/lib/ai/resolve-api-key'
 import { buildSeriesConversationPrompt } from '@/lib/ai/series-system-prompt'
+import { PromptService, PromptType } from '@/lib/prompts'
 
 /**
  * Safely parses a JSON column value into a string array
@@ -257,6 +258,27 @@ export async function POST(request: Request) {
       experimental_telemetry: {
         isEnabled: true,
         functionId: 'compose-series',
+      },
+      onFinish: async ({ usage }) => {
+        if (user && usage) {
+          const inTok = usage.inputTokens ?? 0
+          const outTok = usage.outputTokens ?? 0
+          // gpt-5.4 pricing: $2.50/$15.00 per million tokens
+          const estimatedCost = (inTok * 0.0025 + outTok * 0.015) / 1000
+          PromptService.logUsage({
+            promptType: PromptType.BASE_RULES,
+            promptVersion: 1,
+            userId: user.id,
+            feature: 'compose-series',
+            inputTokens: inTok,
+            outputTokens: outTok,
+            totalTokens: inTok + outTok,
+            model: 'openai/gpt-5.4',
+            success: true,
+            estimatedCost,
+            metadata: { provider: 'openrouter', tone },
+          }).catch(() => {})
+        }
       },
     })
 

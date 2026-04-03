@@ -113,10 +113,6 @@ export async function codexChatCompletion(
     model?: string
     systemPrompt: string
     userMessage: string
-    /** Temperature for OpenRouter fallback (Codex ignores this) */
-    temperature?: number
-    /** Max tokens for OpenRouter fallback (Codex ignores this) */
-    maxTokens?: number
   }
 ): Promise<{
   content: string
@@ -170,7 +166,7 @@ export async function codexChatCompletion(
  */
 async function openRouterFallback(
   apiKey: string,
-  options: { model?: string; systemPrompt: string; userMessage: string; temperature?: number; maxTokens?: number }
+  options: { model?: string; systemPrompt: string; userMessage: string }
 ): Promise<{
   content: string
   model: string
@@ -193,8 +189,8 @@ async function openRouterFallback(
         { role: 'system', content: options.systemPrompt },
         { role: 'user', content: options.userMessage },
       ],
-      max_tokens: options.maxTokens ?? 1500,
-      temperature: options.temperature ?? 0.85,
+      max_tokens: 1500,
+      temperature: 0.85,
     }),
   })
 

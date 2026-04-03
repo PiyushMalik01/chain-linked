@@ -730,6 +730,11 @@ export class PromptService {
         compose: 0,
         carousel: 0,
         playground: 0,
+        "edit-selection": 0,
+        "carousel-caption": 0,
+        "analyze-company": 0,
+        "compose-series": 0,
+        pipeline: 0,
       },
       byModel: {},
       dailyUsage: [],
@@ -800,6 +805,11 @@ export class PromptService {
         compose: 0,
         carousel: 0,
         playground: 0,
+        "edit-selection": 0,
+        "carousel-caption": 0,
+        "analyze-company": 0,
+        "compose-series": 0,
+        pipeline: 0,
       }
       const byModel: Record<string, number> = {}
       const dailyMap = new Map<string, { count: number; tokens: number }>()

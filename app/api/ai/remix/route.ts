@@ -487,7 +487,7 @@ export async function POST(request: NextRequest) {
         ...await codexChatCompletion(
           resolvedProvider.apiKey,
           resolvedProvider.accountId,
-          { model: 'gpt-5.4', systemPrompt, userMessage, temperature: 0.85, maxTokens: 1500 }
+          { model: 'gpt-5.4', systemPrompt, userMessage }
         ),
         finishReason: 'stop',
       }

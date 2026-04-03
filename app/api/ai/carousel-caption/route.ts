@@ -10,6 +10,7 @@ import { resolveClient, resolveApiKey } from '@/lib/ai/resolve-api-key'
 import { codexChatCompletion } from '@/lib/ai/codex-client'
 import { chatCompletion, OpenAIError, getErrorMessage, DEFAULT_MODEL } from '@/lib/ai/openai-client'
 import { ANTI_AI_WRITING_RULES } from '@/lib/ai/anti-ai-rules'
+import { PromptService, PromptType } from '@/lib/prompts'
 
 /**
  * Request body for carousel caption generation
@@ -113,6 +114,24 @@ export async function POST(request: NextRequest) {
         temperature: 0.8,
         maxTokens: 800,
       })
+    }
+
+    // Log usage (non-blocking)
+    if (user) {
+      const estimatedCost = ((response.promptTokens ?? 0) * 0.0025 + (response.completionTokens ?? 0) * 0.015) / 1000
+      PromptService.logUsage({
+        promptType: PromptType.CAROUSEL_SYSTEM,
+        promptVersion: 1,
+        userId: user.id,
+        feature: 'carousel-caption',
+        inputTokens: response.promptTokens,
+        outputTokens: response.completionTokens,
+        totalTokens: response.totalTokens,
+        model: response.model,
+        success: true,
+        estimatedCost,
+        metadata: { provider: resolvedProvider?.provider === 'openai-oauth' ? 'openai-oauth' : 'openrouter', tone },
+      }).catch(() => {})
     }
 
     return NextResponse.json({

@@ -11,6 +11,7 @@ import * as Sentry from '@sentry/nextjs'
 import { createClient } from '@/lib/supabase/server'
 import { resolveApiKey } from '@/lib/ai/resolve-api-key'
 import { PostPipeline, DEFAULT_PIPELINE_CONFIG } from '@/lib/ai/pipeline'
+import { PromptService, PromptType } from '@/lib/prompts'
 
 /**
  * Request body schema for the pipeline endpoint
@@ -121,6 +122,28 @@ export async function POST(request: NextRequest) {
     })
 
     const result = await pipeline.run(content)
+
+    // Log pipeline usage (non-blocking)
+    // PipelineResult exposes steps[] with durationMs but no per-step token counts,
+    // so we log execution metadata without token breakdown.
+    PromptService.logUsage({
+      promptType: PromptType.BASE_RULES,
+      promptVersion: 1,
+      userId: user.id,
+      feature: 'pipeline',
+      model: 'openai/gpt-5.4',
+      success: true,
+      metadata: {
+        provider: 'openrouter',
+        enableVerification: enableVerification ?? true,
+        enableFactCheck: enableFactCheck ?? true,
+        enableAutoRefine: enableAutoRefine ?? true,
+        totalDurationMs: result.totalDurationMs,
+        totalIssues: result.totalIssues,
+        wasRefined: result.wasRefined,
+        stepsRun: result.steps.map(s => s.stage),
+      },
+    }).catch(() => {})
 
     return NextResponse.json({ pipeline: result })
   } catch (error) {

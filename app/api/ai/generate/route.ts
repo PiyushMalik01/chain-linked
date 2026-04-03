@@ -408,7 +408,7 @@ If additional instructions exist above, they override all other guidelines.`
         ...await codexChatCompletion(
           resolvedProvider.apiKey,
           resolvedProvider.accountId,
-          { model: 'gpt-5.4', systemPrompt, userMessage, temperature: 0.8, maxTokens: 1500 }
+          { model: 'gpt-5.4', systemPrompt, userMessage }
         ),
         finishReason: 'stop',
       }

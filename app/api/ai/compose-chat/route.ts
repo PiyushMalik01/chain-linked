@@ -316,6 +316,7 @@ export async function POST(request: Request) {
             success: true,
             estimatedCost,
             metadata: {
+              provider: 'openrouter',
               tone,
               message_count: messages.length,
             },

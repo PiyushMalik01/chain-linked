@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveApiKey } from '@/lib/ai/resolve-api-key'
 import { codexChatCompletion } from '@/lib/ai/codex-client'
 import { ANTI_AI_PROMPT_CONSTRAINTS } from '@/lib/ai/anti-ai-rules'
+import { PromptService, PromptType } from '@/lib/prompts'
 
 /**
  * Request body for the edit-selection endpoint
@@ -122,6 +123,21 @@ ${ANTI_AI_PROMPT_CONSTRAINTS}`
         aiApiKey, resolved.accountId,
         { model: 'gpt-5.4', systemPrompt, userMessage }
       )
+      // Log usage (non-blocking)
+      const codexCost = ((codexResult.promptTokens ?? 0) * 0.0025 + (codexResult.completionTokens ?? 0) * 0.015) / 1000
+      PromptService.logUsage({
+        promptType: PromptType.BASE_RULES,
+        promptVersion: 1,
+        userId: user.id,
+        feature: 'edit-selection',
+        inputTokens: codexResult.promptTokens,
+        outputTokens: codexResult.completionTokens,
+        totalTokens: codexResult.totalTokens,
+        model: 'gpt-5.4',
+        success: true,
+        estimatedCost: codexCost,
+        metadata: { provider: 'openai-oauth' },
+      }).catch(() => {})
       return NextResponse.json({ editedText: codexResult.content })
     }
 
@@ -152,6 +168,21 @@ Return ONLY the edited replacement text:`,
       },
     })
 
+    // Log usage (non-blocking)
+    const orCost = ((result.usage?.inputTokens ?? 0) * 0.0025 + (result.usage?.outputTokens ?? 0) * 0.015) / 1000
+    PromptService.logUsage({
+      promptType: PromptType.BASE_RULES,
+      promptVersion: 1,
+      userId: user.id,
+      feature: 'edit-selection',
+      inputTokens: result.usage?.inputTokens,
+      outputTokens: result.usage?.outputTokens,
+      totalTokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+      model: 'openai/gpt-5.4',
+      success: true,
+      estimatedCost: orCost,
+      metadata: { provider: 'openrouter' },
+    }).catch(() => {})
     return NextResponse.json({ editedText: result.text })
   } catch (error) {
     console.error('Edit selection error:', error)

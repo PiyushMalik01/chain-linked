@@ -195,7 +195,7 @@ export async function chatCompletion(
         { role: 'user', content: userMessage },
       ],
       temperature,
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
     })
 
     const choice = completion.choices[0]

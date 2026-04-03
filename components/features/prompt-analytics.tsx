@@ -84,6 +84,11 @@ const FEATURE_LABELS: Record<PromptFeature, string> = {
   compose: "Compose",
   carousel: "Carousel",
   playground: "Playground",
+  "edit-selection": "Edit Selection",
+  "carousel-caption": "Carousel Caption",
+  "analyze-company": "Analyze Company",
+  "compose-series": "Compose Series",
+  pipeline: "Pipeline",
 }
 
 /**
@@ -94,6 +99,11 @@ const FEATURE_COLORS: Record<PromptFeature, string> = {
   compose: "bg-green-500",
   carousel: "bg-purple-500",
   playground: "bg-orange-500",
+  "edit-selection": "bg-cyan-500",
+  "carousel-caption": "bg-violet-500",
+  "analyze-company": "bg-amber-500",
+  "compose-series": "bg-emerald-500",
+  pipeline: "bg-rose-500",
 }
 
 /**
