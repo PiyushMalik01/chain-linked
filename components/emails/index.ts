@@ -24,3 +24,6 @@ export type { MemberJoinedTeamEmailProps } from './member-joined-team'
 
 export { PostPublishedEmail } from './post-published'
 export type { PostPublishedEmailProps } from './post-published'
+
+export { PostScheduledEmail } from './post-scheduled'
+export type { PostScheduledEmailProps } from './post-scheduled'

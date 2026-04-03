@@ -49,6 +49,9 @@ export const colors = {
   infoBorder: '#BFDBFE',
 } as const
 
+/** Base URL for ChainLinked website links */
+export const SITE_URL = 'https://chainlinked.io'
+
 // ============================================================================
 // Layout
 // ============================================================================
@@ -98,18 +101,15 @@ export const GRADIENT_WARNING = 'linear-gradient(135deg, #D97706 0%, #B45309 100
 export const GRADIENT_TEAM = 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)'
 
 export const headerLogo = {
-  width: '48px',
-  height: '48px',
   borderRadius: '12px',
-  backgroundColor: 'rgba(255, 255, 255, 0.2)',
   margin: '0 auto 16px',
-  lineHeight: '48px',
-  textAlign: 'center' as const,
-  fontSize: '18px',
-  fontWeight: 'bold' as const,
-  color: '#FFFFFF',
-  letterSpacing: '1px',
+  display: 'block' as const,
+  backgroundColor: '#FFFFFF',
+  padding: '4px',
 }
+
+/** URL for the ChainLinked logo image used in email headers */
+export const LOGO_URL = `${SITE_URL}/logo-icon.png`
 
 export const headerHeading = {
   color: '#FFFFFF',
@@ -361,6 +361,3 @@ export const footer = {
   },
   separator: ' \u00B7 ',
 } as const
-
-/** Base URL for ChainLinked website links */
-export const SITE_URL = 'https://chainlinked.io'

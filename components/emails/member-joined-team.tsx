@@ -20,6 +20,7 @@ import {
 import {
   layout,
   headerStyle,
+  headerLogo,
   headerHeading,
   headerSubtext,
   GRADIENT_BRAND,
@@ -29,6 +30,7 @@ import {
   divider,
   footer,
   SITE_URL,
+  LOGO_URL,
 } from './shared-styles'
 
 /**
@@ -90,21 +92,13 @@ export function MemberJoinedTeamEmail({
         <Container style={layout.container}>
           {/* Gradient header */}
           <Section style={headerStyle(GRADIENT_BRAND)}>
-            {companyLogoUrl ? (
-              <Img
-                src={companyLogoUrl}
-                width="48"
-                height="48"
-                alt={companyName || teamName}
-                style={companyLogoStyle}
-              />
-            ) : (
-              <div style={teamLogoPlaceholder}>
-                <Text style={teamLogoText}>
-                  {(companyName || teamName).charAt(0).toUpperCase()}
-                </Text>
-              </div>
-            )}
+            <Img
+              src={companyLogoUrl || LOGO_URL}
+              width="48"
+              height="48"
+              alt={companyLogoUrl ? (companyName || teamName) : 'ChainLinked'}
+              style={headerLogo}
+            />
             <Text style={headerHeading}>New team member!</Text>
             <Text style={headerSubtext}>
               Your team is growing
@@ -162,6 +156,10 @@ export function MemberJoinedTeamEmail({
               <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
               </Link>
+              {footer.separator}
+              <Link href={`${SITE_URL}/terms`} style={footer.link}>
+                Terms of Service
+              </Link>
             </Text>
           </Section>
         </Container>
@@ -176,31 +174,6 @@ export function MemberJoinedTeamEmail({
 export default MemberJoinedTeamEmail
 
 // Template-specific styles
-const companyLogoStyle = {
-  borderRadius: '12px',
-  margin: '0 auto 16px',
-  border: '2px solid rgba(255, 255, 255, 0.3)',
-}
-
-const teamLogoPlaceholder = {
-  width: '48px',
-  height: '48px',
-  borderRadius: '12px',
-  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  margin: '0 auto 16px',
-  lineHeight: '48px',
-  textAlign: 'center' as const,
-}
-
-const teamLogoText = {
-  color: '#FFFFFF',
-  fontSize: '22px',
-  fontWeight: 'bold' as const,
-  margin: '0',
-  lineHeight: '48px',
-  textAlign: 'center' as const,
-}
-
 const memberInfoRow = {
   color: '#374151',
   fontSize: '14px',

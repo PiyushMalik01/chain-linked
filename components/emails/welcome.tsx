@@ -11,6 +11,7 @@ import {
   Head,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
@@ -30,6 +31,7 @@ import {
   divider,
   footer,
   SITE_URL,
+  LOGO_URL,
 } from './shared-styles'
 
 /**
@@ -75,7 +77,7 @@ export function WelcomeEmail({
         <Container style={layout.container}>
           {/* Gradient header */}
           <Section style={headerStyle(GRADIENT_SUCCESS)}>
-            <div style={headerLogo}>CL</div>
+            <Img src={LOGO_URL} width="48" height="48" alt="ChainLinked" style={headerLogo} />
             <Text style={headerHeading}>Welcome to ChainLinked!</Text>
             <Text style={headerSubtext}>
               Your LinkedIn content platform is ready

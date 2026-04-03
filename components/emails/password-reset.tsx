@@ -11,6 +11,7 @@ import {
   Head,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
@@ -30,6 +31,7 @@ import {
   divider,
   footer,
   SITE_URL,
+  LOGO_URL,
 } from './shared-styles'
 
 /**
@@ -65,7 +67,7 @@ export function PasswordResetEmail({
         <Container style={layout.container}>
           {/* Gradient header */}
           <Section style={headerStyle(GRADIENT_WARNING)}>
-            <div style={headerLogo}>CL</div>
+            <Img src={LOGO_URL} width="48" height="48" alt="ChainLinked" style={headerLogo} />
             <Text style={headerHeading}>Reset your password</Text>
             <Text style={headerSubtext}>
               Follow the link below to set a new password
@@ -126,6 +128,10 @@ export function PasswordResetEmail({
               {footer.separator}
               <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
+              </Link>
+              {footer.separator}
+              <Link href={`${SITE_URL}/terms`} style={footer.link}>
+                Terms of Service
               </Link>
             </Text>
           </Section>

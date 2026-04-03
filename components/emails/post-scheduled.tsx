@@ -20,6 +20,7 @@ import {
 import {
   layout,
   headerStyle,
+  headerLogo,
   headerHeading,
   headerSubtext,
   GRADIENT_BRAND,
@@ -30,6 +31,7 @@ import {
   footer,
   colors,
   SITE_URL,
+  LOGO_URL,
 } from './shared-styles'
 
 /**
@@ -91,13 +93,7 @@ export function PostScheduledEmail({
         <Container style={layout.container}>
           {/* Gradient header */}
           <Section style={headerStyle(GRADIENT_BRAND)}>
-            <Img
-              src={`${SITE_URL}/logo.png`}
-              width="48"
-              height="48"
-              alt="ChainLinked"
-              style={logoStyle}
-            />
+            <Img src={LOGO_URL} width="48" height="48" alt="ChainLinked" style={headerLogo} />
             <Text style={headerHeading}>Your post is queued</Text>
             <Text style={headerSubtext}>
               It will be published to LinkedIn on the date and time below.
@@ -178,6 +174,10 @@ export function PostScheduledEmail({
               <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
               </Link>
+              {footer.separator}
+              <Link href={`${SITE_URL}/terms`} style={footer.link}>
+                Terms of Service
+              </Link>
             </Text>
           </Section>
         </Container>
@@ -192,12 +192,6 @@ export function PostScheduledEmail({
 export default PostScheduledEmail
 
 // Template-specific styles
-const logoStyle = {
-  borderRadius: '12px',
-  margin: '0 auto 16px',
-  border: '2px solid rgba(255, 255, 255, 0.3)',
-}
-
 const scheduledBadgeContainer = {
   margin: '0 0 20px',
 }

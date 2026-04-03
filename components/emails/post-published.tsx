@@ -11,6 +11,7 @@ import {
   Head,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
@@ -29,6 +30,7 @@ import {
   footer,
   colors,
   SITE_URL,
+  LOGO_URL,
 } from './shared-styles'
 
 /**
@@ -84,7 +86,7 @@ export function PostPublishedEmail({
         <Container style={layout.container}>
           {/* Gradient header */}
           <Section style={headerStyle(GRADIENT_SUCCESS)}>
-            <div style={headerLogo}>CL</div>
+            <Img src={LOGO_URL} width="48" height="48" alt="ChainLinked" style={headerLogo} />
             <Text style={headerHeading}>Your post is live!</Text>
             <Text style={headerSubtext}>
               Successfully published on LinkedIn
@@ -126,6 +128,10 @@ export function PostPublishedEmail({
               {footer.separator}
               <Link href={`${SITE_URL}/privacy`} style={footer.link}>
                 Privacy Policy
+              </Link>
+              {footer.separator}
+              <Link href={`${SITE_URL}/terms`} style={footer.link}>
+                Terms of Service
               </Link>
             </Text>
           </Section>
